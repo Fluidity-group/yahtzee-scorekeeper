@@ -1,0 +1,1 @@
+/* empty css                  */import{a as e,w as t}from"./client-CV1gx_CU.js";import{m as o}from"./index-BzGpM-lg.js";document.body.innerHTML='<div id="recoveryApp" class="device"></div>';o({root:document.getElementById("recoveryApp"),auth:e,webUrl:t}).catch(()=>{document.getElementById("recoveryApp").textContent="The reset page could not open. Refresh and try again."});
