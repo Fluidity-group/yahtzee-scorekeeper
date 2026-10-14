@@ -21,13 +21,13 @@ beforeAll(async()=>{
 describe('shared scorecard',()=>{
  it('saves through the server and cannot score for the next player',async()=>{
   click('[data-action="online"]');await vi.waitFor(()=>expect(document.querySelector('.core-score-table')).not.toBeNull());
-  expect(document.querySelector('thead th:nth-child(2)').classList.contains('turn-column')).toBe(true);
-  expect(document.querySelector('tbody td:nth-child(3)').classList.contains('waiting-column')).toBe(true);
+  expect(document.querySelector('thead [data-player-seat="0"]').classList.contains('turn-column')).toBe(true);
+  expect(document.querySelector('tbody [data-score-key="aces"][data-score-seat="1"]').classList.contains('waiting-column')).toBe(true);
   click('[data-action="choose"][data-key="twos"]');click('[data-action="confirm-score"][data-value="8"]');
   await vi.waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="twos"]').textContent).toBe('8'));
   expect(document.querySelector('[data-action="choose"]')).toBeNull();
-  expect(document.querySelector('thead th:nth-child(2)').classList.contains('waiting-column')).toBe(true);
-  expect(document.querySelector('tbody td:nth-child(3)').classList.contains('turn-column')).toBe(true);
+  expect(document.querySelector('thead [data-player-seat="0"]').classList.contains('waiting-column')).toBe(true);
+  expect(document.querySelector('tbody [data-score-key="aces"][data-score-seat="1"]').classList.contains('turn-column')).toBe(true);
   expect(saveCore).not.toHaveBeenCalled();
  });
  it('shows other players’ scores read-only and blocks scoring while reconnecting',()=>{
@@ -35,13 +35,14 @@ describe('shared scorecard',()=>{
   expect(document.querySelector('[data-action="edit"][data-seat="0"]')).toBeNull();
   expect(document.querySelector('[data-action="choose"][data-key="twos"]')).not.toBeNull();
   expect(document.querySelectorAll('.current-player')).toHaveLength(1);
-  expect(document.querySelector('thead th:nth-child(2) .seat-status').textContent).toBe('WAITING');
-  expect(document.querySelector('thead th:nth-child(3) .seat-status').textContent).toBe('YOUR TURN');
+  expect(document.querySelector('thead [data-player-seat="0"] .seat-status').textContent).toBe('WAITING');
+  expect(document.querySelector('thead [data-player-seat="1"] .seat-status').textContent).toBe('YOUR TURN');
   expect(document.querySelector('[data-score-key="twos"][data-score-seat="0"] .recorded-score').textContent).toBe('8');
-  expect(document.querySelector('[data-score-key="aces"][data-score-seat="0"] .score-placeholder').textContent).toBe('');
+  expect(document.querySelector('[data-score-key="aces"][data-score-seat="0"] .score-placeholder').getAttribute('aria-label')).toContain('open');expect(document.querySelector('[data-score-key="aces"][data-score-seat="0"] button')).toBeNull();
   mock.callbacks.connection(false);
   expect(document.querySelector('[data-action="choose"]')).toBeNull();
   mock.callbacks.game(mock.room,'guest',true,false);
   expect(document.querySelector('[data-action="choose"]')).not.toBeNull();
  });
 });
+

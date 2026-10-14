@@ -8,17 +8,23 @@ import {renderResumeEntry} from './multiplayer/session-cards.js';
 import { Capacitor } from '@capacitor/core';
 import { AutomaticCapture } from './dice/automatic-capture.js';
 import { celebration,celebrationMessage } from './game/celebrations.js';
-import {pulseAccepted} from './ui/pulse.js';
+import {pulseAccepted,cancelPulse,refreshPulse} from './ui/pulse.js';
+import './ui/phone-scorecard.css';
+import {renderPhoneScorecard,bindPhoneScorecard} from './ui/phone-scorecard.js';
 import { getDiceStatus, subscribeDiceStatus, subscribeDiceEvents } from './dice/live-status.js';
 import { BASE_KEYS, META } from './game/categories.js';
 import { computeTotals } from './game/scoring.js';
 import { MODES, createCoreGame, command, results, scoreOptions, rollLimit, rollAnalytics, filled, yahtzeePoints, undoableScore } from './game/core.js';
 import { saveCore, loadCore, listCore } from './core-store.js';
+import {renderPlayerProfileFields,readPlayerProfileFields} from './ui/commentary-settings.js';
+import {createSessionCommentary} from './ui/commentary-session.js';
 
 const esc = v => String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const id = () => crypto.randomUUID();
 let game=null,busy=false,reportedFace=0,pending=null;
+let peerOffset=0,phoneCleanup=()=>{};
 const hardwareCapture=new AutomaticCapture();
+const commentarySession=createSessionCommentary({onNotice:notice});
 let settleTimer=null,autoStarting=false;
 let hardwareHeld=Array(5).fill(false),hardwareTurnId=null;
 let noticeTimer, effectTimer, activeEffect=null;
@@ -56,14 +62,18 @@ const root=document.getElementById('coreApp'),dialog=document.getElementById('co
 function applyTheme(){document.documentElement.dataset.theme=theme;document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0b141c':'#f3f6f5');}
 applyTheme();
 function notice(text){clearTimeout(noticeTimer);const box=document.getElementById('coreNotice');box.textContent=text;if(text==='Saved on this device.'||text==='Saved to the shared game.')noticeTimer=setTimeout(()=>{box.textContent='';},2500);if(dialog.open){let alert=dialog.querySelector('[role="alert"]');if(!alert){alert=document.createElement('p');alert.setAttribute('role','alert');dialog.append(alert);}alert.textContent=text;}}
-function header(){return `<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><details class="game-menu"><summary aria-label="Game menu">Menu <span aria-hidden="true">☰</span></summary><nav aria-label="Game actions"><button class="hbtn" data-action="online">Host / join online</button><button class="hbtn" data-action="new">New game</button><button class="hbtn" data-action="history">History</button>${game?'<button class="hbtn" data-action="analytics">Roll insights</button><button class="hbtn" data-action="rules">Game rules</button>':''}<button class="hbtn" data-action="export">Export</button><button class="hbtn" data-action="theme">${theme==='dark'?'Light':'Dark'} mode</button><button class="hbtn" data-action="connect-dice">Connect dice</button>${Capacitor.getPlatform()==='android'?'<button class="hbtn" data-action="camera-settings">Camera connection</button><button class="hbtn" data-action="camera-test">Dice identification test</button>':''}<a class="hbtn" href="?dice-lab=1">Dice lab</a><a class="hbtn" href="?legacy=1">Original game</a></nav></details></header>`;}
-function newScreen(){
+function header(){return `<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><details class="game-menu"><summary aria-label="Game menu">Menu <span aria-hidden="true">☰</span></summary><nav aria-label="Game actions"><button class="hbtn" data-action="online">Host / join online</button><button class="hbtn" data-action="new">New game</button><button class="hbtn" data-action="history">History</button><button class="hbtn" data-action="commentary-settings">Commentary</button>${game?'<button class="hbtn" data-action="analytics">Roll insights</button><button class="hbtn" data-action="rules">Game rules</button>':''}<button class="hbtn" data-action="export">Export</button><button class="hbtn" data-action="theme">${theme==='dark'?'Light':'Dark'} mode</button><button class="hbtn" data-action="connect-dice">Connect dice</button>${Capacitor.getPlatform()==='android'?'<button class="hbtn" data-action="camera-settings">Camera connection</button><button class="hbtn" data-action="camera-test">Dice identification test</button>':''}<a class="hbtn" href="?dice-lab=1">Dice lab</a></nav></details></header>`;}
+function newScreen(){cancelPulse(root);clearCelebration();phoneCleanup();
  root.classList.remove('playing');
- root.innerHTML=header()+`<main class="new-core"><div class="intro-kicker">YOUR TABLE. YOUR RULES.</div><h1>Make it a game.</h1><p class="core-muted">Local game · All players score on this device. Use Host / join online to play on separate phones.</p><button class="all-scores" data-action="online">Host / join online ↗</button>${Capacitor.getPlatform()==='android'?'<button class="all-scores" data-action="camera-test">Dice identification test</button>':''}<form id="createCore"><label>Game mode<select name="mode" id="modeSelect">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><p id="modeDescription" class="core-muted">${descriptions.standard}</p><div class="core-form-row"><label>Players<select id="playerCount" name="count">${Array.from({length:8},(_,i)=>`<option ${i===1?'selected':''}>${i+1}</option>`).join('')}</select></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${Capacitor.getPlatform()==='android'?'<option value="camera">C121 camera · review each roll</option>':''}${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · Bluetooth dice</option>':''}</select></label></div><label class="game-option"><input type="checkbox" name="hideTotals"><span>Hide score totals until the end<small>Keep category scores visible; reveal totals when the game finishes.</small></span></label><div id="nameInputs"></div><button class="bigbtn score core-primary" type="submit">Create game</button>${game?'<button type="button" class="all-scores" data-action="resume">Back to current game</button>':''}</form><a class="core-legacy" href="?legacy=1">Open original two-player game &amp; existing saves</a></main>`;
+ root.innerHTML=header()+`<main class="new-core"><div class="intro-kicker">YOUR TABLE. YOUR RULES.</div><h1>Make it a game.</h1><p class="core-muted">Local game · All players score on this device. Use Host / join online to play on separate phones.</p><button class="all-scores" data-action="online">Host / join online ↗</button>${Capacitor.getPlatform()==='android'?'<button class="all-scores" data-action="camera-test">Dice identification test</button>':''}<form id="createCore"><label>Game mode<select name="mode" id="modeSelect">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><p id="modeDescription" class="core-muted">${descriptions.standard}</p><div class="core-form-row"><label>Players<select id="playerCount" name="count">${Array.from({length:8},(_,i)=>`<option ${i===1?'selected':''}>${i+1}</option>`).join('')}</select></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${Capacitor.getPlatform()==='android'?'<option value="camera">C121 camera · review each roll</option>':''}${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · Bluetooth dice</option>':''}</select></label></div><label class="game-option"><input type="checkbox" name="hideTotals"><span>Hide score totals until the end<small>Keep category scores visible; reveal totals when the game finishes.</small></span></label><div id="nameInputs"></div><button class="bigbtn score core-primary" type="submit">Create game</button>${game?'<button type="button" class="all-scores" data-action="resume">Back to current game</button>':''}</form></main>`;
  nameInputs(2);
  root.querySelector('.new-core h1').insertAdjacentHTML('afterend',renderResumeEntry({local:true}));
 }
-function nameInputs(n){const old=[...root.querySelectorAll('[name="player"]')].map(x=>x.value);root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label>`).join('');}
+function nameInputs(n){
+ const old=[...root.querySelectorAll('[name="player"]')].map(x=>x.value);
+ const prior=root.querySelector('#createCore')?new FormData(root.querySelector('#createCore')):null;
+ root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label><details><summary>Personalize commentary (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?readPlayerProfileFields(prior,`player${i}`):{})}</details>`).join('');
+}
 function latest(){return game.turn?.rolls.filter(r=>!r.excluded).at(-1);}
 function options(){
  if(onlineRoom&&!isDiceHost()&&sharedRolling())return null;
@@ -117,12 +127,12 @@ function scoreCell(key, seat) {
  const special=match&&['fullHouse','smallStraight','largeStraight','yahtzee'].includes(key);
  return `<td class="active-score" ${attrs}><button class="empty-score-button ${suggestion>0?'suggested-score':''} ${match?'roll-match':''} ${special?'roll-match-special':''}" style="--match-delay:${BASE_KEYS.indexOf(key)*45}ms" data-action="choose" data-key="${key}" aria-label="Score ${name} ${category}${suggestion!==undefined?`, ${match?'roll matches, ':''}suggested ${suggestion} points${preview?', confirm roll to score':''}`:''}" ${allowed?'':'disabled'}>${suggestion!==undefined?`<span class="score-suggestion">${suggestion}<small>${match?(preview?'PREVIEW':'MATCH'):suggestion===0?'scratch':'suggested'}</small></span>`:'+'}</button></td>`;
 }
-function bonusCell(seat) {
+function bonusCell(seat,{hideTotals=false}={}) {
  const sheet=game.sheets[seat],opt=options();
  const manual=(game.turn?.source||game.source)==='manual';
  const active=!game.finalChain&&game.status==='active'&&seat===game.activeSeat&&ownsSeat(seat)&&(!onlineRoom||onlineConnected)&&sheet.yahtzee!==undefined;
  const ready=!hardwareCapture.capture&&!sharedRolling()&&(manual||opt?.combinations.yahtzee);
- return `<td>${active?`<button class="add-yahtzee" data-action="another-yahtzee" aria-label="Add another Yahtzee for ${esc(game.players[seat].name)}; bonus total ${sheet.yahtzeeBonus||0}" ${ready?'':'disabled'}>${sheet.yahtzeeBonus?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'<span>Yahtzee</span>'}<span class="bonus-plus" aria-hidden="true">+</span></button>`:sheet.yahtzeeBonus?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'—'}</td>`;
+ return `<td>${active?`<button class="add-yahtzee" data-action="another-yahtzee" aria-label="Add another Yahtzee for ${esc(game.players[seat].name)}; ${hideTotals?'bonus total hidden':`bonus total ${sheet.yahtzeeBonus||0}`}" ${ready?'':'disabled'}>${sheet.yahtzeeBonus&&!hideTotals?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'<span>Yahtzee</span>'}<span class="bonus-plus" aria-hidden="true">+</span></button>`:hideTotals?'<span class="hidden-total">Hidden</span>':sheet.yahtzeeBonus?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'—'}</td>`;
 }
 function anotherYahtzee(){
  if(game.finalChain)return;
@@ -154,25 +164,19 @@ function render(){
  hardwareCapture.sync(game,getDiceStatus());
  if(hardwareTurnId!==game.turn?.id){hardwareTurnId=game.turn?.id;hardwareHeld=Array(5).fill(false);}
  const totals=results(game).totals,active=game.status==='active';
- root.innerHTML=header()+`<div class="game-strip"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel()}<div class="score-table-wrap"><table class="core-score-table"><thead><tr><th scope="col"><span class="category-heading">Scorecard</span></th>${game.players.map((p,i)=>`<th scope="col" class="player-heading ${active&&game.activeSeat===i?'current-player':''}"><span class="player-name">${esc(p.name)}</span>${game.hideTotals&&active?'<span class="hidden-total">Total hidden</span>':`<strong>${totals[i]}</strong>`}<small class="seat-status">${active?(game.activeSeat===i?(ownsSeat(i)?'YOUR TURN':'PLAYING'):'WAITING'):(results(game).winners.includes(i)?(results(game).solo?'COMPLETE':'WINNER'):'FINISHED')}</small><small>${onlineRoom&&ownsSeat(i)?'You · ':''}${filled(game.sheets[i])}/13</small></th>`).join('')}</tr></thead><tbody>${BASE_KEYS.map(k=>`<tr><th scope="row" class="${active&&game.sheets[game.activeSeat][k]!==undefined?'category-filled':''}">${META[k].name}</th>${game.players.map((p,i)=>scoreCell(k,i)).join('')}</tr>`).join('')}<tr class="summary-row"><th scope="row">Upper bonus</th>${game.sheets.map(s=>`<td>${computeTotals(s).bonus}</td>`).join('')}</tr><tr class="summary-row"><th scope="row">Yahtzee bonuses</th>${game.players.map((p,i)=>bonusCell(i)).join('')}</tr></tbody></table></div></main>`;
+ root.innerHTML=header()+`<div class="game-strip"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel()}${renderPhoneScorecard(game,{viewerSeat:onlineRoom?onlineRoom.members.findIndex(member=>member.userId===onlineUserId):game.activeSeat,scoreCell,bonusCell,totals,winners:results(game).winners,peerOffset})}</main>`;
  if(onlineRoom?.tournament){
   root.querySelector('main').insertAdjacentHTML('afterbegin',renderTournamentBanner(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));
   if(tournamentPaused())root.querySelectorAll('.core-score-table button').forEach(button=>{button.disabled=true;});
   if(tournamentPaused())root.querySelector('.turn-indicator').textContent='Tournament paused';
  }
  const undo=undoPanel();if(undo)root.querySelector('main').insertAdjacentHTML('afterbegin',undo);
- root.querySelectorAll('.core-score-table tr').forEach(row=>{
-  [...row.children].slice(1).forEach((cell,seat)=>{
-   cell.classList.toggle('turn-column',active&&seat===game.activeSeat);
-   cell.classList.toggle('waiting-column',active&&seat!==game.activeSeat);
-   cell.classList.toggle('winner-column',!active&&results(game).winners.includes(seat));
-  });
- });
+ phoneCleanup();phoneCleanup=bindPhoneScorecard(root,{onPeerOffsetChange:value=>{peerOffset=value;}});
+ root.querySelectorAll('.phone-score-table [data-score-seat]').forEach(cell=>{const seat=Number(cell.dataset.scoreSeat);cell.classList.toggle('turn-column',active&&seat===game.activeSeat);cell.classList.toggle('waiting-column',active&&seat!==game.activeSeat);cell.classList.toggle('winner-column',!active&&results(game).winners.includes(seat));});
  updateDiceStatus();
  updateHardwarePanel();
  applyScorePulse();
- const wrap=root.querySelector('.score-table-wrap'),head=root.querySelector('.current-player');
- if(head){const fixed=root.querySelector('.core-score-table th').offsetWidth;wrap.scrollLeft=Math.max(0,head.offsetLeft-fixed);}
+
 }
 function ensureAutomaticTurn(){
  const status=getDiceStatus();
@@ -263,10 +267,7 @@ function updateHardwarePanel(){
   return `<label>Die ${i+1}<button type="button" data-die-override="${i}" class="capture-face ${moving?'dice-shuffling':''} ${check?'die-needs-check':''}" aria-label="Die ${i+1}: ${moving?'moving':ready?shown??'unknown':'unavailable'}${check?', needs checking':''}. Hold to correct" style="--die-delay:${i*85}ms">${moving?'⚄':ready?shown??'—':'—'}${check?'<small>CHECK</small>':''}</button></label>`;
  }).join('')}</div><p class="core-muted" role="status">${!ready?'Play paused. Connect exactly five dice and keep the app open.':problem|| (candidate?'Settled · checking the roll…':round?'Waiting for settled faces. Hold a die marked CHECK to confirm or correct it.':rolls.length>=game.turn.limit?'Roll limit reached. Choose your score.':last?'Choose your score, or pick up any dice and roll again.':'Roll all five dice to begin.')}</p><small class="dice-menu-hint" tabindex="0" role="button" data-dice-menu>Hold this area for roll controls · hold a die to correct</small>${options()?.extraTurn&&!capture&&ownsSeat(game.activeSeat)?'<button class="bigbtn score core-primary" data-action="bonus">Record bonus Yahtzee</button>':''}`;
 }
-function applyScorePulse(){
- if(!activeEffect||activeEffect.gameId!==game?.id)return;
- const {seat,category}=activeEffect;
- root.querySelector(`[data-score-key="${category}"][data-score-seat="${seat}"]`)?.classList.add('score-pop');
+function applyScorePulse(){refreshPulse(root);
 }
 function openDiceMenu(index=null){
  if(busy||game?.turn?.source!=='godice')return;
@@ -293,27 +294,23 @@ for(const type of ['pointerup','pointercancel'])document.addEventListener(type,c
 root.addEventListener('contextmenu',event=>{if(event.target.closest('#hardwareCapture')){event.preventDefault();cancelDicePress();const die=event.target.closest('[data-die-override]');openDiceMenu(die?Number(die.dataset.dieOverride):null);}});
 root.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&event.target.matches('[data-die-override],[data-dice-menu]')){event.preventDefault();openDiceMenu(event.target.matches('[data-die-override]')?Number(event.target.dataset.dieOverride):null);}});
 dialog.addEventListener('close',scheduleAutomaticRoll);
+function clearCelebration(){clearTimeout(effectTimer);activeEffect=null;const box=document.getElementById('gameCelebration');box.replaceChildren();box.className='';}
 function celebrate(previous,next){
  const pulseId=next.id,pulseRevision=next.revision;
+ const seen=new Set(previous?.events?.map(event=>event.id)||[]);
+ const invalidated=previous?.id!==next.id||next.events.some(event=>['score-undo','score-correction'].includes(event.type)&&!seen.has(event.id));
+ if(invalidated){cancelPulse(root);clearCelebration();}
  queueMicrotask(()=>{if(game?.id===pulseId&&game.revision===pulseRevision)pulseAccepted(root,previous,next);});
- if(previous?.id===next.id){
-  const seen=new Set(previous.events.map(event=>event.id));
-  if(next.events.some(event=>event.type==='score-undo'&&!seen.has(event.id))){clearTimeout(effectTimer);activeEffect=null;const box=document.getElementById('gameCelebration');box.replaceChildren();box.className='';root.querySelectorAll('.score-pop').forEach(cell=>cell.classList.remove('score-pop'));return;}
- }
- const effect=celebration(previous,next);if(!effect)return;
- clearTimeout(effectTimer);activeEffect={...effect,gameId:next.id};applyScorePulse();
- const box=document.getElementById('gameCelebration');box.replaceChildren();box.className='';
- if(effect.kind!=='score'){
-  const name=next.players[effect.seat].name;
-  const {title,subtitle:detail}=celebrationMessage(effect,next);
-  box.className=`celebration celebration-${effect.kind}`;
-  const headline=document.createElement('strong');headline.textContent=title;box.append(headline);
-  const subtitle=document.createElement('span');subtitle.textContent=detail;if(effect.upperBonus&&effect.kind!=='upper-bonus')subtitle.textContent+=` · ${name} also earns the +35 upper bonus!`;box.append(subtitle);
-  const decorations=document.createElement('div');decorations.className='celebration-particles';decorations.setAttribute('aria-hidden','true');
-  for(let i=0;i<(effect.kind==='straight'?5:12);i++){const particle=document.createElement('i');particle.style.setProperty('--i',i);particle.textContent=effect.kind==='straight'?String(i+1):'✦';decorations.append(particle);}box.append(decorations);
- }
- effectTimer=setTimeout(()=>{activeEffect=null;box.replaceChildren();box.className='';root.querySelectorAll('.score-pop').forEach(cell=>cell.classList.remove('score-pop'));},3200);
+ const effect=celebration(previous,next);if(!effect||effect.kind!=='finish')return;
+ clearCelebration();activeEffect={...effect,gameId:next.id};
+ const box=document.getElementById('gameCelebration'),message=celebrationMessage(effect,next);
+ box.className='celebration celebration-finish';const title=document.createElement('strong');title.textContent=message.title;box.append(title);
+ const detail=document.createElement('span');detail.textContent=message.subtitle;box.append(detail);
+ effectTimer=setTimeout(clearCelebration,2200);
 }
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelPulse(root);clearCelebration();}});
+window.addEventListener('pagehide',()=>{cancelPulse(root);clearCelebration();});
+
 function showRules(){openDialog(`<h2>${esc(game.rules.name)} rules · version ${game.rules.version}</h2><p class="core-muted">Score totals: ${game.hideTotals?'hidden until the game ends':'visible during play'}.</p><p class="core-muted">${rulesDescription()}</p><p class="core-muted">Tap + in your column to score. Tap a recorded score to correct it. A scratched first Yahtzee earns no bonus; Joker placement still applies.</p><p class="core-muted">Corrections change category points without rewriting historical turns or granted bonuses. Suggested points are only saved when confirmed.</p>`);}
 async function persist(next){
  busy=true;root.setAttribute('inert','');
@@ -398,8 +395,8 @@ dialog.addEventListener('keydown',e=>{
  }
 });
 async function showHistory(){
- if(onlineRoom){const {onlineHistory}=await import('./multiplayer/ui.js');const all=await onlineHistory();openDialog(`<h2>This table’s games</h2><p class="core-muted">Each game keeps its players, scores and scoring order. Export includes their complete accepted histories.</p>${all.map(g=>`<article class="history-row"><strong>${esc(g.rules.name)} · ${esc(g.status)}</strong><span>${esc(g.players.map(p=>p.name).join(' · '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${results(g).totals.join(' / ')}</small></article>`).join('')}`);return;}
- const all=await listCore();openDialog(`<h2>Game history</h2><p class="core-muted">Modes and solo results are kept separate. Select a game to view or resume.</p>${all.length?all.map(g=>`<button class="history-row" data-action="load" data-id="${esc(g.id)}"><strong>${esc(g.rules.name)} · ${g.players.length===1?'Solo':`${g.players.length} players`}</strong><span>${esc(g.players.map(p=>p.name).join(', '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${g.status} · ${results(g).totals.join(' / ')}</small></button>`).join(''):'<p>No new-mode games saved yet.</p>'}<a class="core-legacy" href="?legacy=1">Original game history</a>`);
+ if(onlineRoom){const {onlineHistory}=await import('./multiplayer/ui.js');const all=await onlineHistory();openDialog(`<h2>This table’s games</h2><p class="core-muted">Each game keeps its players, scores and scoring order. Export includes their complete accepted histories.</p>${all.map(g=>`<article class="history-row"><strong>${esc(g.rules.name)} · ${esc(g.status)}</strong><span>${esc(g.players.map(p=>p.name).join(' · '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${g.hideTotals&&g.status!=='finished'?'Totals hidden':results(g).totals.join(' / ')}</small></article>`).join('')}`);return;}
+ const all=await listCore();openDialog(`<h2>Game history</h2><p class="core-muted">Modes and solo results are kept separate. Select a game to view or resume.</p>${all.length?all.map(g=>`<button class="history-row" data-action="load" data-id="${esc(g.id)}"><strong>${esc(g.rules.name)} · ${g.players.length===1?'Solo':`${g.players.length} players`}</strong><span>${esc(g.players.map(p=>p.name).join(', '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${g.status} · ${g.hideTotals&&g.status!=='finished'?'Totals hidden':results(g).totals.join(' / ')}</small></button>`).join(''):'<p>No new-mode games saved yet.</p>'}`);
 }
 function analytics(){openDialog(`<h2>Roll insights</h2><p class="core-muted">${esc(game.rules.name)} · This game only. Camera, GoDice, simulated and corrected rolls retain their source in the exported history. Missing manual rolls are not counted as failed combinations.</p>${game.players.map((p,i)=>{const a=rollAnalytics(game,i);return `<h3>${esc(p.name)}</h3><p>${a.recordedRolls} recorded rolls · ${a.corrected} corrected</p>${a.recordedRolls?`<table><thead><tr><th>Combination</th><th>Rolls</th><th>Turns</th></tr></thead><tbody>${Object.keys({threeKind:0,fourKind:0,fullHouse:0,smallStraight:0,largeStraight:0,yahtzee:0}).map(k=>`<tr><td>${META[k].name}</td><td>${a.counts[k]||0}</td><td>${a.turns[k]||0}</td></tr>`).join('')}</tbody></table>`:'<p class="core-muted">No dice-level data recorded.</p>'}`;}).join('')}<p class="core-muted">Natural full houses are exactly 3 + 2. Kind and straight counts are inclusive; a Yahtzee also counts as three/four of a kind.</p>`);}
 document.addEventListener('change',e=>{
@@ -411,13 +408,14 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',async e=>{
  if(e.target.id!=='createCore')return;e.preventDefault();if(busy)return;
- try{const f=new FormData(e.target);if(f.get('source')!=='camera'){const {disconnectCamera}=await import('./dice/camera-panel.js');await disconnectCamera();}await persist(createCoreGame({names:f.getAll('player'),mode:f.get('mode'),source:f.get('source'),...(f.get('mode')==='competition'&&f.get('source')==='manual'?{rulesVersion:2}:{}),hideTotals:f.has('hideTotals'),id:id()}));}catch(e){notice(e.message);}
+ try{const f=new FormData(e.target);if(f.get('source')!=='camera'){const {disconnectCamera}=await import('./dice/camera-panel.js');await disconnectCamera();}const playerDrafts=commentarySession.readPlayers(f);const created=createCoreGame({names:f.getAll('player'),mode:f.get('mode'),source:f.get('source'),...(f.get('mode')==='competition'&&f.get('source')==='manual'?{rulesVersion:2}:{}),hideTotals:f.has('hideTotals'),id:id()});await persist(created);commentarySession.setPlayers(created.id,playerDrafts);}catch(e){notice(e.message);}
 });
 document.addEventListener('click',async e=>{
  const b=e.target.closest('[data-action]');if(!b||busy)return;
  const a=b.dataset.action;
  root.querySelector('.game-menu')?.removeAttribute('open');
  try{
+  if(a==='commentary-settings')commentarySession.open({isHost:isDiceHost(),gameId:game?.id||'setup',players:onlineRoom?[]:game?.players||[],scoreDialog:dialog});
   if(a==='camera-settings'||a==='capture-camera'){if(onlineRoom)throw Error('Hosted camera games are not enabled yet.');const {openCameraGame}=await import('./dice/camera-panel.js');await openCameraGame({getGame:()=>game,commit:(action,commandId)=>send(action,commandId),autoCapture:a==='capture-camera'});}
   if(a==='camera-test'){const {openDiceIdentificationTest}=await import('./dice/camera-panel.js');await openDiceIdentificationTest();}
   if(a==='start-camera')await send({type:'start',source:'camera'});

@@ -24,7 +24,7 @@ it('lets the score owner undo a scratch after turn handoff, reopen the category,
  await score('fullHouse',25);expect(mock.room.game.sheets[0].fullHouse).toBe(25);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.activeSeat).toBe(1);
 });
 it('clears an incorrect Yahtzee celebration only after accepted Undo',async()=>{
- await score('yahtzee',50);expect(document.querySelector('#gameCelebration').textContent).toContain('YAHTZEE');action('undo-last-score');expect(document.querySelector('#gameCelebration').textContent).toContain('YAHTZEE');action('confirm-undo-score');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));expect(document.querySelector('#gameCelebration').textContent).toBe('');expect(document.querySelectorAll('.score-pop')).toHaveLength(0);expect(mock.room.game.sheets[0].yahtzee).toBeUndefined();
+ await score('yahtzee',50);expect(document.querySelector('[data-score-key="yahtzee"][data-score-seat="0"]').classList.contains('pulse-yahtzee')).toBe(true);expect(document.querySelector('.pulse-emblem-yahtzee')).not.toBeNull();action('undo-last-score');expect(document.querySelector('[data-score-key="yahtzee"][data-score-seat="0"]').classList.contains('pulse-yahtzee')).toBe(true);expect(document.querySelector('.pulse-emblem-yahtzee')).not.toBeNull();action('confirm-undo-score');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));expect(document.querySelector('#gameCelebration').textContent).toBe('');expect(document.querySelectorAll('.accepted-score,.pulse-emblem')).toHaveLength(0);expect(mock.room.game.sheets[0].yahtzee).toBeUndefined();
 });
 it('targets the replacement score when correcting an undone and rescored category',async()=>{
  await score('twos',8);const old=mock.room.game.events.find(event=>event.type==='score').id;await undo();await score('twos',10);const newest=mock.room.game.events.filter(event=>event.type==='score').at(-1).id;
@@ -41,3 +41,4 @@ it('also reopens the latest score and returns the original turn in local manual 
  mock.callbacks.exit();document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(document.querySelector('#createCore')).toBeNull());await score('fullHouse',25);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();await undo();
  const saved=saveCore.mock.calls.at(-1)[0];expect(saved.mode).toBe('standard');expect(saved.activeSeat).toBe(0);expect(saved.sheets[0].fullHouse).toBeUndefined();expect(document.querySelector('[data-action="choose"][data-key="fullHouse"]')).not.toBeNull();expect(sendOnline).not.toHaveBeenCalled();
 });
+

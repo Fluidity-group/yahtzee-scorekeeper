@@ -3,7 +3,10 @@ import {it,expect,vi,afterEach} from 'vitest';
 import {openCameraGame,disconnectCamera} from '../src/dice/camera-panel.js';
 import {createCoreGame,command} from '../src/game/core.js';
 
-afterEach(async()=>{document.querySelectorAll('dialog').forEach(d=>d.close());await disconnectCamera();vi.useRealTimers();vi.restoreAllMocks();document.body.replaceChildren();});
+const canvasRectDescriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'getBoundingClientRect');
+const canvasRectMethod = HTMLCanvasElement.prototype.getBoundingClientRect;
+
+afterEach(async()=>{document.querySelectorAll('dialog').forEach(d=>d.close());await disconnectCamera();vi.useRealTimers();vi.restoreAllMocks();if(canvasRectDescriptor)Object.defineProperty(HTMLCanvasElement.prototype, 'getBoundingClientRect', canvasRectDescriptor);else delete HTMLCanvasElement.prototype.getBoundingClientRect;document.body.replaceChildren();});
 it('fits live stream aspect from initial status and dimension changes, resetting invalid or reconnect dimensions',async()=>{
  HTMLDialogElement.prototype.showModal=function(){this.open=true;Object.defineProperties(this,{clientWidth:{value:500},clientHeight:{value:500}});};HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new Event('close'));};
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({});
@@ -64,6 +67,8 @@ it.each(['retry','cancel-calibration','scene-change','interrupted','frozen-seque
  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(){return this.hasAttribute('data-preview')?{left:20,top:20,width:500,height:281,right:520,bottom:301}:{left:0,top:0,width:600,height:600,right:600,bottom:600};});
  let altered=false;const pixels=()=>{const data=new Uint8ClampedArray(960*540*4);if(altered)for(let y=240;y<256;y++)for(let x=460;x<476;x++)data[(y*960+x)*4]=255;return data;};
  const ctx={drawImage:vi.fn(),putImageData:vi.fn(),getImageData:()=>({width:960,height:540,data:pixels()}),beginPath:vi.fn(),moveTo:vi.fn(),lineTo:vi.fn(),closePath:vi.fn(),stroke:vi.fn()};vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx);
+ // Vitest 4 reuses inherited spies; keep the canvas geometry independent of the parent preview spy.
+ Object.defineProperty(HTMLCanvasElement.prototype, 'getBoundingClientRect', {configurable:true,writable:true,value:canvasRectMethod});
  vi.spyOn(HTMLCanvasElement.prototype,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:960,height:540});
  let sequence=0,statusListener;const transport={supported:()=>true,listProfiles:async()=>[{profileId:'camera-1',host:'192.168.1.2'}],getStatus:async()=>({state:'live',sessionId:'session-1',streamWidth:960,streamHeight:540}),onStatus:async callback=>{statusListener=callback;return {remove:vi.fn()};},setPreviewRect:vi.fn(async()=>{}),disconnect:vi.fn(async()=>{}),releaseFrame:vi.fn(async()=>{}),acquireLatestFrame:vi.fn(async({calibrationId})=>({version:1,cameraId:'camera-1',sessionId:'session-1',sequence:++sequence,frameId:`frame-${sequence}`,width:960,height:540,orientation:0,calibrationId,mediaOrigin:'camera',timestampMeaning:'local-render-not-sensor-capture',observedAtMonotonicMs:performance.now(),ageUpperBoundMs:0,url:'http://localhost/private-frame',timingDiagnostics:{clock:'android-elapsed-realtime',meaning:'local-stage-durations-not-sensor-latency',snapshotExtractionMs:12,pngEncodeAndWriteMs:23,nativeRenderAgeMs:scenario==='timing-cap'?60000:4,url:'rtsp://user:secret@host',pixels:[255]}}))};
  let game=command(createCoreGame({id:'camera-game',names:['Alice'],source:'camera'}),{type:'start',seat:0},{id:'start-camera'});

@@ -37,6 +37,6 @@ describe('accepted score and turn pulse',()=>{
   pulseAccepted(root,before,next({type:'score',category:'chance',value:21},{activeSeat:1}),{reduced:false});
   expect(classes.has('accepted-score')).toBe(true); expect(classes.has('accepted-turn')).toBe(true);
   expect(root.inert).toBeUndefined();
-  vi.advanceTimersByTime(1000); expect(classes.size).toBe(0); vi.useRealTimers();
+  vi.advanceTimersByTime(1200); expect(classes.size).toBe(0); vi.useRealTimers();
  });
 });

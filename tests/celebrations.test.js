@@ -47,7 +47,7 @@ describe('confirmed game celebrations',()=>{
   expect(celebration(before,after({type:'score',category:'yahtzee',value:50})).kind).toBe('yahtzee');
   expect(celebration(before,after({type:'score',category:'aces',value:5,bonus:100})).kind).toBe('yahtzee');
   expect(celebration(before,after({type:'bonus',value:100})).kind).toBe('yahtzee');
-  expect(celebration(before,after({type:'score',category:'yahtzee',value:0})).kind).toBe('score');
+  expect(celebration(before,after({type:'score',category:'yahtzee',value:0}))).toBeNull();
  });
  it('celebrates straights and prioritises the final result',()=>{
   const next=after({type:'score',category:'largeStraight',value:40});

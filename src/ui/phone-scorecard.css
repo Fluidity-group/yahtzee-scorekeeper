@@ -1,0 +1,31 @@
+/* Smartphone surface: one full-size actionable seat, a shared read-only comparison rail. */
+#coreApp.playing .phone-scorecard{display:flex;flex-direction:column;flex:1 1 auto;min-height:200px;min-width:0;--peer-width:68px;}
+.phone-scorecard-caption{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:48px;color:var(--club-muted);font-size:12px;}
+.phone-peer-controls{display:flex;align-items:center;gap:4px;}
+.phone-peer-controls button{min-width:44px;min-height:44px;border:1px solid var(--club-line);border-radius:12px;background:var(--club-soft);color:var(--club-accent);font:inherit;font-size:24px;touch-action:manipulation;}
+.phone-peer-controls button:focus-visible{outline:2px solid var(--club-accent);outline-offset:2px;}
+.phone-peer-controls [role=status]{font-variant-numeric:tabular-nums;min-width:28px;text-align:center;}
+#coreApp.playing .phone-scorecard .score-table-wrap{overflow-x:hidden;flex:1 1 auto;min-height:140px;}
+#coreApp .phone-scorecard .phone-score-table{table-layout:fixed;width:100%;}
+.phone-category-col{width:38%;}.phone-own-col{width:82px;}
+#coreApp .phone-score-table th,#coreApp .phone-score-table td{min-width:0;max-width:none;height:52px;padding:4px;}
+#coreApp .phone-score-table th:first-child{min-width:0;width:auto;padding-left:8px;position:static;font-size:12px;overflow-wrap:anywhere;}
+#coreApp .phone-score-table thead th{position:sticky;top:0;height:96px;z-index:3;}
+#coreApp .phone-score-table thead th:first-child{position:sticky;}
+#coreApp .phone-score-table tr>:nth-child(2){--player-hue:var(--featured-hue,162);}
+#coreApp .phone-score-table .phone-comparison-cell,#coreApp .phone-score-table .phone-comparison-heading{padding:0;overflow:hidden;background:var(--club-panel);box-shadow:none;}
+.phone-peer-window{width:100%;overflow:hidden;}
+.phone-peer-track{display:flex;width:max-content;transform:translateX(calc(var(--peer-offset) * var(--peer-width) * -1));}
+.phone-peer-slot{box-sizing:border-box;flex:0 0 var(--peer-width);width:var(--peer-width);padding:4px;min-height:44px;display:flex;align-items:center;justify-content:center;--player-color:hsl(var(--player-hue) 65% 76%);--player-border:var(--club-line);--player-tile:var(--club-soft);}
+.phone-peer-headings .phone-peer-slot{display:block;min-height:96px;padding-top:10px;}
+#coreApp .phone-scorecard .player-name{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+#coreApp .phone-scorecard .phone-peer-headings strong{display:block;font-size:16px;line-height:26px;}
+#coreApp .phone-scorecard .phone-peer-headings small{display:block;font-size:8px;line-height:14px;white-space:nowrap;color:var(--club-muted);}
+#coreApp .phone-scorecard .phone-peer-headings .hidden-total{display:block;font-size:8px;line-height:26px;}
+#coreApp .phone-scorecard .phone-peer-score{font-size:14px;min-height:32px;line-height:32px;border-radius:8px;color:var(--club-muted);width:100%;}
+#coreApp .phone-scorecard .phone-peer-score.score-placeholder{border-style:dashed;font-size:12px;}
+#coreApp .phone-scorecard .phone-own-heading strong{font-size:24px;}
+#coreApp .phone-scorecard .phone-peer-slot.turn-column{background:var(--club-soft);}
+#coreApp .phone-scorecard .phone-peer-slot.turn-column .player-name{color:var(--club-accent);}
+@media(min-width:600px){.phone-category-col{width:35%;}.phone-own-col{width:100px;}#coreApp.playing .phone-scorecard{--peer-width:80px;}}
+.phone-peer-window{touch-action:pan-y;}

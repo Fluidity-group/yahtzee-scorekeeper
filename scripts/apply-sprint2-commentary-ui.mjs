@@ -1,0 +1,17 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+export function applyCommentaryPrototypePatch(source) {
+ if(source.includes('createSessionCommentary'))throw new Error('Commentary prototype integration already applied.');
+ function replaceOnce(before,after){const at=source.indexOf(before);if(at<0||source.indexOf(before,at+before.length)>=0)throw new Error(`Expected one integration anchor: ${before.slice(0,70)}`);source=source.slice(0,at)+after+source.slice(at+before.length);}
+ replaceOnce("import { saveCore, loadCore, listCore } from './core-store.js';", "import { saveCore, loadCore, listCore } from './core-store.js';\nimport {renderPlayerProfileFields,readPlayerProfileFields} from './ui/commentary-settings.js';\nimport {createSessionCommentary} from './ui/commentary-session.js';");
+ replaceOnce('const hardwareCapture=new AutomaticCapture();','const hardwareCapture=new AutomaticCapture();\nconst commentarySession=createSessionCommentary({onNotice:notice});');
+ replaceOnce('<button class="hbtn" data-action="history">History</button>','<button class="hbtn" data-action="history">History</button><button class="hbtn" data-action="commentary-settings">Commentary</button>');
+ const old=source.match(/function nameInputs\(n\)\{[^\n]*\}/)?.[0];if(!old)throw new Error('Missing local nameInputs function.');
+ replaceOnce(old,'function nameInputs(n){\n const old=[...root.querySelectorAll(\'[name="player"]\')].map(x=>x.value);\n const prior=root.querySelector(\'#createCore\')?new FormData(root.querySelector(\'#createCore\')):null;\n root.querySelector(\'#nameInputs\').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||[\'Dan\',\'Amber\',\'Sam\'][i]||`Player ${i+1}`)}"></label><details><summary>Personalize commentary (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?readPlayerProfileFields(prior,`player${i}`):{})}</details>`).join(\'\');\n}');
+ const commit='await persist(createCoreGame({names:f.getAll(\'player\'),mode:f.get(\'mode\'),source:f.get(\'source\'),...(f.get(\'mode\')===\'competition\'&&f.get(\'source\')===\'manual\'?{rulesVersion:2}:{}),hideTotals:f.has(\'hideTotals\'),id:id()}));';
+ replaceOnce(commit,'const playerDrafts=commentarySession.readPlayers(f);const created=createCoreGame({names:f.getAll(\'player\'),mode:f.get(\'mode\'),source:f.get(\'source\'),...(f.get(\'mode\')===\'competition\'&&f.get(\'source\')===\'manual\'?{rulesVersion:2}:{}),hideTotals:f.has(\'hideTotals\'),id:id()});await persist(created);commentarySession.setPlayers(created.id,playerDrafts);');
+ replaceOnce("if(a==='camera-settings'||a==='capture-camera')", "if(a==='commentary-settings')commentarySession.open({isHost:isDiceHost(),gameId:game?.id||'setup',players:onlineRoom?[]:game?.players||[],scoreDialog:dialog});\n  if(a==='camera-settings'||a==='capture-camera')");
+ for(const link of ['<a class="hbtn" href="?legacy=1">Original game</a>','<a class="core-legacy" href="?legacy=1">Open original two-player game &amp; existing saves</a>','<a class="core-legacy" href="?legacy=1">Original game history</a>']){if(source.includes(link))replaceOnce(link,'');}
+ return source;
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const path=process.argv[2];if(!path)throw new Error('Pass the intended prototype.js path.');const source=await readFile(path,'utf8');await writeFile(path,applyCommentaryPrototypePatch(source),'utf8');}

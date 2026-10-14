@@ -1,0 +1,8 @@
+.session-commentary-drawer{position:fixed;inset:0 0 0 auto;margin:0;box-sizing:border-box;width:min(100vw,480px);max-width:100vw;height:100dvh;max-height:100dvh;background:#0b2022;color:#f4fffa;border:1px solid #6ce5c466;padding:0;overflow:auto;}
+.session-commentary-drawer::backdrop{background:#041214b8;}
+.session-commentary-drawer .commentary-settings{max-height:none;overflow:visible;}
+.commentary-session-note,.session-commentary-drawer [data-local-player-drafts]{margin:0 18px 18px;font-size:13px;line-height:1.5;}
+.session-commentary-drawer summary,.session-commentary-drawer [data-local-player-drafts] button{min-height:44px;display:flex;align-items:center;cursor:pointer;}
+.session-commentary-drawer [data-local-player-drafts] button{border-radius:10px;border:1px solid #6ce5c466;background:#163a37;color:#f4fffa;font:inherit;padding:10px 16px;}
+.session-commentary-drawer h3{margin-bottom:0;}
+.new-core #nameInputs>details>summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size:13px;}
