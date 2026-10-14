@@ -88,7 +88,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   const attempt={id:randomId(),jobId:job.id,stage,characters,status:'submitted',at:now()};
   state.budgets.set(job.roomId,{requests:used.requests+1,characters:used.characters+characters});state.attempts.set(attempt.id,attempt);return attempt;
  }
- async function getProfile(userId,roomId){await authorized(userId,roomId);return store.transaction(state=>({...settings(state,roomId),capabilities:{providerMode:live?'live':syntheticProviders?'synthetic':'disabled',liveProviders:live}}));}
+ async function getProfile(userId,roomId){await authorized(userId,roomId);return {...settings(store.snapshot(),roomId),capabilities:{providerMode:live?'live':syntheticProviders?'synthetic':'disabled',liveProviders:live}};}
  async function setProfile(userId,roomId,{expectedVersion,changes}={}){
   const room=await authorized(userId,roomId,true);if(!Number.isSafeInteger(expectedVersion)||!changes||typeof changes!=='object'||Object.keys(changes).some(k=>!['enabled','profanityAllowed','humorIntensity','frequency','voiceOption'].includes(k)))fail('Invalid settings change.');
   return store.transaction(state=>{const prior=settings(state,roomId);if(prior.version!==expectedVersion)fail('Commentary settings changed.',409);let next;try{next=updateProfile(prior,changes);}catch{fail('Invalid commentary settings.');}state.settings.set(roomId,next);for(const job of state.jobs.values())if(job.roomId===room.id)cancel(state,job,'profile-changed');
@@ -258,7 +258,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   return store.transaction(state=>{const prior=state.playerProfiles.get(userId);if((state.playerProfileVersions.get(userId)||0)!==expectedVersion)fail('Personal profile changed.',409);
    let checked;try{checked=createPlayerProfile({...prior?.profile,...changes,accountId:userId,version:expectedVersion+1});}catch{fail('Check optional profile fields.');}
    const shared=new Set(prior?.sharedRoomIds||[]);if(changes.shareWithRoom===true)shared.add(roomId);if(changes.shareWithRoom===false)shared.delete(roomId);
-   const m=memory(state);m.setPlayerProfile(userId,checked,{sharedGameIds:shared.has(roomId)?[room.game.id]:[]});state.playerProfiles.get(userId).sharedRoomIds=[...shared];state.playerProfileVersions.set(userId,checked.version);m.setPreferenceSharing(userId,shared.has(roomId)?[room.game.id]:[]);
+   const m=memory(state);m.setPlayerProfile(userId,checked,{sharedGameIds:shared.has(roomId)&&room.game?[room.game.id]:[]});state.playerProfiles.get(userId).sharedRoomIds=[...shared];state.playerProfileVersions.set(userId,checked.version);m.setPreferenceSharing(userId,shared.has(roomId)&&room.game?[room.game.id]:[]);
    for(const job of state.jobs.values())if(job.facts.accountId===userId)cancel(state,job,'personal-profile-changed');return {...checked,shareWithRoom:shared.has(roomId)};
   });
  }

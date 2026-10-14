@@ -19,7 +19,7 @@ beforeEach(async()=>{
  action('online');await vi.waitFor(()=>expect(openOnline).toHaveBeenCalledOnce());
 });
 it('lets the score owner undo a scratch after turn handoff, reopen the category, and choose another score',async()=>{
- await score('smallStraight',0);expect(mock.room.game.activeSeat).toBe(1);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();
+ await score('smallStraight',0);expect(document.querySelector('main').lastElementChild.classList.contains('game-bottom-actions')).toBe(true);expect(document.querySelector('.game-bottom-actions button').textContent).toBe('Undo last score');expect(document.querySelector('.game-bottom-actions').textContent).not.toContain('available before the next score');expect(mock.room.game.activeSeat).toBe(1);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();
  await undo();expect(mock.room.game.activeSeat).toBe(0);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.events.some(event=>event.type==='score-undo')).toBe(true);expect(document.querySelector('[data-action="choose"][data-key="smallStraight"]')).not.toBeNull();
  await score('fullHouse',25);expect(mock.room.game.sheets[0].fullHouse).toBe(25);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.activeSeat).toBe(1);
 });

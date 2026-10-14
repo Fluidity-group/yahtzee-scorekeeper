@@ -23,3 +23,5 @@
 .mp-tournament-fields{margin:0;padding:16px;border:1px solid var(--club-line);border-radius:12px;min-width:0;}
 .mp-tournament-fields[hidden]{display:none;}.mp-tournament-fields legend{padding:0 6px;font-weight:600;}
 .tournament-return{min-height:110px;gap:7px;}.tournament-return strong{overflow-wrap:anywhere;}.tournament-return b{color:var(--club-accent);font-size:13px;margin-top:4px;}
+
+.mp-commentary-setup{border:1px solid var(--club-line,#6ce5c466);border-radius:18px;padding:16px;margin:18px 0;background:var(--club-panel,#14242d)}.mp-commentary-setup h2{font-size:20px;margin:0 0 8px}.mp-commentary-setup p{font-size:14px;line-height:1.5;color:var(--club-muted,#b9c9c5)}.mp-commentary-setup button{min-height:48px;}

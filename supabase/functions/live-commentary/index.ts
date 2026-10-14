@@ -716,7 +716,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function getProfile(userId, roomId) {
     await authorized(userId, roomId);
-    return store.transaction((state) => ({ ...settings(state, roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live } }));
+    return { ...settings(store.snapshot(), roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live } };
   }
   async function setProfile(userId, roomId, { expectedVersion, changes } = {}) {
     const room = await authorized(userId, roomId, true);
@@ -1143,10 +1143,10 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       if (changes.shareWithRoom === true) shared.add(roomId);
       if (changes.shareWithRoom === false) shared.delete(roomId);
       const m = memory(state);
-      m.setPlayerProfile(userId, checked, { sharedGameIds: shared.has(roomId) ? [room.game.id] : [] });
+      m.setPlayerProfile(userId, checked, { sharedGameIds: shared.has(roomId) && room.game ? [room.game.id] : [] });
       state.playerProfiles.get(userId).sharedRoomIds = [...shared];
       state.playerProfileVersions.set(userId, checked.version);
-      m.setPreferenceSharing(userId, shared.has(roomId) ? [room.game.id] : []);
+      m.setPreferenceSharing(userId, shared.has(roomId) && room.game ? [room.game.id] : []);
       for (const job of state.jobs.values()) if (job.facts.accountId === userId) cancel(state, job, "personal-profile-changed");
       return { ...checked, shareWithRoom: shared.has(roomId) };
     });

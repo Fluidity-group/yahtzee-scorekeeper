@@ -79,7 +79,7 @@ function ownUndoCandidate(){
 }
 function undoPanel(){
  const candidate=ownUndoCandidate();if(!candidate)return '';
- return `<section class="compact-start" aria-label="Undo latest score"><button class="all-scores" data-action="undo-last-score"${busy||tournamentPaused()||onlineRoom&&!onlineConnected?' disabled':''}>Undo last score · ${esc(META[candidate.category].name)}</button><span class="core-muted">${esc(game.players[candidate.seat].name)} · ${game.sheets[candidate.seat][candidate.category]} points · available before the next score</span></section>`;
+ return `<section class="game-bottom-actions" aria-label="Score actions"><button class="all-scores" data-action="undo-last-score"${busy||tournamentPaused()||onlineRoom&&!onlineConnected?' disabled':''}>Undo last score</button></section>`;
 }
 function confirmUndoScore(){
  const candidate=ownUndoCandidate();if(!candidate||tournamentPaused()||onlineRoom&&!onlineConnected)throw Error('This score cannot be undone now.');
@@ -207,7 +207,7 @@ function render(){
   if(tournamentPaused())root.querySelectorAll('.core-score-table button').forEach(button=>{button.disabled=true;});
   if(tournamentPaused())root.querySelector('.turn-indicator').textContent='Tournament paused';
  }
- const undo=undoPanel();if(undo)root.querySelector('main').insertAdjacentHTML('afterbegin',undo);
+ const undo=undoPanel();if(undo)root.querySelector('main').insertAdjacentHTML('beforeend',undo);
  phoneCleanup();phoneCleanup=bindPhoneScorecard(root,{onPeerOffsetChange:value=>{peerOffset=value;}});
  root.querySelectorAll('.phone-score-table [data-score-seat]').forEach(cell=>{const seat=Number(cell.dataset.scoreSeat);cell.classList.toggle('turn-column',active&&seat===game.activeSeat);cell.classList.toggle('waiting-column',active&&seat!==game.activeSeat);cell.classList.toggle('winner-column',!active&&results(game).winners.includes(seat));});
  updateDiceStatus();
@@ -379,7 +379,8 @@ async function openMultiplayer(joinCode='',view='home'){
  await openOnline(root,{
   notice,
   greeting(metadata){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata)).catch(()=>notice('Commentary is unavailable. Keep playing.'));},
-  table(room){if(!room){hostedCommentaryActive=false;resetHostedCommentary();}},
+  commentary(){return openCommentary();},
+  table(room,userId,connected){if(!room){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;}else{hostedCommentaryActive=true;onlineRoom=room;onlineUserId=userId;onlineConnected=connected;syncHostedCommentary();}},
   account(user){if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
   exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;render();},
   game(room,userId,connected,changed){

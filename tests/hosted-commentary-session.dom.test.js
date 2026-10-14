@@ -4,9 +4,10 @@ import {createHostedCommentarySession} from '../src/ui/hosted-commentary-session
 const host='11111111-1111-4111-8111-111111111111',guest='22222222-2222-4222-8222-222222222222',roomId='33333333-3333-4333-8333-333333333333';
 const wait=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
 beforeAll(()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};});
-function fixture(userId=host){
+function fixture(userId=host,{lobby=false}={}){
  let profile={schemaVersion:1,version:1,enabled:false,humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',voiceOption:'rachel',capabilities:{liveProviders:false,providerMode:'synthetic'}},personal={accountId:userId,version:0,displayName:'',gender:'',blurb:'',shareWithRoom:false},jobs=[];
  const room={id:roomId,hostId:host,members:[{userId:host},{userId:guest}],game:{id:'44444444-4444-4444-8444-444444444444',events:[{id:'score',type:'score'}]}};
+ if(lobby){room.status='lobby';room.game=null;}
  const request=vi.fn(async p=>{
   if(p.operation==='profile-read')return {result:{...profile}};
   if(p.operation==='profile-update'){if(p.expectedVersion!==profile.version)throw Error('Settings changed');profile={...profile,...p.changes,version:profile.version+1};return {result:{...profile}};}
@@ -23,7 +24,7 @@ function fixture(userId=host){
  const player={play:vi.fn(async()=>{}),stop:vi.fn(),renew:vi.fn()},onNotice=vi.fn();
  const session=createHostedCommentarySession({request,player,deviceId:'phone',onNotice,pollMs:0,allowSyntheticPlayback:true,nativeAudioAvailable:true});
  const context={room,userId,connected:true,visible:true};session.update(context);
- const job={id:'55555555-5555-4555-8555-555555555555',gameId:room.game.id,eventId:'score',dependencyEventIds:['score'],profileVersion:1,status:'completed',caption:'A remarkable joke',feedbackBasis:userId===host?'playback':'caption'};
+ const job={id:'55555555-5555-4555-8555-555555555555',gameId:room.game?.id||'44444444-4444-4444-8444-444444444444',eventId:'score',dependencyEventIds:['score'],profileVersion:1,status:'completed',caption:'A remarkable joke',feedbackBasis:userId===host?'playback':'caption'};
  return {session,context,request,player,onNotice,bumpProfile:()=>{profile={...profile,version:profile.version+1};},setJobs:value=>{jobs=value;},job};
 }
 describe('hosted commentary session integration',()=>{
@@ -92,4 +93,9 @@ it('shows only eligible utterances inline without a drawer, survives replacement
  root.innerHTML='<div data-hosted-commentary-inline></div>';f.session.mountSurface({root,scoreDialog:score});expect(root.querySelector('[aria-pressed="true"]')).not.toBeNull();
  score.showModal();score.querySelector('input').focus();f.session.refreshSurface();expect([...root.querySelectorAll('button')].every(b=>b.disabled)).toBe(true);await f.session.refresh();expect(document.activeElement).toBe(score.querySelector('input'));expect(score.querySelector('input').value).toBe('23');
  score.close();f.session.refreshSurface();root.querySelector('[data-inline-commentary-more]').click();await wait();expect(document.querySelector('.hosted-commentary-drawer')).not.toBeNull();document.querySelector('[data-caption-forget]').click();await wait();expect(root.textContent).toBe('');f.session.dispose();
+});
+
+it('configures and unmutes Android lobby before game, retains choices on Start and plays only its accepted welcome',async()=>{
+ const f=fixture(host,{lobby:true});await f.session.open();const form=document.querySelector('[data-commentary-form]');expect(form.elements.listenerMuted.checked).toBe(false);form.elements.enabled.checked=true;form.elements.frequency.value='lively';form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(f.request.mock.calls.some(([p])=>p.operation==='profile-update')).toBe(true));await f.session.refresh();expect(f.request.mock.calls.some(([p])=>p.operation==='jobs-read')).toBe(false);expect(f.player.play).not.toHaveBeenCalled();
+ const profileReads=f.request.mock.calls.filter(([p])=>p.operation==='profile-read').length,gameId='44444444-4444-4444-8444-444444444444',sourceCommandId='accepted_lobby_start_001',jobId='55555555-5555-4555-8555-555555555555';f.setJobs([{id:jobId,gameId,eventId:'lifecycle-'+sourceCommandId,sourceCommandId,acceptedAt:'2026-10-14T20:00:00Z',purpose:'opening',lifecycleVerified:true,dependencyEventIds:[],profileVersion:2,status:'ready',caption:'Welcome to your table.'}]);f.session.update({...f.context,room:{...f.context.room,status:'active',game:{id:gameId,events:[]}}});await f.session.allowGreeting({sourceCommandId,gameId});await vi.waitFor(()=>expect(f.player.play).toHaveBeenCalledOnce());expect(f.request.mock.calls.filter(([p])=>p.operation==='profile-read')).toHaveLength(profileReads);await f.session.allowGreeting({sourceCommandId,gameId});expect(f.player.play).toHaveBeenCalledOnce();f.session.dispose();
 });

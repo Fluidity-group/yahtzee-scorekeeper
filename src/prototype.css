@@ -219,3 +219,5 @@ button:disabled{opacity:.45;cursor:not-allowed;}.core-section-head{display:flex;
 @media(max-width:759px){#coreApp.playing{height:100dvh;}}
 html[data-native] #coreApp.playing{height:100dvh;}
 .capture-face{display:block;font-size:30px;color:var(--club-accent);padding:12px 0;}
+
+.game-bottom-actions{display:flex;justify-content:center;margin:20px 0 0;padding:12px 0 max(18px,env(safe-area-inset-bottom));}.game-bottom-actions button{min-height:48px;min-width:160px;width:auto;padding:12px 24px;}
