@@ -8,8 +8,8 @@ vi.mock('../src/core-store.js',()=>({loadCore:async()=>stored.game,saveCore:vi.f
 vi.mock('../src/dice/camera-panel.js',()=>({openCameraGame:vi.fn(async options=>{stored.options=options;}),openDiceIdentificationTest:vi.fn(async()=>{stored.testOpened=true;}),disconnectCamera:vi.fn(async()=>{})}));
 it('starts an Android camera turn and renders legal recommendations only after a confirmed persisted roll',async()=>{
  stored.game=createCoreGame({id:'local-camera-ui',names:['Alice','Bob'],source:'camera'});
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('[data-action="start-camera"]')).not.toBeNull());
- const beforeTest=JSON.stringify(stored.game);document.querySelector('[data-action="camera-test"]').click();await vi.waitFor(()=>expect(stored.testOpened).toBe(true));expect(JSON.stringify(stored.game)).toBe(beforeTest);expect(stored.options).toBeNull();
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('[data-action="start-camera"]')).not.toBeNull());
+ const beforeTest=JSON.stringify(stored.game);document.querySelector('[data-action=game-menu]').click();document.querySelector('[data-action="camera-test"]').click();await vi.waitFor(()=>expect(stored.testOpened).toBe(true));expect(JSON.stringify(stored.game)).toBe(beforeTest);expect(stored.options).toBeNull();
  document.querySelector('[data-action="start-camera"]').click();await vi.waitFor(()=>expect(stored.game.turn?.source).toBe('camera'));
  expect(document.querySelector('[data-action="choose"][data-key="chance"]').disabled).toBe(true);
  document.querySelector('[data-action="capture-camera"]').click();await vi.waitFor(()=>expect(stored.options).not.toBeNull());

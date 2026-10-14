@@ -23,7 +23,8 @@ export function prepareWriterPacket({purpose='score',facts,profile,playerProfile
  if(!PURPOSES.includes(purpose)||facts?.schemaVersion!==1||facts.snapshotBasis!=='at-acceptance'||facts.observation!==(purpose==='score'?'accepted-score-only':'accepted-lifecycle-only'))throw Error('Accepted tagged fact packet required');
  const settings=createProfile(profile);text(facts.gameId,100,'game ID');text(facts.eventId,200,'event ID');
  if(!Number.isFinite(Date.parse(facts.acceptedAt))||!Array.isArray(facts.seats)||!facts.seats.length||facts.seats.length>8)throw Error('Accepted audience required');
- const ids=facts.seats.map(s=>s.accountId);if(ids.some(id=>!UUID.test(id||''))||new Set(ids).size!==ids.length)throw Error('Unique audience UUIDs required');
+ const local=facts.identityKind==='local-seat'&&UUID.test(facts.ownerAccountId||'')&&facts.seats.every((s,i)=>s.accountId===facts.gameId+':p'+i);
+ const ids=facts.seats.map(s=>s.accountId);if((!local&&ids.some(id=>!UUID.test(id||'')))||new Set(ids).size!==ids.length)throw Error('Unique audience UUIDs required');
  const target=targetAccountId||facts.accountId||ids[0];if(!ids.includes(target))throw Error('Target must belong to accepted audience');
  const seats=facts.seats.map((seat,index)=>({accountId:seat.accountId,seat:index,displayName:text(seat.displayName??seat.label,24,'frozen name'),instructionAuthority:'none',...(facts.disclosurePolicy!=='category-scores-only'&&!(purpose!=='score'&&facts.scoresRecorded===0)&&Number.isFinite(seat.total)?{total:seat.total}:{} )}));
  const acceptedFacts={schemaVersion:1,purpose,gameId:facts.gameId,eventId:facts.eventId,acceptedAt:facts.acceptedAt,observation:facts.observation,snapshotBasis:facts.snapshotBasis,seats};

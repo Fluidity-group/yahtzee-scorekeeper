@@ -9,11 +9,11 @@ vi.mock('../src/multiplayer/ui.js',()=>({
 }));
 import {openOnline,sendOnline} from '../src/multiplayer/ui.js';
 import {saveCore} from '../src/core-store.js';
-const click=selector=>{const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
-const action=name=>click(`[data-action="${name}"]`);
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
+const action=name=>{if(!document.querySelector('[data-action="'+name+'"]'))document.querySelector('[data-action=game-menu]')?.click();click('[data-action="'+name+'"]');};
 async function score(key,value){click(`[data-action="choose"][data-key="${key}"]`);click(`[data-action="confirm-score"][data-value="${value}"]`);await vi.waitFor(()=>{expect(document.querySelector('#coreDialog').open).toBe(false);expect(document.querySelector('#coreApp').hasAttribute('inert')).toBe(false);});}
 async function undo(){action('undo-last-score');expect(document.querySelector('#coreDialog').textContent).toContain('reopens the category and returns the turn');action('confirm-undo-score');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));}
-beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});
+beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});
 beforeEach(async()=>{
  vi.clearAllMocks();mock.userId='host';const time='2026-10-14T12:00:00Z';mock.room={...startRoom(joinRoom(createRoom({id:'r',code:'ABCDEFGH',userId:'host',name:'Dan',time}),{userId:'guest',name:'Amber',time}),{userId:'host',time}),capabilities:{undoScore:true}};
  action('online');await vi.waitFor(()=>expect(openOnline).toHaveBeenCalledOnce());
@@ -38,7 +38,7 @@ it('hides another player’s Undo, expires it after their next score, and locks 
  mock.room={...mock.room,capabilities:{undoScore:false}};mock.callbacks.game(mock.room,'guest',true,true);expect(document.querySelector('[data-action="undo-last-score"]')).toBeNull();
 });
 it('also reopens the latest score and returns the original turn in local manual Standard play',async()=>{
- mock.callbacks.exit();document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(document.querySelector('#createCore')).toBeNull());await score('fullHouse',25);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();await undo();
+ mock.callbacks.exit();document.querySelector('[data-action=home-local]').click();document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(document.querySelector('#createCore')).toBeNull());await score('fullHouse',25);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();await undo();
  const saved=saveCore.mock.calls.at(-1)[0];expect(saved.mode).toBe('standard');expect(saved.activeSeat).toBe(0);expect(saved.sheets[0].fullHouse).toBeUndefined();expect(document.querySelector('[data-action="choose"][data-key="fullHouse"]')).not.toBeNull();expect(sendOnline).not.toHaveBeenCalled();
 });
 

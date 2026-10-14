@@ -22,7 +22,7 @@ function message(text){const box=root.querySelector('#mpMessage');if(box)box.tex
 function shell(body){
  if(screen==='lobby')callbacks?.table?.(room,user?.id,connected);else callbacks?.table?.(null);
  root.classList.remove('playing');
- root.innerHTML=`<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><button class="hbtn" data-mp="exit">Local games</button></header><main class="mp-screen">${body}<p id="mpMessage" role="status" aria-live="polite"></p></main>`;
+ root.innerHTML=`<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><button class="hbtn" data-mp="exit">Clubhouse</button></header><main class="mp-screen">${body}<p id="mpMessage" role="status" aria-live="polite"></p></main>`;
 }
 function accountScreen(codeSent=false){
  if(!emailOtpEnabled&&!codeSent){passwordScreen();return;}
@@ -135,7 +135,7 @@ async function sessions(view='open'){
  shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Saved games &amp; tournaments.</h1><div class="tournament-actions" role="group" aria-label="Saved game filters"><button class="hbtn" data-mp="sessions-open" aria-pressed="${view==='open'}">Open · resume play</button><button class="hbtn" data-mp="sessions-completed" aria-pressed="${view==='completed'}">Completed · view results</button></div><p class="core-muted">Saved to your signed-in account. Open the same table to keep your seat, scores and current turn.</p>${renderSavedSessions([...saved.values()],user.id,{view})}`);
 }
 async function accountDestination(){
- if(invite)joinForm();else if(landingView==='sessions')await sessions();else if(landingView==='tournaments')await tournaments();else home();
+ if(landingView==='voice-signin'){await callbacks?.voiceReady?.(user);return;}if(invite)joinForm();else if(landingView==='host-tournament'){hostForm();const select=root.querySelector('[name=tableType]');select.value='tournament';select.dispatchEvent(new Event('change',{bubbles:true}));}else if(landingView==='sessions')await sessions();else if(landingView==='tournaments')await tournaments();else home();
 }
 export async function openOnline(element,handlers,joinCode='',view='home'){
  leaveOnline();onlineOpen=true;const ticket=generation;root=element;callbacks=handlers;invite=joinCode;displayName=recall('clubhouse-name');landingView=view;
@@ -153,9 +153,9 @@ export async function openOnline(element,handlers,joinCode='',view='home'){
   if(!user)accountScreen();else{try{await accountDestination();}catch(error){if(current(ticket)){home();message(onlineErrorMessage(error));}}}
  }catch(error){if(current(ticket)){user=null;callbacks?.account?.(null);accountScreen();message(onlineErrorMessage(error));}}
 }
-export async function sendOnline(action,expectedRevision){
+export async function sendOnline(action,expectedRevision,commandId=crypto.randomUUID()){
  if(!connected||working)throw new Error('Reconnecting. Wait for the game to sync before scoring.');
- return mutate({operation:'command',code:room.code,gameId:room.game.id,rulesVersion:room.game?.rules.version??room.rulesVersion??1,action,expectedRevision,commandId:crypto.randomUUID()});
+ return mutate({operation:'command',code:room.code,gameId:room.game.id,rulesVersion:room.game?.rules.version??room.rulesVersion??1,action,expectedRevision,commandId});
 }
 export async function setOnlineReady(ready){
  if(!connected||working)throw new Error('Reconnecting. Wait for the table to sync.');
@@ -229,6 +229,7 @@ document.addEventListener('click',async e=>{
   if(a==='connect-dice'){const {openDiceConnections}=await import('#dice-panel');openDiceConnections();}
   if(a==='commentary')await callbacks?.commentary?.();
   if(a==='start'){
+   if(callbacks?.beforeStart&&await callbacks.beforeStart()===false)return;
    const status=getDiceStatus();
    if(room.source==='godice'&&(status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected)))throw new Error('Connect five GoDice on this host before starting.');
    await mutate({operation:'start',code:room.code,rulesVersion:room.game?.rules.version??room.rulesVersion??1,expectedRevision:room.revision,commandId:crypto.randomUUID()});
@@ -238,7 +239,7 @@ document.addEventListener('click',async e=>{
    try{await navigator.clipboard.writeText(link);if(current(ticket))message('Invitation link copied.');}
    catch{if(current(ticket))message(`Share this link: ${link}`);}
   }
- }catch(error){if(current(ticket)){message(onlineErrorMessage(error));schedule();}}
+ }catch(error){if(current(ticket)){if(button.dataset.mp==='start'){callbacks?.startFailed?.();if(room&&!room.game)lobby();}message(onlineErrorMessage(error));schedule();}}
 });
 document.addEventListener('submit',async e=>{
  const form=e.target;if(!form.matches('[data-mp-form]')||!onlineOpen)return;e.preventDefault();if(working)return;const ticket=generation;

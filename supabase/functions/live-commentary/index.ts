@@ -46,6 +46,315 @@ function filledBaseCount(values) {
   return BASE_KEYS.filter((k) => values[k] !== void 0).length;
 }
 
+// src/game/core.js
+var MODES = Object.freeze({
+  standard: Object.freeze({ name: "Standard", version: 1, rolls: 3, finalRolls: 3, extraTurn: false, weighted: false, joker: true }),
+  competition: Object.freeze({ name: "Competition", version: 1, rolls: 3, finalRolls: 4, extraTurn: true, weighted: false, joker: true }),
+  accumulative: Object.freeze({ name: "Accumulative", version: 1, rolls: 3, finalRolls: 3, extraTurn: true, weighted: true, joker: true })
+});
+var fail = (message) => {
+  throw new Error(message);
+};
+var isFace = (n) => Number.isInteger(n) && n >= 1 && n <= 6;
+var SOURCES = ["manual", "manual-faces", "simulated", "godice", "camera"];
+var FACE_SOURCES = ["manual-faces", "simulated", "godice", "camera"];
+function gameRules(mode, rulesVersion = 1, source = "manual") {
+  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail("Unknown game mode.");
+  if (rulesVersion === 1) return { ...MODES[mode] };
+  if (rulesVersion === 2 && mode === "competition" && source === "manual") return { ...MODES.competition, version: 2, finalChain: true, bonusRolls: 3 };
+  fail("This rules version requires Competition with manual scoring.");
+}
+var finalChainRules = (g) => g.mode === "competition" && g.rules.version === 2 && g.rules.finalChain === true;
+function validateDice(dice) {
+  if (!Array.isArray(dice) || dice.length !== 5 || !dice.every(isFace)) fail("Enter five dice, each from 1 to 6.");
+  return dice;
+}
+function combinations(dice) {
+  validateDice(dice);
+  const counts = Array.from({ length: 6 }, (_, i) => dice.filter((n) => n === i + 1).length);
+  const present = new Set(dice);
+  const straight = (n) => Array.from({ length: 7 - n }, (_, i) => i + 1).some((start) => Array.from({ length: n }, (_, i) => start + i).every((v) => present.has(v)));
+  return { threeKind: counts.some((n) => n >= 3), fourKind: counts.some((n) => n >= 4), fullHouse: counts.includes(3) && counts.includes(2), smallStraight: straight(4), largeStraight: straight(5), yahtzee: counts.includes(5) };
+}
+var yahtzeePoints = (rules, face) => rules.weighted ? 110 - 10 * face : 50;
+var bonusPoints = (rules, face) => rules.weighted ? yahtzeePoints(rules, face) : 100;
+var filled = (sheet) => BASE_KEYS.filter((k) => sheet[k] !== void 0).length;
+function rollLimit(game, seat = game.activeSeat) {
+  return game.finalChain?.seat === seat ? game.rules.bonusRolls : filled(game.sheets[seat]) === 12 ? game.rules.finalRolls : game.rules.rolls;
+}
+function createCoreGame({ names, mode = "standard", rulesVersion = 1, source = "manual", hideTotals = false, id: id2, time = (/* @__PURE__ */ new Date()).toISOString() }) {
+  if (!Array.isArray(names) || names.length < 1 || names.length > 8) fail("Choose one to eight players.");
+  const clean2 = names.map((n) => String(n).trim());
+  if (clean2.some((n) => !n || n.length > 24)) fail("Player names must contain 1\u201324 characters.");
+  if (new Set(clean2.map((n) => n.toLowerCase())).size !== clean2.length) fail("Use a different name for each player.");
+  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail("Unknown game mode.");
+  if (!SOURCES.includes(source)) fail("Unknown dice source.");
+  if (!id2) fail("A game ID is required.");
+  return {
+    id: id2,
+    schema: 1,
+    revision: 0,
+    mode,
+    rules: gameRules(mode, rulesVersion, source),
+    source,
+    hideTotals: Boolean(hideTotals),
+    players: clean2.map((name2, seat) => ({ id: `${id2}:p${seat}`, name: name2, seat })),
+    sheets: clean2.map(() => ({})),
+    activeSeat: 0,
+    status: "active",
+    startedAt: time,
+    endedAt: null,
+    turn: null,
+    turns: [],
+    events: []
+  };
+}
+function scoreOptions(game, dice) {
+  validateDice(dice);
+  const sheet = game.sheets[game.activeSeat], c = combinations(dice), sum = dice.reduce((a, b) => a + b, 0);
+  const available = BASE_KEYS.filter((k) => sheet[k] === void 0);
+  const matchingUpper = UPPER_KEYS[dice[0] - 1];
+  const repeat = c.yahtzee && sheet.yahtzee !== void 0;
+  let allowed2 = available;
+  if (repeat && game.rules.joker) {
+    if (sheet[matchingUpper] === void 0) allowed2 = [matchingUpper];
+    else {
+      const lower = available.filter((k) => !UPPER_KEYS.includes(k));
+      allowed2 = lower.length ? lower : available;
+    }
+  }
+  const joker = repeat && sheet[matchingUpper] !== void 0;
+  const result = {};
+  for (const key2 of allowed2) {
+    const cat = META[key2];
+    result[key2] = cat.face ? dice.filter((v) => v === cat.face).length * cat.face : key2 === "chance" ? sum : key2 === "threeKind" ? c.threeKind ? sum : 0 : key2 === "fourKind" ? c.fourKind ? sum : 0 : key2 === "yahtzee" ? c.yahtzee ? yahtzeePoints(game.rules, dice[0]) : 0 : c[key2] || joker ? cat.value : 0;
+  }
+  return {
+    scores: result,
+    bonus: repeat && sheet.yahtzee > 0 ? bonusPoints(game.rules, dice[0]) : 0,
+    extraTurn: repeat && sheet.yahtzee > 0 && game.rules.extraTurn && !(finalChainRules(game) && filled(sheet) === 12),
+    joker: repeat,
+    combinations: c
+  };
+}
+function validateValue(game, category, value) {
+  if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail("Invalid score.");
+  const c = META[category];
+  if (c.face && (value > c.face * 5 || value % c.face)) fail("Choose a count from zero to five.");
+  if (c.type === "sum" && value > 30) fail("The dice total cannot exceed 30.");
+  if (c.type === "fixed" && category !== "yahtzee" && ![0, c.value].includes(value)) fail("Use the category score or zero.");
+  if (category === "yahtzee" && !(game.rules.weighted ? [0, 50, 60, 70, 80, 90, 100] : [0, 50]).includes(value)) fail("Invalid Yahtzee value.");
+}
+function finishTurn(g, extra, time) {
+  g.turn.endedAt = time;
+  g.turns.push(g.turn);
+  g.turn = null;
+  if (!g.finalChain && g.sheets.every((s) => filled(s) === 13)) {
+    g.status = "finished";
+    g.endedAt = time;
+    return;
+  }
+  if (!extra) {
+    for (let i = 1; i <= g.players.length; i++) {
+      const next = (g.activeSeat + i) % g.players.length;
+      if (filled(g.sheets[next]) < 13) {
+        g.activeSeat = next;
+        break;
+      }
+    }
+  }
+}
+function undoableScore(game, seat) {
+  if (game.mode !== "standard" || game.source !== "manual" || game.finalChain) return null;
+  const undone = new Set(game.events.filter((e) => e.type === "score-undo").map((e) => e.target));
+  const score = game.events.findLast((e) => e.type === "score" && !undone.has(e.id));
+  if (!score || score.source !== "manual" || seat !== void 0 && score.seat !== seat) return null;
+  if (game.sheets[score.seat][score.category] === void 0) return null;
+  const later = game.events.slice(game.events.indexOf(score) + 1);
+  if (later.some((e) => !["turn-start", "score-correction"].includes(e.type))) return null;
+  for (const e of later.filter((e2) => e2.type === "turn-start")) {
+    const turn = game.turn?.id === e.turnId ? game.turn : game.turns.find((t) => t.id === e.turnId);
+    if (!turn || turn.source !== "manual" || turn.rolls.length || turn.manualRolls?.length || turn.undone) return null;
+  }
+  if (game.turn && (game.turn.source !== "manual" || game.turn.rolls.length || game.turn.manualRolls?.length)) return null;
+  return score;
+}
+function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
+  if (!id2) fail("Command ID required.");
+  if (game.events.some((e) => e.commandId === id2)) return game;
+  const g = structuredClone(game);
+  const event = (type, data = {}) => {
+    const e = { id: `${id2}:${g.events.length}`, commandId: id2, type, time, seat: g.activeSeat, turnId: g.turn?.id ?? null, ...data };
+    g.events.push(e);
+    return e;
+  };
+  if (action.type === "undo-score") {
+    const original = undoableScore(g, action.seat);
+    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest manual Standard score can be undone before another gameplay action.");
+    const before = g.sheets[original.seat][original.category], reversedBonus = original.bonus || 0;
+    delete g.sheets[original.seat][original.category];
+    if (reversedBonus) {
+      const remaining = (g.sheets[original.seat].yahtzeeBonus || 0) - reversedBonus;
+      if (remaining < 0) fail("The attached Yahtzee bonus cannot be reversed.");
+      if (remaining) g.sheets[original.seat].yahtzeeBonus = remaining;
+      else delete g.sheets[original.seat].yahtzeeBonus;
+    }
+    for (const turn of g.turns) if (turn.id === original.turnId) Object.assign(turn, { undone: true, excluded: true, undoTarget: original.id });
+    if (g.turn) g.turns.push({ ...g.turn, endedAt: time, undone: true, excluded: true, undoTarget: original.id });
+    g.turn = null;
+    g.activeSeat = original.seat;
+    g.status = "active";
+    g.endedAt = null;
+    event("score-undo", { target: original.id, seat: original.seat, category: original.category, before, reversedBonus });
+  } else if (action.type === "correct-score") {
+    const original = g.events.find((e) => e.id === action.target && e.type === "score");
+    if (!original || original.seat !== action.seat) fail("Choose one of this player\u2019s recorded scores.");
+    if (g.events.some((e) => e.type === "score-undo" && e.target === original.id)) fail("That score was undone. Choose the replacement score.");
+    validateValue(g, original.category, action.value);
+    event("score-correction", { target: original.id, seat: original.seat, category: original.category, before: g.sheets[original.seat][original.category], value: action.value });
+    g.sheets[original.seat][original.category] = action.value;
+  } else {
+    if (g.status !== "active") fail("This game is complete.");
+    if (action.seat !== g.activeSeat) fail("It is another player\u2019s turn.");
+    if (action.type === "start") {
+      if (g.turn) fail("The turn is already started.");
+      const source = action.source ?? g.source;
+      if (!SOURCES.includes(source)) fail("Unknown dice source.");
+      if (finalChainRules(g) && source !== "manual") fail("These Competition rules use manual scoring.");
+      g.turn = {
+        id: `${id2}:turn`,
+        seat: g.activeSeat,
+        startedAt: time,
+        limit: rollLimit(g),
+        source,
+        rolls: [],
+        manualFallback: false,
+        ...g.finalChain ? { phase: "final-bonus", attempt: g.finalChain.attempt, manualRolls: [] } : {}
+      };
+      event("turn-start");
+    } else {
+      if (!g.turn) fail("Start your turn first.");
+      const rolls = g.turn.rolls.filter((r) => !r.excluded), last = rolls.at(-1);
+      if (g.finalChain && action.type !== "final-chain-roll") fail("Report a roll in your final bonus attempt.");
+      if (action.type === "final-chain-roll") {
+        if (!finalChainRules(g) || !g.finalChain || g.turn.phase !== "final-bonus" || g.turn.source !== "manual") fail("No final bonus attempt is active.");
+        if (action.face !== null && !isFace(action.face)) fail("Report a Yahtzee face from one to six, or no Yahtzee.");
+        if (g.turn.manualRolls.length >= g.turn.limit) fail("Final bonus roll limit reached.");
+        const rollNumber = g.turn.manualRolls.length + 1, attempt = g.finalChain.attempt;
+        const value = action.face === null ? 0 : bonusPoints(g.rules, action.face);
+        const e = event("final-chain-roll", { face: action.face, attempt, rollNumber, value, source: "manual" });
+        g.turn.manualRolls.push({ id: e.id, face: action.face });
+        if (value) {
+          g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + value;
+          g.finalChain.attempt++;
+          finishTurn(g, true, time);
+        } else if (rollNumber === g.turn.limit) {
+          event("final-chain-end", { attempt });
+          g.finalChain = null;
+          finishTurn(g, false, time);
+        }
+      } else if (action.type === "roll") {
+        if (!FACE_SOURCES.includes(g.turn.source)) fail("This turn uses manual scoring.");
+        if (rolls.length >= g.turn.limit) fail("Roll limit reached. Choose a category.");
+        validateDice(action.dice);
+        const held = action.held ?? Array(5).fill(false);
+        if (held.length !== 5 || !held.every((v) => typeof v === "boolean")) fail("Invalid held dice.");
+        if (!last && held.some(Boolean)) fail("Roll all five dice first.");
+        if (held.every(Boolean)) fail("Release at least one die to record a reroll.");
+        if (last && held.some((v, i) => v && action.dice[i] !== last.dice[i])) fail("Held dice cannot change during a reroll.");
+        let hardware = {};
+        if (g.turn.source === "camera") {
+          validateCameraCapture(game, action.capture, action.dice, held);
+          const original = action.capture.observation;
+          if (g.events.some((e2) => e2.type === "roll" && e2.observedSource === "camera" && ["cameraId", "sessionId", "frameId"].every((k) => e2.capture?.observation[k] === original[k]))) fail("This camera frame was already recorded. Capture a fresh roll.");
+          if (last && held.some(Boolean) && ["cameraId", "sessionId", "calibrationId"].some((k) => last.capture?.observation[k] !== original[k])) fail("Camera session or calibration changed. Release all holds and capture again.");
+          hardware = { observedSource: "camera", capture: structuredClone(action.capture) };
+        }
+        if (g.turn.source === "godice") {
+          if (!Array.isArray(action.deviceIds) || action.deviceIds.length !== 5 || new Set(action.deviceIds).size !== 5 || action.deviceIds.some((id3) => typeof id3 !== "string" || !id3)) fail("Five identified dice are required.");
+          if (action.capture?.gameId !== g.id || action.capture?.turnId !== g.turn.id || action.capture?.playerId !== g.players[g.activeSeat].id || action.capture?.revision !== game.revision) fail("Capture belongs to another turn or revision.");
+          if (!Array.isArray(action.capture.events) || action.capture.events.length > 500 || !Array.isArray(action.capture.evidence) || action.capture.evidence.length > 500) fail("Invalid capture evidence.");
+          if (last && held.some(Boolean) && JSON.stringify(last.deviceIds) !== JSON.stringify(action.deviceIds)) fail("Held dice cannot be transferred to another device.");
+          hardware = { deviceIds: [...action.deviceIds], capture: structuredClone(action.capture) };
+        }
+        const e = event("roll", { dice: [...action.dice], held: [...held], source: g.turn.source, combinations: combinations(action.dice), ...hardware });
+        g.turn.rolls.push({ id: e.id, dice: [...action.dice], held: [...held], source: g.turn.source, excluded: false, ...hardware.deviceIds ? { deviceIds: hardware.deviceIds } : {}, ...g.turn.source === "camera" ? hardware : {} });
+      } else if (action.type === "correct-roll") {
+        if (!last) fail("No roll to correct.");
+        validateDice(action.dice);
+        event("roll-correction", { target: last.id, before: [...last.dice], dice: [...action.dice], source: "manual-correction", observedSource: last.observedSource ?? last.source });
+        last.observedSource ??= last.source;
+        last.dice = [...action.dice];
+        last.source = "manual-correction";
+      } else if (action.type === "discard-roll") {
+        if (!last) fail("No roll to exclude.");
+        event("roll-excluded", { target: last.id });
+        last.excluded = true;
+      } else if (action.type === "manual-fallback") {
+        event("manual-fallback");
+        g.turn.source = "manual";
+        g.turn.manualFallback = true;
+      } else if (action.type === "score" || action.type === "bonus") {
+        let dice = FACE_SOURCES.includes(g.turn.source) ? last?.dice : null;
+        if (FACE_SOURCES.includes(g.turn.source) && !dice) fail("Record a roll first.");
+        if (g.turn.source === "manual" && action.yahtzeeFace) {
+          if (!isFace(action.yahtzeeFace)) fail("Choose a valid Yahtzee face.");
+          dice = Array(5).fill(action.yahtzeeFace);
+        }
+        const options = dice ? scoreOptions(g, dice) : null;
+        if (action.type === "bonus") {
+          if (!options?.extraTurn) fail("A scored first Yahtzee and five matching dice are required.");
+          g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + options.bonus;
+          event("bonus", { value: options.bonus, face: dice[0], source: g.turn.source, rollId: last?.id ?? null });
+          finishTurn(g, true, time);
+        } else {
+          if (g.sheets[g.activeSeat][action.category] !== void 0) fail("That category is already filled.");
+          validateValue(g, action.category, action.value);
+          if (options?.extraTurn) fail("Record the bonus Yahtzee, then take your extra turn.");
+          if (options && !(action.category in options.scores)) fail("Joker placement requires another category.");
+          if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail("Score does not match the dice.");
+          if (g.rules.weighted && action.category === "yahtzee" && action.value > 0 && !dice) fail("Select the Yahtzee face.");
+          const bonus = options?.bonus || 0;
+          g.sheets[g.activeSeat][action.category] = action.value;
+          if (bonus) g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + bonus;
+          event("score", { category: action.category, value: action.value, bonus, face: dice?.[0] ?? null, source: g.turn.source, rollId: last?.id ?? null });
+          const finalYahtzee = finalChainRules(g) && filled(g.sheets[g.activeSeat]) === 13 && (action.category === "yahtzee" && action.value > 0 || options?.bonus > 0);
+          if (finalYahtzee) {
+            g.finalChain = { seat: g.activeSeat, attempt: 1 };
+            event("final-chain-start", { attempt: 1 });
+          }
+          finishTurn(g, finalYahtzee, time);
+        }
+      } else fail("Unknown action.");
+    }
+  }
+  g.revision++;
+  return g;
+}
+function validateCameraCapture(game, capture, dice, held) {
+  if (capture?.gameId !== game.id || capture?.revision !== game.revision || capture?.turnId !== game.turn?.id || capture?.playerId !== game.players[game.activeSeat].id) fail("Capture belongs to another turn or revision.");
+  if (capture.version !== 1 || capture.confirmed !== true || capture.identityScope !== "logical-slots") fail("Confirm a versioned camera observation first.");
+  const o = capture.observation;
+  const observationKeys = ["version", "cameraId", "sessionId", "sequence", "frameId", "width", "height", "orientation", "calibrationId", "mediaOrigin", "receivedAtMonotonicMs", "decodedAtMonotonicMs", "observedAtMonotonicMs", "ageUpperBoundMs", "bridgeReceivedAtMonotonicMs", "timestampMeaning", "readerVersion", "prediction", "predictedValues"];
+  if (o && Object.keys(o).some((k) => !observationKeys.includes(k))) fail("Unexpected camera metadata.");
+  if (!o || o.version !== 1 || !["cameraId", "sessionId", "frameId", "calibrationId", "readerVersion"].every((k) => typeof o[k] === "string" && /^[\w.-]{1,128}$/.test(o[k]))) fail("Invalid camera observation identity.");
+  if (!Number.isInteger(o.sequence) || o.sequence < 1 || !Number.isInteger(o.width) || !Number.isInteger(o.height) || o.width < 1 || o.height < 1 || o.width > 8192 || o.height > 8192 || ![0, 90, 180, 270].includes(o.orientation)) fail("Invalid camera frame metadata.");
+  if (!["camera", "local-rtsp", "fixture", "webcam", "replay", "synthetic"].includes(o.mediaOrigin)) fail("Invalid camera media origin.");
+  const rendered = o.timestampMeaning === "local-render-not-sensor-capture";
+  if (rendered) {
+    if (!Number.isFinite(o.observedAtMonotonicMs) || o.observedAtMonotonicMs < 0 || !Number.isFinite(o.ageUpperBoundMs) || o.ageUpperBoundMs < 0) fail("Invalid camera render timing.");
+    if (o.bridgeReceivedAtMonotonicMs !== void 0 && (!Number.isFinite(o.bridgeReceivedAtMonotonicMs) || o.bridgeReceivedAtMonotonicMs < o.observedAtMonotonicMs)) fail("Invalid camera bridge timing.");
+  } else if (o.mediaOrigin === "camera" || !Number.isFinite(o.receivedAtMonotonicMs) || !Number.isFinite(o.decodedAtMonotonicMs) || o.receivedAtMonotonicMs < 0 || o.decodedAtMonotonicMs < o.receivedAtMonotonicMs) fail("Invalid camera frame timing.");
+  if (!Array.isArray(o.predictedValues) || o.predictedValues.length !== 5 || !o.predictedValues.every((v) => v === null || isFace(v))) fail("Invalid original camera values.");
+  if (o.prediction && (!Array.isArray(o.prediction.dice) || o.prediction.dice.length > 5 || JSON.stringify(Array.from({ length: 5 }, (_, i) => o.prediction.dice[i]?.value ?? null)) !== JSON.stringify(o.predictedValues))) fail("Original camera prediction does not match its values.");
+  if (JSON.stringify(o).length > 65536) fail("Camera evidence is too large.");
+  if (!Array.isArray(capture.confirmedValues) || JSON.stringify(capture.confirmedValues) !== JSON.stringify(dice) || JSON.stringify(capture.heldMask) !== JSON.stringify(held)) fail("Review does not match the submitted roll.");
+  if (!Array.isArray(capture.corrections) || capture.corrections.length > 5) fail("Invalid camera corrections.");
+  const changed = o.predictedValues.flatMap((v, i) => v === dice[i] ? [] : [{ slot: i, before: v, after: dice[i] }]);
+  if (JSON.stringify(capture.corrections) !== JSON.stringify(changed)) fail("Camera corrections must preserve the original values.");
+  if (!Number.isFinite(capture.reviewedAtMonotonicMs) || capture.reviewedAtMonotonicMs < (rendered ? o.observedAtMonotonicMs : o.decodedAtMonotonicMs)) fail("Invalid camera review timing.");
+}
+
 // src/commentary/facts.js
 var freeze = (value) => {
   if (value && typeof value === "object") {
@@ -54,14 +363,15 @@ var freeze = (value) => {
   }
   return value;
 };
-function acceptedFacts(game, eventId, accountIds) {
+function acceptedFacts(game, eventId, accountIds, { identityKind = "account", ownerAccountId = null } = {}) {
   const event = game.events.find((e) => e.id === eventId);
   if (!event || !["score", "score-correction", "bonus", "final-chain-roll", "final-chain-end"].includes(event.type)) return null;
-  if (accountIds.length !== game.players.length || new Set(accountIds).size !== accountIds.length || accountIds.some((id2) => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id2))) throw new Error("Unique account UUIDs required for each seat.");
+  const local = identityKind === "local-seat" && /^[0-9a-f-]{36}$/i.test(ownerAccountId || "") && accountIds.every((id2, i) => id2 === game.players[i]?.id && id2 === game.id + ":p" + i);
+  if (accountIds.length !== game.players.length || new Set(accountIds).size !== accountIds.length || !local && accountIds.some((id2) => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id2))) throw new Error("Unique account UUIDs required for each seat.");
   if (game.events.at(-1).commandId !== event.commandId) throw new Error("Capture facts at the accepted command snapshot.");
   const seats = game.sheets.map((sheet, seat) => ({ accountId: accountIds[seat], seat, seatLabel: `Player ${String.fromCharCode(65 + seat)}`, displayName: game.players[seat].name, label: game.players[seat].name, nameSource: "frozen-game-alias", instructionAuthority: "none", ...!game.hideTotals ? { total: computeTotals(sheet).grand, upperBonus: computeTotals(sheet).bonus } : {}, remaining: 13 - filledBaseCount(sheet) }));
   const best = game.hideTotals ? null : Math.max(...seats.map((s) => s.total));
-  return freeze({ schemaVersion: 1, gameId: game.id, eventId, commandId: event.commandId, eventType: event.type, revision: game.revision, acceptedAt: event.time, rulesVersion: game.rules.version, mode: game.mode, source: event.source ?? game.source, seat: event.seat, accountId: accountIds[event.seat], label: seats[event.seat].label, displayName: seats[event.seat].displayName, nameSource: "frozen-game-alias", instructionAuthority: "none", category: event.category ?? null, value: event.value ?? 0, bonus: event.bonus ?? 0, correctionTarget: event.target ?? null, seats, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", leaders: game.hideTotals ? [] : seats.filter((s) => s.total === best).map((s) => s.accountId), tied: game.hideTotals ? null : seats.filter((s) => s.total === best).length > 1, complete: game.status === "finished", finalChain: game.finalChain ? { ...game.finalChain } : null, snapshotBasis: "at-acceptance", scoreDependencies: game.events.filter((e) => e.type === "score").map((e) => e.id), observation: "accepted-score-only" });
+  return freeze({ schemaVersion: 1, ...local ? { identityKind: "local-seat", ownerAccountId } : {}, gameId: game.id, eventId, commandId: event.commandId, eventType: event.type, revision: game.revision, acceptedAt: event.time, rulesVersion: game.rules.version, mode: game.mode, source: event.source ?? game.source, seat: event.seat, accountId: accountIds[event.seat], label: seats[event.seat].label, displayName: seats[event.seat].displayName, nameSource: "frozen-game-alias", instructionAuthority: "none", category: event.category ?? null, value: event.value ?? 0, bonus: event.bonus ?? 0, correctionTarget: event.target ?? null, seats, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", leaders: game.hideTotals ? [] : seats.filter((s) => s.total === best).map((s) => s.accountId), tied: game.hideTotals ? null : seats.filter((s) => s.total === best).length > 1, complete: game.status === "finished", finalChain: game.finalChain ? { ...game.finalChain } : null, snapshotBasis: "at-acceptance", scoreDependencies: game.events.filter((e) => e.type === "score").map((e) => e.id), observation: "accepted-score-only" });
 }
 function factsValid(facts, game) {
   if (facts.gameId !== game.id) return false;
@@ -72,8 +382,65 @@ function factsValid(facts, game) {
   return !game.events.slice(index + 1).some((e) => ["score-undo", "score-correction"].includes(e.type) && (e.target === target || facts.scoreDependencies.includes(e.target)));
 }
 
-// server/commentary/accepted-outbox.js
+// server/commentary/local-sessions.js
 var uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var key = /^[A-Za-z0-9_-]{8,100}$/;
+var clean = (value, max) => typeof value === "string" && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value);
+function createLocalSession({ roomId, ownerId, commandId: commandId2, config, time }) {
+  if (!uuid.test(roomId || "") || !uuid.test(ownerId || "") || !key.test(commandId2 || "") || !config || Object.keys(config).some((k) => !["gameId", "names", "mode", "rulesVersion", "hideTotals", "players"].includes(k)) || !uuid.test(config.gameId || "")) throw Error("Invalid local session setup");
+  const game = createCoreGame({ id: config.gameId, names: config.names, mode: config.mode, rulesVersion: config.rulesVersion || 1, hideTotals: config.hideTotals === true, source: "manual", time });
+  const players = game.players.map((p, seat) => {
+    const draft = config.players?.[seat] || {};
+    if (!["", "woman", "man", "nonbinary", "another"].includes(draft.gender || "") || !clean(draft.blurb || "", 240)) throw Error("Invalid local player details");
+    return { participantId: p.id, gender: draft.gender || "", blurb: draft.blurb || "" };
+  });
+  return { schemaVersion: 1, id: roomId, ownerId, startCommandId: commandId2, fingerprint: JSON.stringify(config), game, players, receipts: {}, createdAt: time };
+}
+function localRoom(session) {
+  return { id: session.id, hostId: session.ownerId, members: [{ userId: session.ownerId, name: session.game.players[0].name }], game: session.game, localSession: { startCommandId: session.startCommandId, identityKind: "local-seat" }, status: "active", revision: session.game.revision };
+}
+function localOpening(session) {
+  const game = session.game;
+  return { schemaVersion: 1, purpose: "opening", gameId: game.id, eventId: "lifecycle-" + session.startCommandId, commandId: session.startCommandId, acceptedAt: session.createdAt, snapshotBasis: "at-acceptance", observation: "accepted-lifecycle-only", identityKind: "local-seat", ownerAccountId: session.ownerId, accountId: game.players[0].id, seats: game.players.map((p, seat) => ({ accountId: p.id, seat, displayName: p.name, label: p.name })), scoresRecorded: 0, gameSequence: 1, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", scoreDependencies: [] };
+}
+function applyLocalCommands(session, commands, time) {
+  if (!Array.isArray(commands) || commands.length < 1 || commands.length > 2) throw Error("One or two local commands required");
+  const next = structuredClone(session), events = [];
+  for (const entry of commands) {
+    if (!entry || Object.keys(entry).some((k) => !["commandId", "action"].includes(k)) || !key.test(entry.commandId || "") || !entry.action || Object.keys(entry.action).some((k) => !["type", "seat", "category", "value", "face", "target", "dice", "source", "rollId", "yahtzeeFace", "heldMask"].includes(k)) || !["start", "score", "bonus", "undo-score", "correct-score", "final-chain-roll", "roll", "discard-roll", "correct-roll", "manual-fallback"].includes(entry.action.type)) throw Error("Invalid local command");
+    const fingerprint = JSON.stringify(entry.action), prior = next.receipts[entry.commandId];
+    if (prior) {
+      if (prior !== fingerprint) throw Error("Local command collision");
+      continue;
+    }
+    if (Object.keys(next.receipts).length >= 2048) throw Error("Local command limit");
+    const before = next.game;
+    next.game = command(before, entry.action, { id: entry.commandId, time });
+    next.receipts[entry.commandId] = fingerprint;
+    events.push(...next.game.events.slice(before.events.length));
+  }
+  return { session: next, events };
+}
+function localScoreFacts(session, eventId) {
+  return acceptedFacts(session.game, eventId, session.game.players.map((p) => p.id), { identityKind: "local-seat", ownerAccountId: session.ownerId });
+}
+function localPreferences(state, ownerId) {
+  const liked = /* @__PURE__ */ new Map(), disliked = /* @__PURE__ */ new Map();
+  let count = 0;
+  for (const feedback of state.feedback.values()) {
+    if (feedback.accountId !== ownerId) continue;
+    const job = state.jobs.get(feedback.recordId);
+    if (!job?.audience.includes(ownerId) || !job.line?.mechanism) continue;
+    const target = feedback.rating === "like" ? liked : disliked;
+    target.set(job.line.mechanism, (target.get(job.line.mechanism) || 0) + 1);
+    count++;
+  }
+  const top = (map) => [...map].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([tag2]) => tag2);
+  return { likedMechanisms: top(liked), dislikedMechanisms: top(disliked), ratingsCount: count };
+}
+
+// server/commentary/accepted-outbox.js
+var uuid2 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var commandId = /^[A-Za-z0-9_-]{8,100}$/;
 var freeze2 = (value) => {
   if (value && typeof value === "object") {
@@ -87,19 +454,19 @@ var requireValue = (value, message) => {
 };
 var scoreTypes = ["score", "bonus", "final-chain-end", "final-chain-roll"];
 function acceptedOutbox({ before, after, actorId, commandId: id2, operation, acceptedAt, openingFacts: openingFacts2, priorGame = null } = {}) {
-  requireValue(before && after && uuid.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
-  requireValue(uuid.test(actorId) && commandId.test(id2 || ""), "Accepted UUID actor and command ID required");
+  requireValue(before && after && uuid2.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
+  requireValue(uuid2.test(actorId) && commandId.test(id2 || ""), "Accepted UUID actor and command ID required");
   requireValue(Number.isFinite(Date.parse(acceptedAt)), "Accepted server timestamp required");
   requireValue(Number.isSafeInteger(before.revision) && Number.isSafeInteger(after.revision), "Room revisions required");
   requireValue(Array.isArray(after.members) && after.members.length >= 1 && after.members.length <= 8, "Bounded roster required");
   const audience = after.members.map((m) => m.userId);
-  requireValue(audience.every((v) => uuid.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
+  requireValue(audience.every((v) => uuid2.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
   requireValue(JSON.stringify(before.members.map((m) => m.userId)) === JSON.stringify(audience) && before.hostId === after.hostId, "Acceptance cannot change ownership or seats");
   if (after === before || after.revision === before.revision) return freeze2([]);
   requireValue(after.revision === before.revision + 1, "Exactly one accepted room revision required");
   if (!["command", "start", "resume", "ready"].includes(operation)) return freeze2([]);
   if (!after.game) return freeze2([]);
-  requireValue(uuid.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
+  requireValue(uuid2.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
   requireValue(Number.isSafeInteger(after.game.rules?.version) && after.game.rules.version > 0, "Versioned game rules required");
   const rows = [];
   const add = (kind, purpose2, facts2, invalidates = []) => rows.push({ schemaVersion: 1, idempotencyKey: JSON.stringify([after.id, after.game.id, id2, kind, purpose2]), roomId: after.id, gameId: after.game.id, commandId: id2, actorId, expectedRoomRevision: before.revision, acceptedRoomRevision: after.revision, acceptedAt, kind, purpose: purpose2, audience: [...audience], facts: facts2, invalidates, dispatch: "after-transaction-commit-only" });
@@ -140,19 +507,19 @@ function acceptedOutbox({ before, after, actorId, commandId: id2, operation, acc
 }
 
 // server/commentary/durable-store.js
-var COMMENTARY_COLLECTIONS = Object.freeze(["settings", "jobs", "moments", "leases", "attempts", "budgets", "exposure", "memoryRecords", "feedback", "playerProfiles", "playerProfileVersions", "preferenceSharing", "memorySummaries", "memoryCaches"]);
+var COMMENTARY_COLLECTIONS = Object.freeze(["settings", "jobs", "moments", "leases", "attempts", "budgets", "exposure", "memoryRecords", "feedback", "playerProfiles", "playerProfileVersions", "preferenceSharing", "memorySummaries", "memoryCaches", "localSessions"]);
 function emptyDurableCommentaryState() {
-  return Object.fromEntries(COMMENTARY_COLLECTIONS.map((key) => [key, /* @__PURE__ */ new Map()]));
+  return Object.fromEntries(COMMENTARY_COLLECTIONS.map((key2) => [key2, /* @__PURE__ */ new Map()]));
 }
 function encodeCommentaryState(state) {
-  if (!state || Object.keys(state).some((key) => !COMMENTARY_COLLECTIONS.includes(key))) throw Error("Unknown durable commentary collection.");
+  if (!state || Object.keys(state).some((key2) => !COMMENTARY_COLLECTIONS.includes(key2))) throw Error("Unknown durable commentary collection.");
   const output = /* @__PURE__ */ Object.create(null);
-  for (const key of COMMENTARY_COLLECTIONS) {
-    if (!(state[key] instanceof Map)) throw Error("Explicit Map collection required.");
-    output[key] = /* @__PURE__ */ Object.create(null);
-    for (const [id2, value] of state[key]) {
+  for (const key2 of COMMENTARY_COLLECTIONS) {
+    if (!(state[key2] instanceof Map)) throw Error("Explicit Map collection required.");
+    output[key2] = /* @__PURE__ */ Object.create(null);
+    for (const [id2, value] of state[key2]) {
       if (typeof id2 !== "string" || !id2 || id2.length > 1024 || ["__proto__", "constructor", "prototype"].includes(id2)) throw Error("Safe bounded durable key required.");
-      output[key][id2] = value;
+      output[key2][id2] = value;
     }
   }
   const serialized = JSON.stringify(output, (_key, value) => {
@@ -163,12 +530,12 @@ function encodeCommentaryState(state) {
   return JSON.parse(serialized);
 }
 function decodeCommentaryState(payload) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload) || Object.keys(payload).some((key) => !COMMENTARY_COLLECTIONS.includes(key))) throw Error("Invalid durable commentary state.");
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || Object.keys(payload).some((key2) => !COMMENTARY_COLLECTIONS.includes(key2))) throw Error("Invalid durable commentary state.");
   const state = emptyDurableCommentaryState();
-  for (const key of COMMENTARY_COLLECTIONS) {
-    const value = payload[key] ?? {};
+  for (const key2 of COMMENTARY_COLLECTIONS) {
+    const value = payload[key2] ?? {};
     if (!value || typeof value !== "object" || Array.isArray(value)) throw Error("Invalid durable commentary collection.");
-    state[key] = new Map(Object.entries(value));
+    state[key2] = new Map(Object.entries(value));
   }
   encodeCommentaryState(state);
   return state;
@@ -211,6 +578,10 @@ var DurableCommentaryStore = class {
       this.install(row2);
       return this.snapshot();
     });
+  }
+  read(collection, key2) {
+    if (!this.state || !COMMENTARY_COLLECTIONS.includes(collection)) throw Error("Initialized supported collection required.");
+    return structuredClone(this.state[collection].get(key2));
   }
   snapshot() {
     if (!this.state) throw Error("Await durable store initialization/refresh before snapshot.");
@@ -259,9 +630,9 @@ function createSupabaseCommentaryRpc({ url, getServiceKey, fetchImplementation =
     if (!routes2.has(operation)) throw Error("Unsupported commentary durability operation.");
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const key = await getServiceKey();
-      if (typeof key !== "string" || !key || /[\r\n]/.test(key)) throw Error();
-      const response = await fetchImplementation(`${base.href.replace(/\/$/, "")}/rest/v1/rpc/${operation}`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+      const key2 = await getServiceKey();
+      if (typeof key2 !== "string" || !key2 || /[\r\n]/.test(key2)) throw Error();
+      const response = await fetchImplementation(`${base.href.replace(/\/$/, "")}/rest/v1/rpc/${operation}`, { method: "POST", headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
       if (!response.ok) throw Error();
       return await response.json();
     } catch {
@@ -273,7 +644,7 @@ function createSupabaseCommentaryRpc({ url, getServiceKey, fetchImplementation =
 }
 
 // src/commentary/opening-facts.js
-var uuid2 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var uuid3 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var freeze3 = (value) => {
   if (value && typeof value === "object") {
     Object.values(value).forEach(freeze3);
@@ -282,9 +653,9 @@ var freeze3 = (value) => {
   return value;
 };
 function openingFacts({ room, purpose, sourceCommandId, acceptedAt, priorGame = null } = {}) {
-  if (!["opening", "return", "next-game"].includes(purpose) || !room?.game || !uuid2.test(room.id || "") || typeof sourceCommandId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(sourceCommandId) || !Number.isFinite(Date.parse(acceptedAt))) throw Error("Accepted room lifecycle identity required.");
+  if (!["opening", "return", "next-game"].includes(purpose) || !room?.game || !uuid3.test(room.id || "") || typeof sourceCommandId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(sourceCommandId) || !Number.isFinite(Date.parse(acceptedAt))) throw Error("Accepted room lifecycle identity required.");
   const game = room.game, ids = room.members.map((member) => member.userId);
-  if (ids.length !== game.players.length || new Set(ids).size !== ids.length || ids.some((id2) => !uuid2.test(id2 || ""))) throw Error("Unique account-owned roster required.");
+  if (ids.length !== game.players.length || new Set(ids).size !== ids.length || ids.some((id2) => !uuid3.test(id2 || ""))) throw Error("Unique account-owned roster required.");
   const hidden = game.hideTotals && game.status !== "finished";
   const seats = ids.map((accountId, seat) => ({ accountId, seat, displayName: game.players[seat].name, label: game.players[seat].name, instructionAuthority: "none", remaining: 13 - filledBaseCount(game.sheets[seat]), ...!hidden ? { total: computeTotals(game.sheets[seat]).grand } : {} }));
   const scoresRecorded = game.sheets.reduce((sum, sheet) => sum + filledBaseCount(sheet), 0);
@@ -299,39 +670,39 @@ function openingFacts({ room, purpose, sourceCommandId, acceptedAt, priorGame = 
 }
 
 // src/commentary/lifecycle-validity.js
-var uuid3 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var uuid4 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var token = /^[A-Za-z0-9_-]{8,100}$/;
-var canonical = (value) => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
+var canonical = (value) => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key2) => [key2, item[key2]])) : item);
 var same = (a, b) => canonical(a) === canonical(b);
-var fail = (reason) => ({ valid: false, reason });
+var fail2 = (reason) => ({ valid: false, reason });
 function validateLifecycleMoment({ moment, receipt, beforeRoom, acceptedRoom, room, jobProfileVersion, currentProfileVersion, started = false, cancelled = false, priorGame = null } = {}) {
   try {
-    if (cancelled) return fail("source-cancelled");
-    if (typeof started !== "boolean" || !moment || moment.schemaVersion !== 1 || moment.kind !== "moment" || !["opening", "return", "next-game"].includes(moment.purpose) || !token.test(moment.commandId || "")) return fail("invalid-lifecycle-source");
-    if (!beforeRoom || !acceptedRoom || !room || !uuid3.test(moment.roomId || "") || beforeRoom.id !== moment.roomId || acceptedRoom.id !== moment.roomId || room.id !== moment.roomId) return fail("room-changed");
-    if (!receipt || receipt.room_id !== moment.roomId || receipt.command_id !== moment.commandId || receipt.actor_id !== moment.actorId || typeof receipt.fingerprint !== "string" || !receipt.fingerprint.length) return fail("source-receipt-missing");
-    if (!Number.isSafeInteger(jobProfileVersion) || jobProfileVersion < 1 || jobProfileVersion !== currentProfileVersion) return fail("profile-changed");
-    if (!Number.isSafeInteger(moment.expectedRoomRevision) || !Number.isSafeInteger(moment.acceptedRoomRevision) || beforeRoom.revision !== moment.expectedRoomRevision || acceptedRoom.revision !== moment.acceptedRoomRevision || moment.acceptedRoomRevision !== moment.expectedRoomRevision + 1 || !Number.isSafeInteger(room.revision) || room.revision < moment.acceptedRoomRevision) return fail("source-revision-mismatch");
-    if (!uuid3.test(moment.gameId || "") || acceptedRoom.game?.id !== moment.gameId || room.game?.id !== moment.gameId) return fail("game-changed");
+    if (cancelled) return fail2("source-cancelled");
+    if (typeof started !== "boolean" || !moment || moment.schemaVersion !== 1 || moment.kind !== "moment" || !["opening", "return", "next-game"].includes(moment.purpose) || !token.test(moment.commandId || "")) return fail2("invalid-lifecycle-source");
+    if (!beforeRoom || !acceptedRoom || !room || !uuid4.test(moment.roomId || "") || beforeRoom.id !== moment.roomId || acceptedRoom.id !== moment.roomId || room.id !== moment.roomId) return fail2("room-changed");
+    if (!receipt || receipt.room_id !== moment.roomId || receipt.command_id !== moment.commandId || receipt.actor_id !== moment.actorId || typeof receipt.fingerprint !== "string" || !receipt.fingerprint.length) return fail2("source-receipt-missing");
+    if (!Number.isSafeInteger(jobProfileVersion) || jobProfileVersion < 1 || jobProfileVersion !== currentProfileVersion) return fail2("profile-changed");
+    if (!Number.isSafeInteger(moment.expectedRoomRevision) || !Number.isSafeInteger(moment.acceptedRoomRevision) || beforeRoom.revision !== moment.expectedRoomRevision || acceptedRoom.revision !== moment.acceptedRoomRevision || moment.acceptedRoomRevision !== moment.expectedRoomRevision + 1 || !Number.isSafeInteger(room.revision) || room.revision < moment.acceptedRoomRevision) return fail2("source-revision-mismatch");
+    if (!uuid4.test(moment.gameId || "") || acceptedRoom.game?.id !== moment.gameId || room.game?.id !== moment.gameId) return fail2("game-changed");
     const ids = acceptedRoom.members?.map((member) => member.userId);
-    if (!ids || ids.length < 1 || ids.length > 8 || ids.some((id2) => !uuid3.test(id2)) || new Set(ids).size !== ids.length || !ids.includes(moment.actorId) || !same(moment.audience, ids) || !same(beforeRoom.members?.map((member) => member.userId), ids) || !same(room.members?.map((member) => member.userId), ids) || beforeRoom.hostId !== acceptedRoom.hostId || room.hostId !== acceptedRoom.hostId) return fail("ownership-changed");
-    if (acceptedRoom.game.players.length !== ids.length || room.game.players.length !== ids.length || ids.some((id2, seat) => acceptedRoom.game.players[seat].id !== id2 || room.game.players[seat].id !== id2 || acceptedRoom.game.players[seat].name !== room.game.players[seat].name)) return fail("seat-identity-changed");
+    if (!ids || ids.length < 1 || ids.length > 8 || ids.some((id2) => !uuid4.test(id2)) || new Set(ids).size !== ids.length || !ids.includes(moment.actorId) || !same(moment.audience, ids) || !same(beforeRoom.members?.map((member) => member.userId), ids) || !same(room.members?.map((member) => member.userId), ids) || beforeRoom.hostId !== acceptedRoom.hostId || room.hostId !== acceptedRoom.hostId) return fail2("ownership-changed");
+    if (acceptedRoom.game.players.length !== ids.length || room.game.players.length !== ids.length || ids.some((id2, seat) => acceptedRoom.game.players[seat].id !== id2 || room.game.players[seat].id !== id2 || acceptedRoom.game.players[seat].name !== room.game.players[seat].name)) return fail2("seat-identity-changed");
     const purpose = moment.purpose;
     const sourceValid = purpose === "opening" ? moment.actorId === acceptedRoom.hostId && !beforeRoom.game && beforeRoom.status === "lobby" && acceptedRoom.status === "active" : purpose === "return" ? moment.actorId === acceptedRoom.hostId && beforeRoom.game?.id === moment.gameId && beforeRoom.tournament?.status === "paused" && acceptedRoom.tournament?.status === "playing" : beforeRoom.game?.status === "finished" && beforeRoom.game.id !== moment.gameId && acceptedRoom.game.status === "active" && (acceptedRoom.gameSequence ?? 1) === (beforeRoom.gameSequence ?? 1) + 1;
-    if (!sourceValid || moment.dispatch !== "after-transaction-commit-only" || moment.idempotencyKey !== JSON.stringify([moment.roomId, moment.gameId, moment.commandId, "moment", purpose])) return fail("invalid-lifecycle-transition");
+    if (!sourceValid || moment.dispatch !== "after-transaction-commit-only" || moment.idempotencyKey !== JSON.stringify([moment.roomId, moment.gameId, moment.commandId, "moment", purpose])) return fail2("invalid-lifecycle-transition");
     const expected = openingFacts({ room: acceptedRoom, purpose, sourceCommandId: moment.commandId, acceptedAt: moment.acceptedAt, priorGame });
-    if (!same(moment.facts, expected)) return fail("source-facts-mismatch");
-    if (room.paused === true || room.tournament?.status === "paused") return fail("paused");
-    if (!same(acceptedRoom.game.rules, room.game.rules) || acceptedRoom.game.mode !== room.game.mode || acceptedRoom.game.hideTotals !== room.game.hideTotals) return fail("rules-disclosure-changed");
-    if (acceptedRoom.game.status !== room.game.status) return fail("game-status-changed");
+    if (!same(moment.facts, expected)) return fail2("source-facts-mismatch");
+    if (room.paused === true || room.tournament?.status === "paused") return fail2("paused");
+    if (!same(acceptedRoom.game.rules, room.game.rules) || acceptedRoom.game.mode !== room.game.mode || acceptedRoom.game.hideTotals !== room.game.hideTotals) return fail2("rules-disclosure-changed");
+    if (acceptedRoom.game.status !== room.game.status) return fail2("game-status-changed");
     const captured = acceptedRoom.game.events, current = room.game.events;
-    if (!Array.isArray(captured) || !Array.isArray(current) || current.length < captured.length || captured.some((event, index) => !same(event, current[index]))) return fail("source-history-changed");
+    if (!Array.isArray(captured) || !Array.isArray(current) || current.length < captured.length || captured.some((event, index) => !same(event, current[index]))) return fail2("source-history-changed");
     const dependencies = new Set(captured.filter((event) => event.type === "score").map((event) => event.id));
-    if (current.slice(captured.length).some((event) => ["score-correction", "score-undo"].includes(event.type) && dependencies.has(event.target))) return fail("source-score-invalidated");
-    if (!started && !same(acceptedRoom.game.sheets, room.game.sheets)) return fail("progress-changed-before-start");
+    if (current.slice(captured.length).some((event) => ["score-correction", "score-undo"].includes(event.type) && dependencies.has(event.target))) return fail2("source-score-invalidated");
+    if (!started && !same(acceptedRoom.game.sheets, room.game.sheets)) return fail2("progress-changed-before-start");
     return { valid: true, reason: null };
   } catch {
-    return fail("invalid-lifecycle-source");
+    return fail2("invalid-lifecycle-source");
   }
 }
 
@@ -371,9 +742,9 @@ var PLAYER_GENDERS = Object.freeze(["", "woman", "man", "nonbinary", "another"])
 var PLAYER_PROFILE_LIMITS = Object.freeze({ displayName: 24, blurb: 240 });
 function text(value, limit, label) {
   if (typeof value !== "string") throw new Error(`${label} must be text.`);
-  const clean = value.trim();
-  if ([...clean].length > limit || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(clean)) throw new Error(`${label} must be at most ${limit} characters without control characters.`);
-  return clean;
+  const clean2 = value.trim();
+  if ([...clean2].length > limit || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(clean2)) throw new Error(`${label} must be at most ${limit} characters without control characters.`);
+  return clean2;
 }
 function createPlayerProfile({ accountId, displayName = "", gender = "", blurb = "", version = 1 } = {}) {
   if (typeof accountId !== "string" || !UUID.test(accountId)) throw new Error("A valid account UUID is required.");
@@ -492,9 +863,9 @@ var RetrievalAdaptation = class {
     this.purgeExpired();
     const actor = account(actorId), record = this.records.get(recordId);
     if (!["like", "dislike"].includes(rating) || !["playback", "caption"].includes(basis) || !record || !["completed", "interrupted"].includes(record.status) || (basis === "playback" ? !record.heardBy.includes(actor) : !record.audience.includes(actor))) throw new Error("Like/Dislike requires your reported exposure or authorized caption after speech.");
-    const key = `${recordId}:${actor}`, prior = this.feedback.get(key);
+    const key2 = `${recordId}:${actor}`, prior = this.feedback.get(key2);
     if (prior?.rating === rating && prior?.basis === basis) return false;
-    this.feedback.set(key, { recordId, accountId: actor, rating, basis, at: this.now(), expiresAt: record.expiresAt });
+    this.feedback.set(key2, { recordId, accountId: actor, rating, basis, at: this.now(), expiresAt: record.expiresAt });
     this.invalidateDerived();
     return true;
   }
@@ -504,11 +875,11 @@ var RetrievalAdaptation = class {
   }
   purgeExpired() {
     const removed = /* @__PURE__ */ new Set();
-    for (const [key, record] of this.records) if (record.expiresAt !== null && record.expiresAt <= this.now()) {
-      this.records.delete(key);
-      removed.add(key);
+    for (const [key2, record] of this.records) if (record.expiresAt !== null && record.expiresAt <= this.now()) {
+      this.records.delete(key2);
+      removed.add(key2);
     }
-    for (const [key, rating] of this.feedback) if (removed.has(rating.recordId) || rating.expiresAt <= this.now()) this.feedback.delete(key);
+    for (const [key2, rating] of this.feedback) if (removed.has(rating.recordId) || rating.expiresAt <= this.now()) this.feedback.delete(key2);
     if (removed.size) this.invalidateDerived();
     return removed.size;
   }
@@ -519,8 +890,8 @@ var RetrievalAdaptation = class {
     if (!listeners.includes(actor) || !listeners.includes(target)) throw new Error("Current audience membership required.");
     if (!Array.isArray(authorizedSourceIds) || authorizedSourceIds.length > 200 || !profile || !Number.isSafeInteger(profile.version) || profile.version < 1 || !["playful", "savage", "dark"].includes(profile.humorIntensity) || typeof profile.profanityAllowed !== "boolean") throw new Error("Resolved source permissions and current table profile required.");
     const sources = new Set(authorizedSourceIds.map(id));
-    const key = JSON.stringify({ actor, target, listeners, gameId, sources: [...sources], profileVersion: profile.version, intensity: profile.humorIntensity, profanity: profile.profanityAllowed });
-    if (this.caches.has(key)) return clone(this.caches.get(key).value);
+    const key2 = JSON.stringify({ actor, target, listeners, gameId, sources: [...sources], profileVersion: profile.version, intensity: profile.humorIntensity, profanity: profile.profanityAllowed });
+    if (this.caches.has(key2)) return clone(this.caches.get(key2).value);
     const exposed = [...this.records.values()].filter((record) => record.heardBy.some((value2) => listeners.includes(value2)));
     const shared = exposed.filter((record) => sources.has(record.line.gameId) && listeners.every((value2) => record.audience.includes(value2) && record.heardBy.includes(value2)));
     const personal = this.profiles.get(target);
@@ -557,23 +928,23 @@ var RetrievalAdaptation = class {
       retentionDays: 90
     };
     this.summaries.set(target, { accounts: [...listeners], value: clone({ weights, evidence: value.evidence }) });
-    this.caches.set(key, { accounts: [...listeners], value: clone(value) });
+    this.caches.set(key2, { accounts: [...listeners], value: clone(value) });
     return value;
   }
   forgetHistory(actorId) {
     const actor = account(actorId), removed = /* @__PURE__ */ new Set();
-    for (const [key, record] of this.records) if (record.audience.includes(actor) || record.line.targetAccountId === actor) {
-      this.records.delete(key);
-      removed.add(key);
+    for (const [key2, record] of this.records) if (record.audience.includes(actor) || record.line.targetAccountId === actor) {
+      this.records.delete(key2);
+      removed.add(key2);
     }
-    for (const [key, rating] of this.feedback) if (rating.accountId === actor || removed.has(rating.recordId)) this.feedback.delete(key);
+    for (const [key2, rating] of this.feedback) if (rating.accountId === actor || removed.has(rating.recordId)) this.feedback.delete(key2);
     this.invalidateDerived();
     return { removedRecords: removed.size, derivativesCleared: true, scoresChanged: false };
   }
 };
 
 // server/commentary/service.js
-var uuid4 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var uuid5 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var token2 = /^[A-Za-z0-9_-]{8,100}$/;
 var CommentaryError = class extends Error {
   constructor(message, status = 400) {
@@ -581,7 +952,7 @@ var CommentaryError = class extends Error {
     this.status = status;
   }
 };
-var fail2 = (message, status) => {
+var fail3 = (message, status) => {
   throw new CommentaryError(message, status);
 };
 var positive = (v, name2) => {
@@ -604,9 +975,9 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   function purge(state) {
     memory(state).purgeExpired();
-    for (const [key, receipt] of state.exposure) if (receipt.expiresAt != null && receipt.expiresAt <= now()) {
+    for (const [key2, receipt] of state.exposure) if (receipt.expiresAt != null && receipt.expiresAt <= now()) {
       memory(state).invalidateDerived();
-      state.exposure.delete(key);
+      state.exposure.delete(key2);
       const job = state.jobs.get(receipt.jobId);
       if (job) {
         job.line = null;
@@ -622,10 +993,11 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     return { feedbackBasis: basis, feedbackValue: rating?.rating || null };
   }
   async function sourcePermissions(actor, room) {
-    const snapshot = store.snapshot(), ids = /* @__PURE__ */ new Set();
+    const snapshot = store.snapshot(), ids = /* @__PURE__ */ new Set(), rooms = /* @__PURE__ */ new Map([[room.id, room]]);
     for (const job of snapshot.jobs.values()) {
       if (!job.audience.includes(actor)) continue;
-      const source = job.roomId === room.id ? room : await getRoom(job.roomId);
+      if (!rooms.has(job.roomId)) rooms.set(job.roomId, await getRoom(job.roomId));
+      const source = rooms.get(job.roomId);
       if (source?.members.some((member) => member.userId === actor) && room.members.every((listener) => source.members.some((member) => member.userId === listener.userId))) ids.add(job.facts.gameId);
     }
     return [...ids].slice(-200);
@@ -648,19 +1020,22 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function authorized(userId, roomId, host = false) {
     await refresh();
-    if (!uuid4.test(userId || "")) fail2("Sign in to use commentary.", 401);
-    if (!uuid4.test(roomId || "")) fail2("Invalid room ID.");
+    if (!uuid5.test(userId || "")) fail3("Sign in to use commentary.", 401);
+    if (!uuid5.test(roomId || "")) fail3("Invalid room ID.");
     const room = await getRoom(roomId);
-    if (!room) fail2("Room not found.", 404);
-    if (!room.members?.some((m) => m.userId === userId)) fail2("Table membership required.", 403);
-    if (host && room.hostId !== userId) fail2("Only the host controls playback and settings.", 403);
+    if (!room) fail3("Room not found.", 404);
+    if (!room.members?.some((m) => m.userId === userId)) fail3("Table membership required.", 403);
+    if (host && room.hostId !== userId) fail3("Only the host controls playback and settings.", 403);
     return room;
   }
   const settings = (state, roomId) => state.settings.get(roomId) || initial;
   function eligible(state, job, room, { started = false } = {}) {
     if (room.game?.id !== job.facts.gameId) return "game-changed";
     if (live && !settings(state, room.id).enabled) return "disabled";
-    if (job.sourceType === "accepted-settings") {
+    if (job.sourceType === "accepted-local-opening") {
+      if (room.localSession?.startCommandId !== job.facts.commandId) return "invalid-event";
+      if (!started && room.game.events.some((e) => e.type === "score")) return "progress-changed-before-start";
+    } else if (job.sourceType === "accepted-settings") {
       const proof = job.evidence;
       if (room.hostId !== proof.hostId || JSON.stringify(room.members.map((m) => m.userId)) !== JSON.stringify(proof.accountIds) || JSON.stringify(room.game.players) !== JSON.stringify(proof.players) || JSON.stringify(room.game.rules) !== JSON.stringify(proof.rules) || room.game.hideTotals !== proof.hideTotals) return "invalid-event";
       if (proof.events.some((event, index) => JSON.stringify(event) !== JSON.stringify(room.game.events[index]))) return "invalid-event";
@@ -703,12 +1078,12 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   function lease(state, room, userId, device, epoch, serverNowMs = now()) {
     const current = state.leases.get(room.id);
-    if (!current || current.owner !== userId || current.device !== device || current.epoch !== epoch || current.expiresAt <= serverNowMs) fail2("Playback lease is stale.", 409);
+    if (!current || current.owner !== userId || current.device !== device || current.epoch !== epoch || current.expiresAt <= serverNowMs) fail3("Playback lease is stale.", 409);
     return current;
   }
   function reserve(state, job, stage, characters) {
     const used = state.budgets.get(job.roomId) || { requests: 0, characters: 0 };
-    if (used.requests + 1 > budget.maxRequests || used.characters + characters > budget.maxCharacters) fail2("Commentary budget exhausted.", 429);
+    if (used.requests + 1 > budget.maxRequests || used.characters + characters > budget.maxCharacters) fail3("Commentary budget exhausted.", 429);
     const attempt = { id: randomId(), jobId: job.id, stage, characters, status: "submitted", at: now() };
     state.budgets.set(job.roomId, { requests: used.requests + 1, characters: used.characters + characters });
     state.attempts.set(attempt.id, attempt);
@@ -716,24 +1091,24 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function getProfile(userId, roomId) {
     await authorized(userId, roomId);
-    return { ...settings(store.snapshot(), roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live } };
+    return { ...settings(store.snapshot(), roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live, atomicPlaybackStart: true } };
   }
   async function setProfile(userId, roomId, { expectedVersion, changes } = {}) {
     const room = await authorized(userId, roomId, true);
-    if (!Number.isSafeInteger(expectedVersion) || !changes || typeof changes !== "object" || Object.keys(changes).some((k) => !["enabled", "profanityAllowed", "humorIntensity", "frequency", "voiceOption"].includes(k))) fail2("Invalid settings change.");
+    if (!Number.isSafeInteger(expectedVersion) || !changes || typeof changes !== "object" || Object.keys(changes).some((k) => !["enabled", "profanityAllowed", "humorIntensity", "frequency", "voiceOption"].includes(k))) fail3("Invalid settings change.");
     return store.transaction((state) => {
       const prior = settings(state, roomId);
-      if (prior.version !== expectedVersion) fail2("Commentary settings changed.", 409);
+      if (prior.version !== expectedVersion) fail3("Commentary settings changed.", 409);
       let next;
       try {
         next = updateProfile(prior, changes);
       } catch {
-        fail2("Invalid commentary settings.");
+        fail3("Invalid commentary settings.");
       }
       state.settings.set(roomId, next);
       for (const job of state.jobs.values()) if (job.roomId === room.id) cancel(state, job, "profile-changed");
       let greetingJobId = null;
-      if (live && next.enabled && !prior.enabled && room.game) {
+      if (live && next.enabled && !prior.enabled && room.game?.status === "active" && !room.localSession) {
         const commandId2 = "commentary-enable-" + randomId(), purpose = room.game.sheets.some((sheet) => filledBaseCount(sheet) > 0) ? "return" : "opening";
         const facts = structuredClone(openingFacts({ room, purpose, sourceCommandId: commandId2, acceptedAt: new Date(now()).toISOString() }));
         facts.accountId = room.hostId;
@@ -746,7 +1121,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     });
   }
   async function enqueueAccepted(room, eventId) {
-    if (!uuid4.test(room?.id || "")) throw Error("Trusted accepted room required");
+    if (!uuid5.test(room?.id || "")) throw Error("Trusted accepted room required");
     const facts = acceptedFacts(room.game, eventId, room.members.map((m) => m.userId));
     if (!facts) return null;
     const named = structuredClone(facts);
@@ -799,7 +1174,8 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         adaptive = null;
       }
       job.personalProfileVersion = state.playerProfiles.get(job.facts.accountId)?.profile.version || 0;
-      const input = { facts: job.facts, profile: job.profile, purpose: job.facts.purpose || "score", roomId: job.roomId, jobId: job.id, source: live ? "accepted-durable-service" : "synthetic-service-rehearsal", personalContext: state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id) ? adaptive?.personalContext || null : null, preferences: adaptive?.writerPreferences || null };
+      const local = state.localSessions?.get(job.roomId), localDraft = local?.players.find((p) => p.participantId === job.facts.accountId);
+      const input = { facts: job.facts, profile: job.profile, purpose: job.facts.purpose || "score", roomId: job.roomId, jobId: job.id, source: live ? "accepted-durable-service" : "synthetic-service-rehearsal", personalContext: localDraft ? { accountId: job.facts.accountId, gender: localDraft.gender, blurb: localDraft.blurb } : state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id) ? adaptive?.personalContext || null : null, preferences: local ? localPreferences(state, room.hostId) : adaptive?.writerPreferences || null };
       const attempt = reserve(state, job, "writer", [...JSON.stringify(input)].length);
       job.status = "generating";
       job.workerToken = attempt.id;
@@ -850,7 +1226,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         job.reason = "invalid-candidate";
         return null;
       }
-      job.line = { text: line.text, containsProfanity: line.containsProfanity, source: live ? "anthropic-writer" : "synthetic" };
+      job.line = { text: line.text, containsProfanity: line.containsProfanity, mechanism: line.mechanism, subject: line.subject, source: live ? "anthropic-writer" : "synthetic" };
       rememberTrusted(state, job, line);
       job.status = "ready";
       return { id: job.id, text: job.line.text };
@@ -858,10 +1234,10 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function acquire(userId, roomId, { device } = {}) {
     await authorized(userId, roomId, true);
-    if (!token2.test(device || "")) fail2("Invalid playback device.");
+    if (!token2.test(device || "")) fail3("Invalid playback device.");
     return store.transaction((state) => {
       const serverNowMs = now(), prior = state.leases.get(roomId);
-      if (prior && prior.expiresAt > serverNowMs && (prior.owner !== userId || prior.device !== device)) fail2("Another host device owns playback.", 409);
+      if (prior && prior.expiresAt > serverNowMs && (prior.owner !== userId || prior.device !== device)) fail3("Another host device owns playback.", 409);
       const value = { ...prior && prior.expiresAt > serverNowMs ? prior : {}, owner: userId, device, epoch: prior && prior.expiresAt > serverNowMs ? prior.epoch : (prior?.epoch || 0) + 1, expiresAt: serverNowMs + leaseMs };
       state.leases.set(roomId, value);
       return projectLeaseClock(value, serverNowMs);
@@ -883,7 +1259,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       current.expiresAt = serverNowMs + leaseMs;
       return { value: projectLeaseClock(current, serverNowMs) };
     });
-    if (result.rejected) fail2("Playback renewal rejected: " + result.reason, 409);
+    if (result.rejected) fail3("Playback renewal rejected: " + result.reason, 409);
     return result.value;
   }
   async function list(userId, roomId) {
@@ -901,17 +1277,17 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     const room = await authorized(userId, roomId, true);
     return store.transaction((state) => {
       const current = lease(state, room, userId, device, epoch), job = state.jobs.get(jobId);
-      if (!job || job.roomId !== roomId) fail2("Commentary job not found.", 404);
+      if (!job || job.roomId !== roomId) fail3("Commentary job not found.", 404);
       const reason = eligible(state, job, room);
       if (reason) {
         cancel(state, job, reason);
         return { claimed: false, reason };
       }
       if (job.claim?.epoch === epoch && job.claim.device === device && ["claimed", "streaming", "started"].includes(job.status)) return { claimed: true, token: job.claim.token };
-      if (job.status !== "ready") fail2("Commentary is not ready.", 409);
+      if (job.status !== "ready") fail3("Commentary is not ready.", 409);
       if (current.activeJobId && current.activeJobId !== jobId) {
         const active = state.jobs.get(current.activeJobId);
-        if (active && ["claimed", "streaming", "started"].includes(active.status)) fail2("Commentary is already playing.", 409);
+        if (active && ["claimed", "streaming", "started"].includes(active.status)) fail3("Commentary is already playing.", 409);
       }
       job.claim = { token: randomId(), owner: userId, device, epoch };
       job.status = "claimed";
@@ -919,28 +1295,29 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return { claimed: true, token: job.claim.token };
     });
   }
-  async function playbackEvent(userId, roomId, { jobId, device, epoch, claimToken, status, sequence } = {}) {
+  async function playbackEvent(userId, roomId, { jobId, device, epoch, claimToken, status, sequence, timing } = {}) {
     const room = await authorized(userId, roomId, true);
-    if (!["started", "completed", "interrupted", "failed"].includes(status) || !Number.isSafeInteger(sequence) || sequence < 1) fail2("Invalid playback event.");
+    if (!["started", "completed", "interrupted", "failed"].includes(status) || !Number.isSafeInteger(sequence) || sequence < 1) fail3("Invalid playback event.");
     return store.transaction((state) => {
       lease(state, room, userId, device, epoch);
       const job = state.jobs.get(jobId);
-      if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail2("Playback claim is stale.", 409);
+      if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail3("Playback claim is stale.", 409);
       const prior = state.exposure.get(claimToken);
       if (prior && sequence === prior.sequence) {
-        if (status !== prior.status) fail2("Playback receipt collision.", 409);
+        if (status !== prior.status) fail3("Playback receipt collision.", 409);
         return prior;
       }
-      if (prior && sequence <= prior.sequence) fail2("Playback sequence is stale.", 409);
+      if (prior && sequence <= prior.sequence) fail3("Playback sequence is stale.", 409);
       const reason = eligible(state, job, room, { started: prior?.status === "started" });
       if (reason) {
         cancel(state, job, reason);
         return { accepted: false, reason };
       }
-      if (status === "started" && job.audioFirstByteAt == null) fail2("Audio must begin streaming before reported speech.", 409);
+      if (status === "started" && job.audioFirstByteAt == null) fail3("Audio must begin streaming before reported speech.", 409);
       const allowed2 = prior?.status === "started" ? ["completed", "interrupted", "failed"] : !prior ? ["started", "failed"] : [];
-      if (!allowed2.includes(status) || !prior && !["streaming", "claimed"].includes(job.status)) fail2("Invalid exposure transition.", 409);
-      const receipt = { jobId, epoch, sequence, status, at: now(), reportingAccount: userId, heardBy: prior?.heardBy || (status === "started" ? [userId] : []), firstExposureAt: prior?.firstExposureAt ?? (status === "started" ? now() : null), expiresAt: prior?.expiresAt ?? (status === "started" ? now() + COMMENTARY_RETENTION_MS : null), expectedAudience: [...job.audience], valid: true };
+      if (!allowed2.includes(status) || !prior && !["streaming", "claimed"].includes(job.status)) fail3("Invalid exposure transition.", 409);
+      const safeTiming = timing && ["score-submission", "accepted-event-observed"].includes(timing.basis) && Number.isFinite(timing.elapsedMs) && timing.elapsedMs >= 0 && timing.elapsedMs <= 18e4 ? { basis: timing.basis, elapsedMs: Math.round(timing.elapsedMs), nativeStartupMs: Number.isFinite(timing.nativeStartupMs) && timing.nativeStartupMs >= 0 && timing.nativeStartupMs <= 6e4 ? Math.round(timing.nativeStartupMs) : null, measurement: "client-reported-native-position" } : null;
+      const receipt = { ...safeTiming || prior?.clientTiming ? { clientTiming: safeTiming || prior.clientTiming } : {}, acceptedToReceiptMs: prior?.acceptedToReceiptMs ?? Math.max(0, now() - Date.parse(job.facts.acceptedAt)), jobId, epoch, sequence, status, at: now(), reportingAccount: userId, heardBy: prior?.heardBy || (status === "started" ? [userId] : []), firstExposureAt: prior?.firstExposureAt ?? (status === "started" ? now() : null), expiresAt: prior?.expiresAt ?? (status === "started" ? now() + COMMENTARY_RETENTION_MS : null), expectedAudience: [...job.audience], valid: true };
       state.exposure.set(claimToken, receipt);
       memoryExposure(state, job, receipt);
       job.status = status;
@@ -955,14 +1332,14 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     const requestStarted = monotonicNow(), room = await authorized(userId, roomId, true);
     const start = await store.transaction((state) => {
       const serverNowMs = now(), current = lease(state, room, userId, device, epoch, serverNowMs), job = state.jobs.get(jobId);
-      if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail2("Playback claim is stale.", 409);
+      if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail3("Playback claim is stale.", 409);
       const reason = eligible(state, job, room);
       if (reason) {
         cancel(state, job, reason);
-        fail2("Commentary was cancelled.", 409);
+        fail3("Commentary was cancelled.", 409);
       }
-      if (job.status !== "claimed") fail2("Audio already requested.", 409);
-      if (!providers?.streamAudio) fail2("Voice provider is disabled.", 503);
+      if (job.status !== "claimed") fail3("Audio already requested.", 409);
+      if (!providers?.streamAudio) fail3("Voice provider is disabled.", 503);
       const attempt = reserve(state, job, "tts", [...job.line.text].length);
       job.activeTtsAttemptId = attempt.id;
       job.status = "streaming";
@@ -1105,13 +1482,13 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function feedback(userId, roomId, { jobId, value, basis } = {}) {
     const room = await authorized(userId, roomId);
-    if (!["like", "dislike"].includes(value) || !["playback", "caption"].includes(basis)) fail2("Choose Like or Dislike with an exact rating basis.");
+    if (!["like", "dislike"].includes(value) || !["playback", "caption"].includes(basis)) fail3("Choose Like or Dislike with an exact rating basis.");
     return store.transaction((state) => {
       purge(state);
       const job = state.jobs.get(jobId);
-      if (!job || job.roomId !== roomId || !job.audience.includes(userId)) fail2("This commentary is not available to your account.", 403);
+      if (!job || job.roomId !== roomId || !job.audience.includes(userId)) fail3("This commentary is not available to your account.", 403);
       const projection = feedbackProjection(state, job, userId);
-      if (!projection.feedbackBasis || basis === "playback" && projection.feedbackBasis !== "playback") fail2("Feedback is available after speech with your own authorized basis.", 409);
+      if (!projection.feedbackBasis || basis === "playback" && projection.feedbackBasis !== "playback") fail3("Feedback is available after speech with your own authorized basis.", 409);
       const receipt = state.exposure.get(job.claim.token), prior = state.feedback.get(job.id + ":" + userId);
       state.feedback.set(job.id + ":" + userId, { recordId: job.id, accountId: userId, rating: value, basis, at: now(), expiresAt: receipt.expiresAt });
       memory(state).invalidateDerived();
@@ -1129,15 +1506,15 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function setPlayerProfile(userId, roomId, { expectedVersion, changes } = {}) {
     const room = await authorized(userId, roomId);
-    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || !changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).some((key) => !["displayName", "gender", "blurb", "shareWithRoom"].includes(key)) || "shareWithRoom" in changes && typeof changes.shareWithRoom !== "boolean") fail2("Invalid personal profile change.");
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0 || !changes || typeof changes !== "object" || Array.isArray(changes) || Object.keys(changes).some((key2) => !["displayName", "gender", "blurb", "shareWithRoom"].includes(key2)) || "shareWithRoom" in changes && typeof changes.shareWithRoom !== "boolean") fail3("Invalid personal profile change.");
     return store.transaction((state) => {
       const prior = state.playerProfiles.get(userId);
-      if ((state.playerProfileVersions.get(userId) || 0) !== expectedVersion) fail2("Personal profile changed.", 409);
+      if ((state.playerProfileVersions.get(userId) || 0) !== expectedVersion) fail3("Personal profile changed.", 409);
       let checked;
       try {
         checked = createPlayerProfile({ ...prior?.profile, ...changes, accountId: userId, version: expectedVersion + 1 });
       } catch {
-        fail2("Check optional profile fields.");
+        fail3("Check optional profile fields.");
       }
       const shared = new Set(prior?.sharedRoomIds || []);
       if (changes.shareWithRoom === true) shared.add(roomId);
@@ -1153,10 +1530,10 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function deletePlayerProfile(userId, roomId, { expectedVersion } = {}) {
     await authorized(userId, roomId);
-    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) fail2("Expected personal profile version required.");
+    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 0) fail3("Expected personal profile version required.");
     return store.transaction((state) => {
       const prior = state.playerProfiles.get(userId);
-      if ((state.playerProfileVersions.get(userId) || 0) !== expectedVersion) fail2("Personal profile changed.", 409);
+      if ((state.playerProfileVersions.get(userId) || 0) !== expectedVersion) fail3("Personal profile changed.", 409);
       state.playerProfiles.delete(userId);
       state.playerProfileVersions.set(userId, expectedVersion + 1);
       state.preferenceSharing.delete(userId);
@@ -1177,17 +1554,17 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         if (job.claim) state.exposure.delete(job.claim.token);
         affected++;
       }
-      for (const [key, rating] of state.feedback) if (rating.accountId === userId || state.jobs.get(rating.recordId)?.audience.includes(userId)) state.feedback.delete(key);
+      for (const [key2, rating] of state.feedback) if (rating.accountId === userId || state.jobs.get(rating.recordId)?.audience.includes(userId)) state.feedback.delete(key2);
       return { ...removed, affectedJobs: affected, durability: live ? "database" : "process-memory-rehearsal" };
     });
   }
   async function enqueueCommitted({ moment, beforeRoom, acceptedRoom, receipt, priorGame = null }) {
     await refresh();
-    if (!moment || !uuid4.test(moment.roomId || "") || acceptedRoom?.id !== moment.roomId || receipt?.room_id !== moment.roomId || receipt.command_id !== moment.commandId || receipt.actor_id !== moment.actorId) throw Error("Committed acceptance evidence required.");
+    if (!moment || !uuid5.test(moment.roomId || "") || acceptedRoom?.id !== moment.roomId || receipt?.room_id !== moment.roomId || receipt.command_id !== moment.commandId || receipt.actor_id !== moment.actorId) throw Error("Committed acceptance evidence required.");
     if (typeof receipt.fingerprint !== "string" || !receipt.fingerprint) throw Error("Committed acceptance fingerprint required.");
     const operation = moment.kind === "invalidate" || moment.purpose === "score" ? "command" : moment.purpose === "opening" ? "start" : moment.purpose === "return" ? "resume" : "ready";
     const expected = acceptedOutbox({ before: beforeRoom, after: acceptedRoom, actorId: moment.actorId, commandId: moment.commandId, operation, acceptedAt: moment.acceptedAt, openingFacts, priorGame });
-    const canonical2 = (value) => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
+    const canonical2 = (value) => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map((key2) => [key2, item[key2]])) : item);
     if (!expected.some((row2) => canonical2(row2) === canonical2(moment))) throw Error("Committed moment does not match accepted rules.");
     return store.transaction((state) => {
       if (state.moments.has(moment.idempotencyKey)) return state.moments.get(moment.idempotencyKey);
@@ -1214,7 +1591,90 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return id2;
     });
   }
-  return { enqueueCommitted, feedback, getPlayerProfile, setPlayerProfile, deletePlayerProfile, forgetHistory, authorized, getProfile, setProfile, enqueueAccepted, prepareTrusted, acquire, heartbeat, list, claimPlayback, playbackEvent, audio };
+  async function startLocal(userId, roomId, { commandId: commandId2, config, settings: requested } = {}) {
+    await refresh();
+    if (!uuid5.test(userId || "")) fail3("Sign in for live commentary.", 401);
+    if (!live) fail3("Live commentary is unavailable.", 503);
+    let p;
+    try {
+      p = createProfile({ ...requested, enabled: true, version: 1 });
+    } catch {
+      fail3("Invalid saved commentary settings.");
+    }
+    const existing = await getRoom(roomId);
+    if (existing && !existing.localSession) fail3("Room identifier collision.", 409);
+    return store.transaction((state) => {
+      const prior = state.localSessions.get(roomId);
+      if (prior) {
+        if (prior.ownerId !== userId || prior.startCommandId !== commandId2 || prior.fingerprint !== JSON.stringify(config)) fail3("Local session collision.", 409);
+        return { room: localRoom(prior), profile: { ...settings(state, roomId), capabilities: { liveProviders: live, atomicPlaybackStart: true } }, greetingJobId: state.moments.get(roomId + ":local-opening") };
+      }
+      if ([...state.localSessions.values()].filter((s) => s.ownerId === userId).length >= 100) fail3("Local commentary session limit.", 429);
+      const session = createLocalSession({ roomId, ownerId: userId, commandId: commandId2, config, time: new Date(now()).toISOString() }), id2 = randomId();
+      state.localSessions.set(roomId, session);
+      state.settings.set(roomId, p);
+      state.jobs.set(id2, { id: id2, roomId, momentKey: roomId + ":local-opening", facts: localOpening(session), profile: p, audience: [userId], status: "pending", line: null, claim: null, sourceType: "accepted-local-opening" });
+      state.moments.set(roomId + ":local-opening", id2);
+      return { room: localRoom(session), profile: { ...p, capabilities: { liveProviders: live, atomicPlaybackStart: true } }, greetingJobId: id2 };
+    });
+  }
+  async function commitLocal(userId, roomId, { commands, quiet = false } = {}) {
+    if (typeof quiet !== "boolean") fail3("Invalid replay flag.");
+    await authorized(userId, roomId, true);
+    return store.transaction((state) => {
+      const prior = state.localSessions.get(roomId);
+      if (!prior || prior.ownerId !== userId) fail3("Local session is not yours.", 403);
+      let result;
+      try {
+        result = applyLocalCommands(prior, commands, new Date(now()).toISOString());
+      } catch (error) {
+        fail3(error.message, 409);
+      }
+      state.localSessions.set(roomId, result.session);
+      const changes = result.events.filter((e) => ["score-undo", "score-correction"].includes(e.type));
+      for (const change of changes) for (const job of state.jobs.values()) if (job.roomId === roomId && (job.facts.eventId === change.target || job.facts.scoreDependencies?.includes(change.target))) cancel(state, job, "invalid-event");
+      const event = ["score", "bonus", "final-chain-roll", "final-chain-end"].map((type) => result.events.findLast((e) => e.type === type)).find(Boolean);
+      if (event && !changes.length && !quiet) {
+        const moment = roomId + ":" + event.commandId;
+        if (!state.moments.has(moment)) {
+          const p = settings(state, roomId), facts = localScoreFacts(result.session, event.id), id2 = randomId(), quiet2 = !p.enabled || p.frequency === "highlights" && !facts.complete && facts.category !== "yahtzee" && facts.value < 30;
+          state.jobs.set(id2, { id: id2, roomId, momentKey: moment, facts, profile: p, audience: [userId], status: quiet2 ? "silent" : "pending", line: null, claim: null, sourceType: "accepted-local-score" });
+          state.moments.set(moment, id2);
+        }
+      }
+      return { room: localRoom(result.session) };
+    });
+  }
+  async function acquireAndClaim(userId, roomId, { device, jobId } = {}) {
+    const room = await authorized(userId, roomId, true);
+    if (!token2.test(device || "")) fail3("Invalid playback device.");
+    return store.transaction((state) => {
+      const serverNowMs = now(), prior = state.leases.get(roomId), job = state.jobs.get(jobId);
+      if (!job || job.roomId !== roomId) fail3("Commentary job not found.", 404);
+      const reason = eligible(state, job, room);
+      if (reason) {
+        cancel(state, job, reason);
+        return { claim: { claimed: false, reason } };
+      }
+      if (job.status !== "ready") fail3("Commentary is not ready.", 409);
+      if (prior && prior.expiresAt > serverNowMs && (prior.owner !== userId || prior.device !== device)) fail3("Another host device owns playback.", 409);
+      if (prior?.activeJobId) {
+        const active = state.jobs.get(prior.activeJobId);
+        if (active && ["claimed", "streaming", "started"].includes(active.status)) fail3("Commentary is already playing.", 409);
+      }
+      const current = { owner: userId, device, epoch: prior && prior.expiresAt > serverNowMs ? prior.epoch : (prior?.epoch || 0) + 1, expiresAt: serverNowMs + leaseMs, activeJobId: jobId };
+      state.leases.set(roomId, current);
+      job.claim = { token: randomId(), owner: userId, device, epoch: current.epoch };
+      job.status = "claimed";
+      return { lease: projectLeaseClock(current, serverNowMs), claim: { claimed: true, token: job.claim.token } };
+    });
+  }
+  async function readLocal(userId, roomId) {
+    const room = await authorized(userId, roomId, true);
+    if (!room.localSession) fail3("Not a local commentary session.");
+    return { room, profile: await getProfile(userId, roomId) };
+  }
+  return { readLocal, startLocal, commitLocal, acquireAndClaim, enqueueCommitted, feedback, getPlayerProfile, setPlayerProfile, deletePlayerProfile, forgetHistory, authorized, getProfile, setProfile, enqueueAccepted, prepareTrusted, acquire, heartbeat, list, claimPlayback, playbackEvent, audio };
 }
 
 // server/commentary/writer-prompt.js
@@ -1246,8 +1706,9 @@ function prepareWriterPacket({ purpose = "score", facts, profile, playerProfiles
   text2(facts.gameId, 100, "game ID");
   text2(facts.eventId, 200, "event ID");
   if (!Number.isFinite(Date.parse(facts.acceptedAt)) || !Array.isArray(facts.seats) || !facts.seats.length || facts.seats.length > 8) throw Error("Accepted audience required");
+  const local = facts.identityKind === "local-seat" && UUID3.test(facts.ownerAccountId || "") && facts.seats.every((s, i) => s.accountId === facts.gameId + ":p" + i);
   const ids = facts.seats.map((s) => s.accountId);
-  if (ids.some((id2) => !UUID3.test(id2 || "")) || new Set(ids).size !== ids.length) throw Error("Unique audience UUIDs required");
+  if (!local && ids.some((id2) => !UUID3.test(id2 || "")) || new Set(ids).size !== ids.length) throw Error("Unique audience UUIDs required");
   const target = targetAccountId || facts.accountId || ids[0];
   if (!ids.includes(target)) throw Error("Target must belong to accepted audience");
   const seats = facts.seats.map((seat, index) => ({ accountId: seat.accountId, seat: index, displayName: text2(seat.displayName ?? seat.label, 24, "frozen name"), instructionAuthority: "none", ...facts.disclosurePolicy !== "category-scores-only" && !(purpose !== "score" && facts.scoresRecorded === 0) && Number.isFinite(seat.total) ? { total: seat.total } : {} }));
@@ -1293,7 +1754,7 @@ function prepareWriterPacket({ purpose = "score", facts, profile, playerProfiles
 function buildCommentaryPrompt(input) {
   const packet = prepareWriterPacket(input), facts = packet.acceptedFacts;
   const visibleFacts = { purpose: packet.purpose, observation: facts.observation, snapshotBasis: facts.snapshotBasis, seats: facts.seats.map(({ accountId, ...seat }) => seat), ...packet.purpose === "score" ? { actorDisplayName: facts.seats.find((s) => s.accountId === facts.accountId).displayName, eventType: facts.eventType, category: facts.category, value: facts.value, complete: facts.complete, disclosurePolicy: facts.disclosurePolicy } : {} };
-  for (const key of ["tournamentName", "scoresRecorded", "gameSequence"]) if (Object.hasOwn(facts, key)) visibleFacts[key] = facts[key];
+  for (const key2 of ["tournamentName", "scoresRecorded", "gameSequence"]) if (Object.hasOwn(facts, key2)) visibleFacts[key2] = facts[key2];
   if (facts.priorGameSummary) visibleFacts.priorGameSummary = { basis: facts.priorGameSummary.basis, meaning: facts.priorGameSummary.meaning, tied: facts.priorGameSummary.tied, winners: facts.priorGameSummary.winners.map(({ accountId, ...winner }) => winner) };
   const quotedData = { purpose: packet.purpose, acceptedFacts: visibleFacts, profile: { profanityAllowed: packet.profile.profanityAllowed, humorIntensity: packet.profile.humorIntensity, frequency: packet.profile.frequency }, selectedTarget: { displayName: packet.selectedTarget.displayName }, personalizationRequired: packet.personalizationRequired, commentator: { name: packet.commentatorName, introPrefix: packet.introPrefix }, outputLimits: packet.outputLimits, quotedProfiles: packet.quotedProfiles.map(({ accountId, ...profile }) => profile), preferences: packet.preferences };
   return { packet, system: COMMENTARY_SYSTEM, user: JSON.stringify(quotedData) };
@@ -1313,12 +1774,12 @@ function writerCandidateDiagnostics(candidate, packet) {
   const spoken = typeof candidate?.spokenText === "string" ? candidate.spokenText : "";
   const target = packet.selectedTarget, counts = /* @__PURE__ */ new Map();
   for (const seat of packet.acceptedFacts.seats) {
-    const key = seat.displayName.normalize("NFKC").toLowerCase();
-    counts.set(key, (counts.get(key) || 0) + 1);
+    const key2 = seat.displayName.normalize("NFKC").toLowerCase();
+    counts.set(key2, (counts.get(key2) || 0) + 1);
   }
   const rivals = packet.acceptedFacts.seats.filter((s) => s.accountId !== target.accountId && aliasMention(spoken, s.displayName));
   const ambiguous = packet.acceptedFacts.seats.filter((s) => counts.get(s.displayName.normalize("NFKC").toLowerCase()) > 1 && aliasMention(spoken, s.displayName));
-  return { spokenCharacters: [...spoken].length, spokenWords: spoken.trim() ? spoken.trim().split(/\s+/).length : 0, usesTargetProfile: typeof candidate?.usesTargetProfile === "boolean" ? candidate.usesTargetProfile : null, targetNameMentioned: aliasMention(spoken, target.displayName), namedRivalCount: rivals.length, ambiguousNameCount: ambiguous.length, candidateAuthorityFieldCount: ["gameId", "eventId", "profileVersion", "targetAccountId", "groundedEventIds", "profileSourceAccountIds"].filter((key) => Object.hasOwn(candidate || {}, key)).length };
+  return { spokenCharacters: [...spoken].length, spokenWords: spoken.trim() ? spoken.trim().split(/\s+/).length : 0, usesTargetProfile: typeof candidate?.usesTargetProfile === "boolean" ? candidate.usesTargetProfile : null, targetNameMentioned: aliasMention(spoken, target.displayName), namedRivalCount: rivals.length, ambiguousNameCount: ambiguous.length, candidateAuthorityFieldCount: ["gameId", "eventId", "profileVersion", "targetAccountId", "groundedEventIds", "profileSourceAccountIds"].filter((key2) => Object.hasOwn(candidate || {}, key2)).length };
 }
 function validateWriterResult(candidate, packet) {
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate) || Object.keys(candidate).sort().join("|") !== [...COMMENTARY_OUTPUT_SCHEMA.required].sort().join("|")) throw Error("Invalid writer schema");
@@ -1345,17 +1806,17 @@ var AnthropicWriterError = class extends Error {
     this.status = status;
   }
 };
-var fail3 = (code, status) => {
+var fail4 = (code, status) => {
   throw new AnthropicWriterError(code, status);
 };
-function headers(key, workspaceId) {
-  if (typeof key !== "string" || !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) fail3("credential-unavailable");
-  if (workspaceId !== void 0 && !/^wrkspc_[A-Za-z0-9]{8,100}$/.test(workspaceId)) fail3("workspace-invalid");
-  return { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json", ...workspaceId ? { "anthropic-workspace-id": workspaceId } : {} };
+function headers(key2, workspaceId) {
+  if (typeof key2 !== "string" || !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key2)) fail4("credential-unavailable");
+  if (workspaceId !== void 0 && !/^wrkspc_[A-Za-z0-9]{8,100}$/.test(workspaceId)) fail4("workspace-invalid");
+  return { "x-api-key": key2, "anthropic-version": "2023-06-01", "content-type": "application/json", ...workspaceId ? { "anthropic-workspace-id": workspaceId } : {} };
 }
 async function boundedJson(response, maxBytes, signal) {
-  if (!response.ok) fail3("provider-http", response.status);
-  if (!response.body) fail3("provider-empty");
+  if (!response.ok) fail4("provider-http", response.status);
+  if (!response.body) fail4("provider-empty");
   const reader = response.body.getReader(), chunks = [];
   let size = 0;
   while (true) {
@@ -1372,18 +1833,18 @@ async function boundedJson(response, maxBytes, signal) {
     size += value.byteLength;
     if (size > maxBytes) {
       await reader.cancel();
-      fail3("response-cap");
+      fail4("response-cap");
     }
     chunks.push(value);
   }
   try {
     return JSON.parse(new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c)))));
   } catch {
-    fail3("provider-json");
+    fail4("provider-json");
   }
 }
 function buildAnthropicWriterRequest(input, { model, maxOutputTokens } = {}) {
-  if (typeof model !== "string" || !/^claude-[a-z0-9-]{1,80}$/.test(model) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 1024) fail3("request-config-invalid");
+  if (typeof model !== "string" || !/^claude-[a-z0-9-]{1,80}$/.test(model) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 1024) fail4("request-config-invalid");
   const prompt = buildCommentaryPrompt(input), body = { model, max_tokens: maxOutputTokens, stream: false, system: prompt.system, messages: [{ role: "user", content: prompt.user }], output_config: { format: { type: "json_schema", schema: COMMENTARY_OUTPUT_SCHEMA } } };
   if (model === "claude-sonnet-5-5") {
     body.thinking = { type: "between_tools" };
@@ -1393,35 +1854,35 @@ function buildAnthropicWriterRequest(input, { model, maxOutputTokens } = {}) {
   return { body, payload, packet: prompt.packet, submittedCharacters: [...payload].length, promptVersion: 4 };
 }
 function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, limits, allowPaid = false, budgetGate, now = () => performance.now() } = {}) {
-  if (typeof model !== "string" || !/^claude-[a-z0-9-]{1,80}$/.test(model)) fail3("model-invalid");
-  for (const name2 of ["maxRequests", "maxInputCharacters", "maxOutputTokens", "deadlineMs", "maxResponseBytes"]) if (!Number.isSafeInteger(limits?.[name2]) || limits[name2] < 1) fail3("limits-invalid");
-  if (limits.maxOutputTokens > 1024 || limits.deadlineMs > 6e4 || limits.maxInputCharacters > 5e4 || limits.maxResponseBytes > 262144) fail3("limits-too-large");
+  if (typeof model !== "string" || !/^claude-[a-z0-9-]{1,80}$/.test(model)) fail4("model-invalid");
+  for (const name2 of ["maxRequests", "maxInputCharacters", "maxOutputTokens", "deadlineMs", "maxResponseBytes"]) if (!Number.isSafeInteger(limits?.[name2]) || limits[name2] < 1) fail4("limits-invalid");
+  if (limits.maxOutputTokens > 1024 || limits.deadlineMs > 6e4 || limits.maxInputCharacters > 5e4 || limits.maxResponseBytes > 262144) fail4("limits-too-large");
   let submitted = 0;
   const seenRequestIds = /* @__PURE__ */ new Set();
   async function write(input, { requestId } = {}) {
-    if (!allowPaid) fail3("paid-disabled");
-    if (typeof budgetGate?.reserve !== "function" || typeof budgetGate?.finish !== "function") fail3("durable-budget-required");
-    if (typeof getKey !== "function") fail3("credential-unavailable");
-    if (typeof requestId !== "string" || !/^[A-Za-z0-9:_-]{8,200}$/.test(requestId)) fail3("request-id-invalid");
+    if (!allowPaid) fail4("paid-disabled");
+    if (typeof budgetGate?.reserve !== "function" || typeof budgetGate?.finish !== "function") fail4("durable-budget-required");
+    if (typeof getKey !== "function") fail4("credential-unavailable");
+    if (typeof requestId !== "string" || !/^[A-Za-z0-9:_-]{8,200}$/.test(requestId)) fail4("request-id-invalid");
     let request;
     try {
       request = buildAnthropicWriterRequest(input, { model, maxOutputTokens: limits.maxOutputTokens });
     } catch {
-      fail3("input-invalid");
+      fail4("input-invalid");
     }
     const { payload, packet } = request, characters = request.submittedCharacters;
-    if (characters > limits.maxInputCharacters) fail3("input-cap");
-    if (seenRequestIds.has(requestId)) fail3("request-duplicate");
-    if (submitted >= limits.maxRequests) fail3("request-cap");
+    if (characters > limits.maxInputCharacters) fail4("input-cap");
+    if (seenRequestIds.has(requestId)) fail4("request-duplicate");
+    if (submitted >= limits.maxRequests) fail4("request-cap");
     submitted++;
     seenRequestIds.add(requestId);
     const controller = new AbortController(), start = now();
     let timer, reservation, usage = { inputTokens: null, outputTokens: null }, providerRequestId = null, validationReason = null, candidateDiagnostics = null;
     try {
-      const key = await getKey();
-      const requestHeaders = headers(key, workspaceId);
+      const key2 = await getKey();
+      const requestHeaders = headers(key2, workspaceId);
       reservation = await budgetGate.reserve({ requestId, provider: "anthropic", model, submittedCharacters: characters, maxOutputTokens: limits.maxOutputTokens });
-      if (!reservation?.id || reservation.durable !== true || reservation.approved !== true) fail3("durable-budget-required");
+      if (!reservation?.id || reservation.durable !== true || reservation.approved !== true) fail4("durable-budget-required");
       const response = await Promise.race([fetchImpl(ENDPOINT + "/messages", { method: "POST", headers: requestHeaders, body: payload, signal: controller.signal }), new Promise((_resolve, reject) => {
         timer = setTimeout(() => {
           controller.abort();
@@ -1432,26 +1893,26 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
       if (/^req_[A-Za-z0-9]{8,100}$/.test(requestHeader || "")) providerRequestId = requestHeader;
       const data = await boundedJson(response, limits.maxResponseBytes, controller.signal);
       usage = { inputTokens: Number.isSafeInteger(data.usage?.input_tokens) ? data.usage.input_tokens : null, outputTokens: Number.isSafeInteger(data.usage?.output_tokens) ? data.usage.output_tokens : null };
-      if (data.stop_reason !== "end_turn") fail3("incomplete-output");
-      if (!Array.isArray(data.content) || !data.content.length || data.content.length > 16) fail3("output-shape");
+      if (data.stop_reason !== "end_turn") fail4("incomplete-output");
+      if (!Array.isArray(data.content) || !data.content.length || data.content.length > 16) fail4("output-shape");
       const texts = [];
       for (const block of data.content) {
-        if (!block || typeof block !== "object") fail3("output-shape");
+        if (!block || typeof block !== "object") fail4("output-shape");
         if (block.type === "text") {
-          if (typeof block.text !== "string") fail3("output-shape");
+          if (typeof block.text !== "string") fail4("output-shape");
           texts.push(block.text);
         } else if (block.type === "thinking") {
-          if (typeof block.thinking !== "string" || typeof block.signature !== "string") fail3("output-shape");
+          if (typeof block.thinking !== "string" || typeof block.signature !== "string") fail4("output-shape");
         } else if (block.type === "redacted_thinking") {
-          if (typeof block.data !== "string") fail3("output-shape");
-        } else fail3("output-shape");
+          if (typeof block.data !== "string") fail4("output-shape");
+        } else fail4("output-shape");
       }
-      if (texts.length !== 1) fail3("output-shape");
+      if (texts.length !== 1) fail4("output-shape");
       let parsed;
       try {
         parsed = JSON.parse(texts[0]);
       } catch {
-        fail3("output-json");
+        fail4("output-json");
       }
       candidateDiagnostics = writerCandidateDiagnostics(parsed, packet);
       let result;
@@ -1460,9 +1921,9 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
       } catch (error) {
         const reasons = { "Invalid writer schema": "schema", "Writer grounding mismatch": "grounding", "Writer settings/tags mismatch": "settings-or-tags", "Unknown event grounding": "event-reference", "Unknown personal profile source": "profile-reference", "Missing target blurb source": "missing-blurb", "Invalid spoken line": "line-length", "Incomplete or tagged writer utterance": "line-completeness", "Spoken line exceeds word limit": "line-word-count", "Clean profile incompatible": "clean-incompatible", "Target profile required": "target-profile-required", "Wrong named target": "wrong-named-target", "Ambiguous target name": "ambiguous-target-name" };
         validationReason = reasons[error.message] || "validation";
-        fail3("output-invalid");
+        fail4("output-invalid");
       }
-      if (usage.outputTokens !== null && (!Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0 || usage.outputTokens > limits.maxOutputTokens)) fail3("usage-invalid");
+      if (usage.outputTokens !== null && (!Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0 || usage.outputTokens > limits.maxOutputTokens)) fail4("usage-invalid");
       await budgetGate.finish(reservation.id, { status: "completed", ...usage, providerRequestId, candidateDiagnostics, elapsedMs: now() - start });
       return { ...result, model, usage, latencyMs: now() - start };
     } catch (error) {
@@ -1473,7 +1934,7 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
         }
       }
       if (error instanceof AnthropicWriterError) throw error;
-      fail3(controller.signal.aborted ? "deadline" : "provider-unavailable");
+      fail4(controller.signal.aborted ? "deadline" : "provider-unavailable");
     } finally {
       clearTimeout(timer);
     }
@@ -1487,6 +1948,10 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
 var headers2 = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Content-Type": "application/json", "Cache-Control": "no-store" };
 var reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: headers2 });
 var allowed = {
+  "local-read": ["operation", "roomId"],
+  "local-start": ["operation", "roomId", "commandId", "config", "settings"],
+  "local-command": ["operation", "roomId", "commands", "quiet"],
+  "playback-start": ["operation", "roomId", "device", "jobId"],
   "feedback": ["operation", "roomId", "jobId", "value", "basis"],
   "forget-history": ["operation", "roomId"],
   "player-profile-read": ["operation", "roomId"],
@@ -1498,7 +1963,7 @@ var allowed = {
   "playback-acquire": ["operation", "roomId", "device"],
   "playback-heartbeat": ["operation", "roomId", "device", "epoch"],
   "playback-claim": ["operation", "roomId", "jobId", "device", "epoch"],
-  "playback-event": ["operation", "roomId", "jobId", "device", "epoch", "claimToken", "status", "sequence"]
+  "playback-event": ["operation", "roomId", "jobId", "device", "epoch", "claimToken", "status", "sequence", "timing"]
 };
 function commentaryHandler({ service, authenticate }) {
   return async (request) => {
@@ -1521,10 +1986,22 @@ function commentaryHandler({ service, authenticate }) {
       } catch {
         throw new CommentaryError("Invalid request.");
       }
-      if (!body || typeof body !== "object" || Array.isArray(body) || !allowed[body.operation] || Object.keys(body).some((key) => !allowed[body.operation].includes(key))) throw new CommentaryError("Unsupported commentary request.");
+      if (!body || typeof body !== "object" || Array.isArray(body) || !allowed[body.operation] || Object.keys(body).some((key2) => !allowed[body.operation].includes(key2))) throw new CommentaryError("Unsupported commentary request.");
       const args = [user, body.roomId, body];
       let result;
       switch (body.operation) {
+        case "local-read":
+          result = await service.readLocal(...args);
+          break;
+        case "local-start":
+          result = await service.startLocal(...args);
+          break;
+        case "local-command":
+          result = await service.commitLocal(...args);
+          break;
+        case "playback-start":
+          result = await service.acquireAndClaim(...args);
+          break;
         case "feedback":
           result = await service.feedback(...args);
           break;
@@ -1571,7 +2048,7 @@ function commentaryHandler({ service, authenticate }) {
 
 // server/commentary/provider-runtime.js
 var gates = /* @__PURE__ */ new WeakSet();
-var uuid5 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var uuid6 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var identifier = /^[A-Za-z0-9:_-]{8,200}$/;
 var ProviderRuntimeError = class extends Error {
   constructor(code, status = null) {
@@ -1580,20 +2057,20 @@ var ProviderRuntimeError = class extends Error {
     this.status = status;
   }
 };
-var fail4 = (code, status) => {
+var fail5 = (code, status) => {
   throw new ProviderRuntimeError(code, status);
 };
 var positive2 = (value) => Number.isSafeInteger(value) && value > 0;
 function createDurableProviderGate({ verifyPersistence, readAllowance, reserveAttempt, finishAttempt } = {}) {
-  if ([verifyPersistence, readAllowance, reserveAttempt, finishAttempt].some((fn) => typeof fn !== "function")) fail4("database-ledger-required");
+  if ([verifyPersistence, readAllowance, reserveAttempt, finishAttempt].some((fn) => typeof fn !== "function")) fail5("database-ledger-required");
   const gate = { verifyPersistence, readAllowance, reserveAttempt, finishAttempt };
   gates.add(gate);
   return Object.freeze(gate);
 }
 function serviceWriterPacket({ facts, profile, personalContext = null, preferences = {}, targetAccountId } = {}) {
   const purpose = facts?.purpose || "score", target = targetAccountId || facts?.accountId || facts?.seats?.[0]?.accountId;
-  if (!uuid5.test(target || "")) fail4("target-invalid");
-  if (personalContext && personalContext.accountId !== target) fail4("target-profile-mismatch");
+  if (!uuid6.test(target || "") && !(facts?.identityKind === "local-seat" && uuid6.test(facts.ownerAccountId || "") && facts.seats?.some((s, i) => s.accountId === target && target === facts.gameId + ":p" + i))) fail5("target-invalid");
+  if (personalContext && personalContext.accountId !== target) fail5("target-profile-mismatch");
   const tags = (name2, allowed2) => [...new Set((Array.isArray(preferences?.[name2]) ? preferences[name2] : []).filter((tag2) => allowed2.includes(tag2)))].slice(0, 12);
   return { purpose, facts, profile, targetAccountId: target, playerProfiles: personalContext ? [{ accountId: target, gender: personalContext.gender || "", blurb: personalContext.blurb || "" }] : [], feedback: { likedMechanisms: tags("likedMechanisms", WRITER_MECHANISMS), dislikedMechanisms: tags("dislikedMechanisms", WRITER_MECHANISMS), likedSubjects: tags("likedSubjects", WRITER_SUBJECTS), dislikedSubjects: tags("dislikedSubjects", WRITER_SUBJECTS), avoidSubjects: tags("avoidSubjects", WRITER_SUBJECTS), ratingsCount: Number.isSafeInteger(preferences?.ratingsCount) && preferences.ratingsCount >= 0 ? preferences.ratingsCount : 0 } };
 }
@@ -1601,51 +2078,51 @@ function createCommentaryProviders({ allowPaid = false, allowance, durableGate, 
   let writerRequests = 0, ttsRequests = 0, ttsCharacters = 0;
   const seen = /* @__PURE__ */ new Set();
   function active(signal) {
-    if (signal?.aborted) fail4("cancelled");
-    if (!allowPaid) fail4("paid-disabled");
-    if (!gates.has(durableGate)) fail4("database-ledger-required");
-    if (!identifier.test(allowance?.id || "") || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= now() || !["maxWriterRequests", "maxTtsRequests", "maxTtsCharacters"].every((k) => positive2(allowance[k]))) fail4("allowance-invalid-or-expired");
+    if (signal?.aborted) fail5("cancelled");
+    if (!allowPaid) fail5("paid-disabled");
+    if (!gates.has(durableGate)) fail5("database-ledger-required");
+    if (!identifier.test(allowance?.id || "") || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= now() || !["maxWriterRequests", "maxTtsRequests", "maxTtsCharacters"].every((k) => positive2(allowance[k]))) fail5("allowance-invalid-or-expired");
   }
   function binding(input) {
-    if (!uuid5.test(input?.roomId || "") || !uuid5.test(input?.jobId || "") || !identifier.test(input?.requestId || "")) fail4("trusted-job-binding-required");
+    if (!uuid6.test(input?.roomId || "") || !uuid6.test(input?.jobId || "") || !identifier.test(input?.requestId || "")) fail5("trusted-job-binding-required");
     return { roomId: input.roomId, jobId: input.jobId, requestId: input.requestId };
   }
   async function reserve(input, stage, details) {
     active(input.signal);
-    const bind = binding(input), key = stage + ":" + bind.requestId;
-    if (seen.has(key)) fail4("attempt-duplicate");
-    seen.add(key);
+    const bind = binding(input), key2 = stage + ":" + bind.requestId;
+    if (seen.has(key2)) fail5("attempt-duplicate");
+    seen.add(key2);
     let verified, authority;
     try {
       verified = await durableGate.verifyPersistence();
       authority = verified === true ? await durableGate.readAllowance(allowance.id) : null;
     } catch {
-      fail4("ledger-unavailable");
+      fail5("ledger-unavailable");
     }
-    if (verified !== true) fail4("database-ledger-required");
+    if (verified !== true) fail5("database-ledger-required");
     active(input.signal);
-    if (authority?.id !== allowance.id || authority.approved !== true || authority.revoked === true || authority.expiresAt !== allowance.expiresAt || authority.expiresAt <= now() || ["maxWriterRequests", "maxTtsRequests", "maxTtsCharacters"].some((k) => authority[k] !== allowance[k])) fail4("allowance-not-approved");
+    if (authority?.id !== allowance.id || authority.approved !== true || authority.revoked === true || authority.expiresAt !== allowance.expiresAt || authority.expiresAt <= now() || ["maxWriterRequests", "maxTtsRequests", "maxTtsCharacters"].some((k) => authority[k] !== allowance[k])) fail5("allowance-not-approved");
     let receipt;
     try {
       receipt = await durableGate.reserveAttempt({ ...bind, stage, allowanceId: allowance.id, expiresAt: allowance.expiresAt, ...details });
     } catch {
-      fail4("ledger-unavailable");
+      fail5("ledger-unavailable");
     }
-    if (!identifier.test(receipt?.id || "") || receipt.allowanceId !== allowance.id || receipt.requestId !== bind.requestId || receipt.stage !== stage || receipt.committed !== true) fail4("reservation-uncommitted");
+    if (!identifier.test(receipt?.id || "") || receipt.allowanceId !== allowance.id || receipt.requestId !== bind.requestId || receipt.stage !== stage || receipt.committed !== true) fail5("reservation-uncommitted");
     return receipt;
   }
   async function finish(id2, metadata) {
     try {
       await durableGate.finishAttempt(id2, metadata);
     } catch {
-      fail4("ledger-reconciliation-required");
+      fail5("ledger-reconciliation-required");
     }
   }
   async function writeLine(input) {
     active(input?.signal);
     binding(input);
-    if (!writerLimits || typeof getAnthropicKey !== "function") fail4("writer-config-required");
-    if (writerRequests >= allowance.maxWriterRequests) fail4("writer-cap");
+    if (!writerLimits || typeof getAnthropicKey !== "function") fail5("writer-config-required");
+    if (writerRequests >= allowance.maxWriterRequests) fail5("writer-cap");
     writerRequests++;
     const packet = serviceWriterPacket(input);
     const writer = createAnthropicWriter({ model, workspaceId, getKey: async () => {
@@ -1664,23 +2141,23 @@ function createCommentaryProviders({ allowPaid = false, allowance, durableGate, 
   async function* streamAudio(input) {
     active(input?.signal);
     binding(input);
-    if (!audioLimits || !["firstByteMs", "completeMs", "maxBytes", "maxLineCharacters"].every((k) => positive2(audioLimits[k])) || audioLimits.firstByteMs > audioLimits.completeMs || audioLimits.completeMs > 6e4 || audioLimits.maxBytes > 5242880 || typeof getElevenLabsKey !== "function") fail4("audio-config-required");
+    if (!audioLimits || !["firstByteMs", "completeMs", "maxBytes", "maxLineCharacters"].every((k) => positive2(audioLimits[k])) || audioLimits.firstByteMs > audioLimits.completeMs || audioLimits.completeMs > 6e4 || audioLimits.maxBytes > 5242880 || typeof getElevenLabsKey !== "function") fail5("audio-config-required");
     const text3 = input.text;
-    if (typeof text3 !== "string" || !text3.trim() || text3.trim() !== text3 || /[\u0000-\u001f\u007f\[\]`<>]/.test(text3) || !/[.!?]["']?$/.test(text3) || [...text3].length > audioLimits.maxLineCharacters) fail4("complete-line-required");
+    if (typeof text3 !== "string" || !text3.trim() || text3.trim() !== text3 || /[\u0000-\u001f\u007f\[\]`<>]/.test(text3) || !/[.!?]["']?$/.test(text3) || [...text3].length > audioLimits.maxLineCharacters) fail5("complete-line-required");
     const voice = resolveCommentaryVoice(input.profile?.voiceOption);
-    if (input.voice && (input.voice.voiceId !== voice.voiceId || input.voice.voiceOption !== voice.voiceOption)) fail4("voice-route-mismatch");
+    if (input.voice && (input.voice.voiceId !== voice.voiceId || input.voice.voiceOption !== voice.voiceOption)) fail5("voice-route-mismatch");
     const characters = [...text3].length;
-    if (ttsRequests >= allowance.maxTtsRequests || ttsCharacters + characters > allowance.maxTtsCharacters) fail4("tts-cap");
+    if (ttsRequests >= allowance.maxTtsRequests || ttsCharacters + characters > allowance.maxTtsCharacters) fail5("tts-cap");
     ttsRequests++;
     ttsCharacters += characters;
-    let key;
+    let key2;
     try {
-      key = await getElevenLabsKey();
+      key2 = await getElevenLabsKey();
     } catch {
-      fail4("credential-unavailable");
+      fail5("credential-unavailable");
     }
     active(input.signal);
-    if (typeof key !== "string" || !(/^[a-f0-9]{64}$/i.test(key) || /^sk_[A-Za-z0-9_-]{20,}$/.test(key))) fail4("credential-unavailable");
+    if (typeof key2 !== "string" || !(/^[a-f0-9]{64}$/i.test(key2) || /^sk_[A-Za-z0-9_-]{20,}$/.test(key2))) fail5("credential-unavailable");
     const receipt = await reserve(input, "tts", { provider: "elevenlabs", model: "eleven_flash_v2_5", submittedCharacters: characters });
     const controller = new AbortController(), signal = input.signal ? AbortSignal.any([controller.signal, input.signal]) : controller.signal, start = monotonicNow();
     let firstTimer, completeTimer, reader, bytes = 0, firstByteMs = null, completed = false, failureCode = null, failureStatus = null;
@@ -1697,16 +2174,16 @@ function createCommentaryProviders({ allowPaid = false, allowance, durableGate, 
         signal.addEventListener("abort", abort, { once: true });
         Promise.resolve(promise).then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
       });
-      const response = await interrupted(fetchImpl("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(voice.voiceId) + "/stream?output_format=mp3_44100_128", { method: "POST", signal, headers: { "xi-api-key": key, "content-type": "application/json", accept: "audio/mpeg" }, body: JSON.stringify({ text: text3, model_id: "eleven_flash_v2_5" }) }));
-      if (!response.ok) fail4("provider-http", response.status);
-      if (!response.headers.get("content-type")?.includes("audio/") || !response.body) fail4("non-audio-response");
+      const response = await interrupted(fetchImpl("https://api.elevenlabs.io/v1/text-to-speech/" + encodeURIComponent(voice.voiceId) + "/stream?output_format=mp3_44100_128", { method: "POST", signal, headers: { "xi-api-key": key2, "content-type": "application/json", accept: "audio/mpeg" }, body: JSON.stringify({ text: text3, model_id: "eleven_flash_v2_5" }) }));
+      if (!response.ok) fail5("provider-http", response.status);
+      if (!response.headers.get("content-type")?.includes("audio/") || !response.body) fail5("non-audio-response");
       reader = response.body.getReader();
       while (true) {
         const { done, value } = await interrupted(reader.read());
         if (done) break;
         if (!value?.byteLength) continue;
         bytes += value.byteLength;
-        if (bytes > audioLimits.maxBytes) fail4("audio-byte-cap");
+        if (bytes > audioLimits.maxBytes) fail5("audio-byte-cap");
         if (firstByteMs === null) {
           firstByteMs = monotonicNow() - start;
           clearTimeout(firstTimer);
@@ -1714,14 +2191,14 @@ function createCommentaryProviders({ allowPaid = false, allowance, durableGate, 
         active(signal);
         yield value;
       }
-      if (!bytes) fail4("empty-audio");
+      if (!bytes) fail5("empty-audio");
       completed = true;
       await finish(receipt.id, { status: "completed", bytes, firstByteMs, completeMs: monotonicNow() - start, firstAudibleMs: null });
     } catch (error) {
       failureCode = error instanceof ProviderRuntimeError ? error.code : "provider-unavailable";
       failureStatus = error instanceof ProviderRuntimeError ? error.status : null;
       if (error instanceof ProviderRuntimeError) throw error;
-      fail4("provider-unavailable");
+      fail5("provider-unavailable");
     } finally {
       controller.abort();
       clearTimeout(firstTimer);
@@ -1736,22 +2213,22 @@ function createCommentaryProviders({ allowPaid = false, allowance, durableGate, 
   return { writeLine, streamAudio, providerMode: "server-live", liveConfigured: allowPaid === true };
 }
 function composeCommentaryEndpoint({ service, authenticate, refresh } = {}) {
-  if (!service || typeof authenticate !== "function" || typeof refresh !== "function") fail4("durable-composition-required");
+  if (!service || typeof authenticate !== "function" || typeof refresh !== "function") fail5("durable-composition-required");
   return commentaryHandler({ service, authenticate: async (request) => {
     const actor = await authenticate(request);
-    if (!uuid5.test(actor || "")) return null;
+    if (!uuid6.test(actor || "")) return null;
     await refresh({ userId: actor, request });
     return actor;
   } });
 }
 
 // server/rooms/supabase-adapter.js
-var uuid6 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var uuid7 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var row = (room) => ({ id: room.id, code: room.code, host_id: room.hostId, member_ids: room.members.map((m) => m.userId), revision: room.revision, state: room, created_at: room.createdAt });
-function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) => fetch(...args), now = () => Date.now(), commentaryScopeId = null }) {
+function createSupabaseRoomAdapter({ url, key: key2, fetchImplementation = (...args) => fetch(...args), now = () => Date.now(), commentaryScopeId = null }) {
   async function db(path, options = {}) {
     try {
-      const response = await fetchImplementation(`${url}/rest/v1/clubhouse_rooms${path}`, { ...options, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" } });
+      const response = await fetchImplementation(`${url}/rest/v1/clubhouse_rooms${path}`, { ...options, headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json", Prefer: "return=representation" } });
       if (response.status === 409 && ["POST", "PATCH"].includes(options.method)) return null;
       if (!response.ok) throw new Error();
       const rows = await response.json();
@@ -1763,9 +2240,9 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
   }
   const store = {
     async commentaryAvailable() {
-      if (!uuid6.test(commentaryScopeId || "")) return false;
+      if (!uuid7.test(commentaryScopeId || "")) return false;
       try {
-        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
+        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`, { method: "POST", headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" }, body: "{}" });
         if (response.status === 404) return false;
         if (!response.ok) throw Error();
         const available = await response.json();
@@ -1777,7 +2254,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     },
     async competitionAvailable() {
       try {
-        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_competition_v2_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
+        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_competition_v2_available`, { method: "POST", headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" }, body: "{}" });
         if (response.status === 404) return false;
         if (!response.ok) throw Error();
         const available = await response.json();
@@ -1789,7 +2266,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     },
     async tournamentsAvailable() {
       try {
-        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_tournaments_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
+        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_tournaments_available`, { method: "POST", headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" }, body: "{}" });
         if (response.status === 404) return false;
         if (!response.ok) throw Error();
         const available = await response.json();
@@ -1800,14 +2277,14 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       }
     },
     async tournamentGames(roomId) {
-      if (!uuid6.test(roomId)) throw new Error("Database request failed");
+      if (!uuid7.test(roomId)) throw new Error("Database request failed");
       const games = await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null&select=state,sequence_number&order=sequence_number.asc&limit=20`);
       if (!Array.isArray(games)) throw new Error("Database request failed");
       return games;
     },
     async rematchAvailable() {
       try {
-        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_rematch_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
+        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_rematch_available`, { method: "POST", headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" }, body: "{}" });
         if (response.status === 404) return false;
         if (!response.ok) throw Error();
         const available = await response.json();
@@ -1824,7 +2301,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before ? `&sequence_number=lt.${before}` : ""}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
     },
     async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null } = {}) {
-      if (outboxRows !== null && !uuid6.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+      if (outboxRows !== null && !uuid7.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
       const result = await resource(outboxRows === null ? "rpc/clubhouse_commit_game" : "rpc/clubhouse_commit_game_commentary", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, ...outboxRows !== null ? { p_scope: commentaryScopeId, p_outbox: outboxRows } : {} }) });
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;
@@ -1839,13 +2316,13 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       return (await db(`?member_ids=cs.{${userId}}&select=state&order=created_at.desc&limit=30`)).map((r) => r.state);
     },
     async openTournaments(userId, before) {
-      if (!uuid6.test(userId)) throw new Error("Database request failed");
-      if (before && (!uuid6.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid7.test(userId)) throw new Error("Database request failed");
+      if (before && (!uuid7.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const cursor = before ? `&or=(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id}))` : "";
       return await db(`?member_ids=cs.{${userId}}&state->tournament=not.is.null&state->tournament->>status=neq.completed${cursor}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
     },
     async sessions(userId, view, before) {
-      if (!uuid6.test(userId) || !["open", "completed"].includes(view) || before && (!uuid6.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid7.test(userId) || !["open", "completed"].includes(view) || before && (!uuid7.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const classification = view === "open" ? "and(state->tournament.is.null,state->>status.neq.finished),state->tournament->>status.neq.completed" : "and(state->tournament.is.null,state->>status.eq.finished),state->tournament->>status.eq.completed";
       const filter = before ? `and=(or(${classification}),or(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})))` : `or=(${classification})`;
       return await db(`?member_ids=cs.{${userId}}&${filter}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
@@ -1862,7 +2339,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
   };
   async function resource(path, options = {}) {
     try {
-      const response = await fetchImplementation(`${url}/rest/v1/${path}`, { ...options, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" } });
+      const response = await fetchImplementation(`${url}/rest/v1/${path}`, { ...options, headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json", Prefer: "return=representation" } });
       if (!response.ok) throw Error();
       return await response.json();
     } catch {
@@ -1873,10 +2350,10 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     const authorization = request.headers.get("Authorization");
     if (!authorization?.startsWith("Bearer ")) return null;
     try {
-      const response = await fetchImplementation(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: authorization } });
+      const response = await fetchImplementation(`${url}/auth/v1/user`, { headers: { apikey: key2, Authorization: authorization } });
       if (!response.ok) return null;
       const user = await response.json();
-      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid6.test(user.id) ? user.id : null;
+      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid7.test(user.id) ? user.id : null;
     } catch {
       throw new Error("Authentication request failed");
     }
@@ -1889,18 +2366,18 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
 }) } = {}) {
   const get = (name2) => typeof env?.get === "function" ? env.get(name2) : env?.[name2];
   const scopeId = "d1ce0000-0000-4000-8000-000000000026";
-  const url = get("SUPABASE_URL"), key = get("SUPABASE_SERVICE_ROLE_KEY");
+  const url = get("SUPABASE_URL"), key2 = get("SUPABASE_SERVICE_ROLE_KEY");
   const enabled = get("COMMENTARY_LIVE_ENABLED") === "true";
   const allowance = { id: get("COMMENTARY_ALLOWANCE_ID") || "sw026-pixel-owner-test", expiresAt: Date.parse(get("COMMENTARY_ALLOWANCE_EXPIRES_AT") || ""), maxWriterRequests: 200, maxTtsRequests: 200, maxTtsCharacters: 36e3 };
-  const { store: roomStore, authenticate } = createSupabaseRoomAdapter({ url, key, fetchImplementation: fetchImpl });
+  const { store: roomStore, authenticate } = createSupabaseRoomAdapter({ url, key: key2, fetchImplementation: fetchImpl });
   async function resource(path, options = {}) {
-    const response = await fetchImpl(url + "/rest/v1/" + path, { ...options, headers: { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" }, signal: AbortSignal.timeout(8e3) });
+    const response = await fetchImpl(url + "/rest/v1/" + path, { ...options, headers: { apikey: key2, Authorization: "Bearer " + key2, "Content-Type": "application/json" }, signal: AbortSignal.timeout(8e3) });
     if (!response.ok) throw Error("Commentary persistence unavailable.");
     return response.json();
   }
   const rpc = (operation, body) => resource("rpc/" + operation, { method: "POST", body: JSON.stringify(body) });
   function createRuntime() {
-    const persistence = new DurableCommentaryStore({ scopeId, rpc: createSupabaseCommentaryRpc({ url, getServiceKey: () => key, fetchImplementation: fetchImpl, timeoutMs: 8e3 }) });
+    const persistence = new DurableCommentaryStore({ scopeId, rpc: createSupabaseCommentaryRpc({ url, getServiceKey: () => key2, fetchImplementation: fetchImpl, timeoutMs: 8e3 }) });
     const gate = createDurableProviderGate({
       verifyPersistence: () => persistence instanceof DurableCommentaryStore && persistence.version !== null,
       readAllowance: async (id2) => id2 === allowance.id ? { ...allowance, approved: enabled, revoked: !enabled } : null,
@@ -1932,7 +2409,10 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
       })
     });
     const providers = enabled ? createCommentaryProviders({ fetchImpl, allowPaid: true, allowance, durableGate: gate, getAnthropicKey: () => get("ANTHROPIC_API_KEY"), getElevenLabsKey: () => get("ELEVENLABS_API_KEY"), model: get("COMMENTARY_WRITER_MODEL") || "claude-haiku-4-5-20251001", writerLimits: { maxRequests: 1, maxInputCharacters: 5e4, maxOutputTokens: 512, deadlineMs: 12e3, maxResponseBytes: 2e4 }, audioLimits: { firstByteMs: 1e4, completeMs: 25e3, maxBytes: 524288, maxLineCharacters: 180 } }) : null;
-    const service = createCommentaryService({ store: persistence, getRoom: (id2) => roomStore.byId(id2), now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, maxAgeMs: 3e4, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
+    const service = createCommentaryService({ store: persistence, getRoom: async (id2) => {
+      const local = persistence.read("localSessions", id2);
+      return local ? localRoom(local) : roomStore.byId(id2);
+    }, now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, maxAgeMs: 3e4, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
     async function processRoom(roomId) {
       await persistence.initialize();
       const rows = await resource("clubhouse_commentary_outbox?scope_id=eq." + scopeId + "&room_id=eq." + roomId + "&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10");
@@ -1968,16 +2448,17 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
           }
         }
       }
+      if (body?.operation === "local-start" && (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now())) throw Error("Live commentary is not configured.");
       if (body?.operation === "profile-update" && body.changes?.enabled === true) {
         await runtime.service.authorized(actor, body.roomId, true);
         if (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now()) throw Error("Live test configuration is not enabled.");
       }
       const handler = composeCommentaryEndpoint({ service: runtime.service, authenticate: async () => actor, refresh: () => runtime.persistence.refresh() });
       const response = await handler(request);
-      if (response.ok && body?.operation === "profile-update" && body.changes?.enabled === true) {
+      if (response.ok && (body?.operation === "local-start" || body?.operation === "profile-update" && body.changes?.enabled === true)) {
         await rpc("clubhouse_commentary_set_limit", { p_scope: scopeId, p_room: body.roomId, p_max_requests: 400, p_max_characters: 4e6, p_expires_at: new Date(allowance.expiresAt).toISOString() });
       }
-      if (response.ok && body?.roomId && ["jobs-read", "profile-update"].includes(body.operation)) {
+      if (response.ok && body?.roomId && ["jobs-read", "profile-update", "local-start", "local-command"].includes(body.operation)) {
         await runtime.service.authorized(actor, body.roomId);
         waitUntil(runtime.processRoom(body.roomId).catch(() => {
         }));

@@ -11,7 +11,7 @@ vi.mock('../src/multiplayer/ui.js',()=>({
  sendOnline:vi.fn(async(action,expectedRevision)=>{mock.room=playRoom(mock.room,{userId:host,action,expectedRevision,gameId:mock.room.game.id,commandId:crypto.randomUUID(),time:'2026-10-14T20:00:00.000Z'});mock.callbacks.game(mock.room,host,true,true);return mock.room;}),
 }));
 import {createAuthenticatedCommentaryTransport} from '../src/commentary/authenticated-transport.js';
-const click=selector=>{const el=document.querySelector(selector);expect(el).not.toBeNull();el.click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const el=document.querySelector(selector);expect(el).not.toBeNull();el.click();};
 beforeAll(async()=>{
  vi.stubEnv('VITE_COMMENTARY_URL','https://service.example.test/live-commentary');
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new Event('close'));};
@@ -27,7 +27,7 @@ beforeAll(async()=>{
  mock.room=playRoom(mock.room,{userId:host,action:{type:'score',category:'chance',value:25,id:crypto.randomUUID()},expectedRevision:mock.room.revision,gameId:mock.room.game.id,commandId:crypto.randomUUID(),time});
  mock.room=playRoom(mock.room,{userId:guest,action:{type:'score',category:'chance',value:20,id:crypto.randomUUID()},expectedRevision:mock.room.revision,gameId:mock.room.game.id,commandId:crypto.randomUUID(),time});
  const event=mock.room.game.events.find(e=>e.type==='score');mock.jobs=[{id:'55555555-5555-4555-8555-555555555555',gameId:mock.room.game.id,eventId:event.id,dependencyEventIds:[event.id],profileVersion:1,status:'completed',caption:'That score has a pulse.',feedbackBasis:'playback'}];
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 afterAll(()=>{window.dispatchEvent(new Event('pagehide'));vi.unstubAllEnvs();});
 it('renders actual game inline feedback across score renders without opening a drawer or disturbing centered input',async()=>{

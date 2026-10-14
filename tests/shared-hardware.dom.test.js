@@ -23,7 +23,7 @@ it('captures on the host for a guest turn, shows synced faces and permits only t
  mock.room=playRoom(mock.room,{userId:'host',action:hostRoll,expectedRevision:mock.room.revision,commandId:'first-host-roll',time});
  mock.room=playRoom(mock.room,{userId:'host',action:{type:'score',category:'chance',value:15},expectedRevision:mock.room.revision,commandId:'first-host-score',time});
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('[data-action="online"]')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('[data-action="online"]')).not.toBeNull());
  publishDiceStatus({enabled:true,paused:false,dice:Array.from({length:5},(_,i)=>({id:`d${i}`,epoch:1,connected:true}))});
  click('[data-action="online"]');await vi.waitFor(()=>expect(document.querySelector('#hardwareCapture')).not.toBeNull());
  [5,5,5,2,4].forEach((face,i)=>{publishDiceEvent({id:`d${i}`,epoch:1,kind:'moving'});publishDiceEvent({id:`d${i}`,epoch:1,kind:'stable',face});});

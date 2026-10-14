@@ -1,3 +1,4 @@
+import {localRoom} from './local-sessions.js';
 import {createCommentaryService} from './service.js';
 import {DurableCommentaryStore,createSupabaseCommentaryRpc} from './durable-store.js';
 import {createCommentaryProviders,createDurableProviderGate,composeCommentaryEndpoint} from './provider-runtime.js';
@@ -38,7 +39,7 @@ function createRuntime(){
   finishAttempt:(id,metadata)=>persistence.transaction(state=>{const attempt=state.attempts.get(id);if(!attempt)throw Error('Missing durable attempt.');Object.assign(attempt,{providerResult:metadata,providerFinishedAt:Date.now()});return true;}),
  });
  const providers=enabled?createCommentaryProviders({fetchImpl,allowPaid:true,allowance,durableGate:gate,getAnthropicKey:()=>get('ANTHROPIC_API_KEY'),getElevenLabsKey:()=>get('ELEVENLABS_API_KEY'),model:get('COMMENTARY_WRITER_MODEL')||'claude-haiku-4-5-20251001',writerLimits:{maxRequests:1,maxInputCharacters:50000,maxOutputTokens:512,deadlineMs:12000,maxResponseBytes:20000},audioLimits:{firstByteMs:10000,completeMs:25000,maxBytes:524288,maxLineCharacters:180}}):null;
- const service=createCommentaryService({store:persistence,getRoom:id=>roomStore.byId(id),now:()=>persistence.databaseNowMs??Date.now(),profile:{enabled:false,profanityAllowed:true,humorIntensity:'dark',frequency:'balanced',voiceOption:'rachel'},liveProviders:providers,maxAgeMs:30000,writerTimeoutMs:15000,streamTimeoutMs:30000,budget:{maxRequests:400,maxCharacters:4000000}});
+ const service=createCommentaryService({store:persistence,getRoom:async id=>{const local=persistence.read('localSessions',id);return local?localRoom(local):roomStore.byId(id);},now:()=>persistence.databaseNowMs??Date.now(),profile:{enabled:false,profanityAllowed:true,humorIntensity:'dark',frequency:'balanced',voiceOption:'rachel'},liveProviders:providers,maxAgeMs:30000,writerTimeoutMs:15000,streamTimeoutMs:30000,budget:{maxRequests:400,maxCharacters:4000000}});
  async function processRoom(roomId){
   await persistence.initialize();
   const rows=await resource('clubhouse_commentary_outbox?scope_id=eq.'+scopeId+'&room_id=eq.'+roomId+'&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10');
@@ -57,6 +58,7 @@ return async request=>{
   const actor=await authenticate(request);if(!actor)return new Response(JSON.stringify({error:'Sign in to use commentary.'}),{status:401,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
   const runtime=createRuntime();await runtime.persistence.initialize();
   let body=null;if(request.method==='POST'){const raw=await request.clone().text();if(raw.length<=4096){try{body=JSON.parse(raw);}catch{}}}
+  if(body?.operation==='local-start'&&(!enabled||!Number.isFinite(allowance.expiresAt)||allowance.expiresAt<=Date.now()))throw Error('Live commentary is not configured.');
   if(body?.operation==='profile-update'&&body.changes?.enabled===true){
    await runtime.service.authorized(actor,body.roomId,true);
    if(!enabled||!Number.isFinite(allowance.expiresAt)||allowance.expiresAt<=Date.now())throw Error('Live test configuration is not enabled.');
@@ -64,8 +66,8 @@ return async request=>{
   }
   const handler=composeCommentaryEndpoint({service:runtime.service,authenticate:async()=>actor,refresh:()=>runtime.persistence.refresh()});
   const response=await handler(request);
-  if(response.ok&&body?.operation==='profile-update'&&body.changes?.enabled===true){await rpc('clubhouse_commentary_set_limit',{p_scope:scopeId,p_room:body.roomId,p_max_requests:400,p_max_characters:4000000,p_expires_at:new Date(allowance.expiresAt).toISOString()});}
-  if(response.ok&&body?.roomId&&['jobs-read','profile-update'].includes(body.operation)){
+  if(response.ok&&(body?.operation==='local-start'||body?.operation==='profile-update'&&body.changes?.enabled===true)){await rpc('clubhouse_commentary_set_limit',{p_scope:scopeId,p_room:body.roomId,p_max_requests:400,p_max_characters:4000000,p_expires_at:new Date(allowance.expiresAt).toISOString()});}
+  if(response.ok&&body?.roomId&&['jobs-read','profile-update','local-start','local-command'].includes(body.operation)){
    await runtime.service.authorized(actor,body.roomId);
    waitUntil(runtime.processRoom(body.roomId).catch(()=>{}));
   }

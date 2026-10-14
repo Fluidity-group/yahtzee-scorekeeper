@@ -14,7 +14,7 @@ export function createDurableProviderGate({verifyPersistence,readAllowance,reser
 }
 export function serviceWriterPacket({facts,profile,personalContext=null,preferences={},targetAccountId}={}){
  const purpose=facts?.purpose||'score',target=targetAccountId||facts?.accountId||facts?.seats?.[0]?.accountId;
- if(!uuid.test(target||''))fail('target-invalid');
+ if(!uuid.test(target||'')&&!(facts?.identityKind==='local-seat'&&uuid.test(facts.ownerAccountId||'')&&facts.seats?.some((s,i)=>s.accountId===target&&target===facts.gameId+':p'+i)))fail('target-invalid');
  // The service supplies ONLY consented target context. Never accept a rival profile list.
  if(personalContext&&personalContext.accountId!==target)fail('target-profile-mismatch');
  const tags=(name,allowed)=>[...new Set((Array.isArray(preferences?.[name])?preferences[name]:[]).filter(tag=>allowed.includes(tag)))].slice(0,12);

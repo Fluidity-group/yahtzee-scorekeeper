@@ -16,8 +16,8 @@ vi.mock('../src/multiplayer/ui.js',()=>({
 vi.mock('../src/dice/camera-panel.js',()=>({disconnectCamera:vi.fn(async()=>{})}));
 import {sendOnline,openOnline} from '../src/multiplayer/ui.js';
 import {saveCore,listCore} from '../src/core-store.js';
-const click=selector=>{const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
-const action=name=>click(`[data-action="${name}"]`);
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
+const action=name=>{if(!document.querySelector('[data-action="'+name+'"]'))document.querySelector('[data-action=game-menu]')?.click();click('[data-action="'+name+'"]');};
 const outcome=async face=>{click(`[data-action="final-chain-outcome"][data-face="${face}"]`);action('confirm-final-chain');await vi.waitFor(()=>{expect(document.querySelector('#coreDialog').open).toBe(false);expect(document.querySelector('#coreApp').hasAttribute('inert')).toBe(false);});};
 function finalCategory({names=['Dan'],version=2}={}){
  let game=createCoreGame({id:crypto.randomUUID(),names,mode:'competition',rulesVersion:version});
@@ -30,7 +30,7 @@ function finalCategory({names=['Dan'],version=2}={}){
 function table(game){return {id:'room',code:'ABCDEFGH',revision:30,hostId:'host',members:game.players.map((player,seat)=>({userId:seat?'guest':'host',name:player.name})),game,capabilities:{rematch:true,tournaments:true},source:'manual'};}
 async function scoreFinal(){click('[data-action="choose"][data-key="yahtzee"]');click('[data-action="confirm-score"][data-value="50"]');await vi.waitFor(()=>{expect(document.querySelector('.final-chain-panel')).not.toBeNull();expect(document.querySelector('[data-action="final-chain-outcome"]').disabled).toBe(false);expect(document.querySelector('#coreDialog').open).toBe(false);});}
 beforeAll(async()=>{
- HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
+ HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 beforeEach(async()=>{vi.clearAllMocks();mock.saved=null;mock.userId='host';mock.room=table(finalCategory());action('online');await vi.waitFor(()=>{expect(openOnline).toHaveBeenCalledOnce();expect(document.querySelector('[data-action="choose"][data-key="yahtzee"]')).not.toBeNull();});});
 it('keeps the first final-category 50-point Yahtzee active until a full failed bonus attempt',async()=>{
@@ -64,7 +64,7 @@ it('disables report controls while paused or disconnected and clears pending con
  mock.room={...mock.room,revision:32,tournament:{...mock.room.tournament,status:'playing'}};mock.callbacks.game(mock.room,'host',true,true);mock.callbacks.connection(false);expect([...document.querySelectorAll('[data-action="final-chain-outcome"]')].every(button=>button.disabled)).toBe(true);
 });
 it('creates new local manual Competition under version two and explains its rules',async()=>{
- mock.callbacks.exit();document.querySelector('[name="mode"]').value='competition';document.querySelector('[name="mode"]').dispatchEvent(new Event('change',{bubbles:true}));expect(document.querySelector('#modeDescription').textContent).toContain('three-roll attempt');
+ mock.callbacks.exit();document.querySelector('[data-action=home-local]').click();document.querySelector('[name="mode"]').value='competition';document.querySelector('[name="mode"]').dispatchEvent(new Event('change',{bubbles:true}));expect(document.querySelector('#modeDescription').textContent).toContain('three-roll attempt');
  document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(saveCore).toHaveBeenCalled());expect(mock.saved.rules.version).toBe(2);action('rules');expect(document.querySelector('#coreDialog').textContent).toContain('version 2');expect(document.querySelector('#coreDialog').textContent).toContain('Score the final category first');action('close');
 });
 it('retains a saved version-one final turn and its original result behavior',async()=>{

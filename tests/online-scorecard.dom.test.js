@@ -11,12 +11,12 @@ vi.mock('../src/multiplayer/ui.js',()=>({
  }),
 }));
 import { saveCore } from '../src/core-store.js';
-const click=selector=>{expect(document.querySelector(selector)).not.toBeNull();document.querySelector(selector).click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();expect(document.querySelector(selector)).not.toBeNull();document.querySelector(selector).click();};
 beforeAll(async()=>{
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};
  const time='2026-09-16T12:00:00.000Z';
  mock.room=startRoom(joinRoom(createRoom({id:'room-id',code:'ABCDEFGH',userId:'host',name:'Dan',time}),{userId:'guest',name:'Amber',time}),{userId:'host',time});
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 describe('shared scorecard',()=>{
  it('saves through the server and cannot score for the next player',async()=>{

@@ -1,6 +1,13 @@
 import './styles.css';
 import './clubhouse.css';
 import './prototype.css';
+import './ui/clubhouse-home.css';
+import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';
+import {renderCommentarySettings,bindCommentarySettings} from './ui/commentary-settings.js';
+import {readCommentaryPreferences,persistCommentaryPatch,readLocalPlayerDefaults,saveLocalPlayerDefaults} from './commentary/preferences.js';
+import {markScoreSubmitted,readPlaybackTimings} from './commentary/latency.js';
+import {queueLocalCommands} from './commentary/local-client.js';
+import {askGameCommentary,showWelcomeGate} from './ui/welcome-gate.js';
 import './ui/hosted-results.css';
 import {renderHostedResults} from './ui/hosted-results.js';
 import {renderTournamentBanner,renderTournamentStandings} from './ui/tournament.js';
@@ -33,7 +40,7 @@ let noticeTimer, effectTimer, activeEffect=null;
 let onlineRoom=null,onlineUserId=null,onlineConnected=false,localGame=null;
 const commentaryServiceBase=(import.meta.env.VITE_COMMENTARY_URL||'').trim();
 let hostedCommentaryActive=false,hostedCommentary=null,hostedCommentaryPlayer=null,hostedCommentarySetup=null,hostedCommentaryGeneration=0;
-const commentaryContext=()=>({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,visible:!document.hidden});
+const commentaryContext=()=>({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,visible:!document.hidden&&view!=='home'});
 function resetHostedCommentary(){
  hostedCommentaryGeneration++;hostedCommentary?.dispose();hostedCommentary=null;
  const player=hostedCommentaryPlayer;hostedCommentaryPlayer=null;hostedCommentarySetup=null;
@@ -49,7 +56,7 @@ async function ensureHostedCommentary(){
   const transport=createAuthenticatedCommentaryTransport({auth,serviceBase:commentaryServiceBase,anonymousKey:import.meta.env.VITE_SUPABASE_ANON_KEY||''});
   const android=Capacitor.getPlatform()==='android';
   const player=android?(await import('./commentary/native-player.js')).createNativeCommentaryPlayer({serviceBase:commentaryServiceBase,getAccessToken:transport.getAccessToken}):{play:async()=>false,stop:()=>{},dispose:async()=>{}};
-  const session=createHostedCommentarySession({request:transport.request,player,deviceId:id(),onNotice:notice,nativeAudioAvailable:android});
+  const session=createHostedCommentarySession({request:transport.request,player,deviceId:id(),onNotice:notice,nativeAudioAvailable:android,initialListenerMuted:readCommentaryPreferences().listenerMuted,onPreferencesSaved:persistCommentaryPatch});
   if(ticket!==hostedCommentaryGeneration){session.dispose();await player.dispose?.();return null;}
   hostedCommentary=session;hostedCommentaryPlayer=player;session.update(commentaryContext());session.mountSurface?.({root,scoreDialog:dialog});return session;
  })();hostedCommentarySetup=task;
@@ -60,7 +67,7 @@ function syncHostedCommentary(){
  if(hostedCommentaryActive&&onlineRoom&&commentaryServiceBase)void ensureHostedCommentary().catch(()=>notice('Commentary is unavailable. Keep playing.'));
 }
 async function openCommentary(){
- if(!onlineRoom)return commentarySession.open({isHost:true,gameId:game?.id||'setup',players:game?.players||[],scoreDialog:dialog});
+ if(!onlineRoom){if(localVoice)return localVoice.open({scoreDialog:dialog});return openGlobalCommentary();}
  if(dialog.open){notice('Finish or close score entry before opening commentary.');return;}
  if(!commentaryServiceBase){notice('Live commentary is not connected for this build.');return;}
  try{const session=await ensureHostedCommentary();if(session)await session.open({scoreDialog:dialog});else notice('Sign in at your table to use commentary.');}
@@ -99,17 +106,33 @@ const root=document.getElementById('coreApp'),dialog=document.getElementById('co
 function applyTheme(){document.documentElement.dataset.theme=theme;document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0b141c':'#f3f6f5');}
 applyTheme();
 function notice(text){clearTimeout(noticeTimer);const box=document.getElementById('coreNotice');box.textContent=text;if(text==='Saved on this device.'||text==='Saved to the shared game.')noticeTimer=setTimeout(()=>{box.textContent='';},2500);if(dialog.open){let alert=dialog.querySelector('[role="alert"]');if(!alert){alert=document.createElement('p');alert.setAttribute('role','alert');dialog.append(alert);}alert.textContent=text;}}
-function header(){return `<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><details class="game-menu"><summary aria-label="Game menu">Menu <span aria-hidden="true">☰</span></summary><nav aria-label="Game actions"><button class="hbtn" data-action="online">Host / join online</button><button class="hbtn" data-action="new">New game</button><button class="hbtn" data-action="history">History</button><button class="hbtn" data-action="commentary-settings">Commentary</button>${game?'<button class="hbtn" data-action="analytics">Roll insights</button><button class="hbtn" data-action="rules">Game rules</button>':''}<button class="hbtn" data-action="export">Export</button><button class="hbtn" data-action="theme">${theme==='dark'?'Light':'Dark'} mode</button><button class="hbtn" data-action="connect-dice">Connect dice</button>${Capacitor.getPlatform()==='android'?'<button class="hbtn" data-action="camera-settings">Camera connection</button><button class="hbtn" data-action="camera-test">Dice identification test</button>':''}<a class="hbtn" href="?dice-lab=1">Dice lab</a></nav></details></header>`;}
-function newScreen(){cancelPulse(root);clearCelebration();phoneCleanup();
+function header(){return '<header class="compact-header"><button class="compact-logo hbtn" data-action="home">yahtzee<span>.</span></button><button class="hbtn" data-action="game-menu" aria-label="Open clubhouse menu">Menu <span aria-hidden="true">☰</span></button></header>';}
+
+let launchGeneration=0;
+let view='home',localVoice=null,localVoiceGameId=null,welcomeGate=null,pendingWelcome=false,pendingLocalLaunch=null,settingsCleanup=()=>{};
+function showHome(){view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences()})+'<button class="all-scores" data-action="saved-sessions">Your online games &amp; tournaments</button>';}
+async function returnHome(){launchGeneration++;welcomeGate?.cancel();if(onlineRoom){const {leaveOnline}=await import('./multiplayer/ui.js');leaveOnline();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;hostedCommentaryActive=false;resetHostedCommentary();}dialog.close();showHome();}
+function openNavigation(){if(dialog.open){notice('Finish or close score entry before opening the menu.');return;}openDialog(renderGameMenu({hasGame:!!game,theme,native:Capacitor.getPlatform()==='android'}));dialog.dataset.navigation='true';}
+function openGlobalCommentary(){const saved=readCommentaryPreferences(),defaults=readLocalPlayerDefaults(),players=defaults.length?defaults:[{displayName:localStorage.getItem('clubhouse-name')||'',gender:'',blurb:''}];openDialog(renderCommentarySettings({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted,isHost:true,connected:false,id:'global-commentary'}).replace('Voice not connected · preferences only','Saved defaults · connect when a new game begins').replace('Enable table commentary','Offer commentary for new games').replace('Table voice style','Your default commentator').replace('<p data-commentary-error', '<details class="global-player-defaults"><summary>Saved player details for local games</summary><p class="core-muted">Stored on this phone. Only players in the new game are shared when you choose commentary.</p>'+players.map((p,i)=>'<label>Player '+(i+1)+' name<input name="localName'+i+'" maxlength="24" value="'+esc(p.displayName)+'"></label>'+renderPlayerProfileFields('defaultPlayer'+i,p)).join('')+'</details><p data-commentary-error')+'<p class="core-muted">Saved on this phone across app launches. Each new game asks whether to use commentary. Live voice needs an internet connection and sign-in; your optional player details are shared only when you choose commentary for that game.</p>');settingsCleanup();settingsCleanup=bindCommentarySettings(dialog,{onClose:()=>dialog.close(),onListenerMute:value=>{persistCommentaryPatch({listenerMuted:value});(onlineRoom?hostedCommentary:localVoice?.session)?.setListenerMuted?.(value);},onTableSettings:async value=>{const data=new FormData(dialog.querySelector('[data-commentary-form]'));saveLocalPlayerDefaults(players.map((_,i)=>({displayName:String(data.get('localName'+i)||''),...readPlayerProfileFields(data,'defaultPlayer'+i)})));const saved=persistCommentaryPatch({profile:{...value.profile,enabled:value.enabled}});const active=onlineRoom?hostedCommentary:localVoice?.session;if(active&&(!onlineRoom||onlineRoom.hostId===onlineUserId)){active.muteForGame?.();await active.configure({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted});}notice('Commentary settings saved for every game.');}});}
+function showTimingLog(){const values=readPlaybackTimings(),latest=values.at(-1);openDialog('<h2>Commentary response times</h2><p class="core-muted">From scoring to the phone audio-position callback. This measures the playback path, not sound reaching your ears. No jokes, blurbs or keys are stored here.</p>'+(latest?'<p>Latest: <strong>'+ (latest.elapsedMs/1000).toFixed(1)+' seconds</strong></p><ol class="timing-list">'+values.slice(-10).reverse().map(v=>'<li>'+ (v.elapsedMs/1000).toFixed(1)+'s<small>'+esc(v.basis==='score-submission'?'Score submitted → playback':'Accepted score observed → playback')+' · '+esc(new Date(v.at).toLocaleTimeString())+'</small></li>').join('')+'</ol>':'<p>No measured score commentary yet. Play a fresh score with commentary enabled.</p>'));}
+function showLaunchFailure(message){view='welcome';root.innerHTML='<main class="launch-progress"><div class="launch-pulse" aria-hidden="true">⚄</div><h1>Your game is ready.</h1><p role="status">'+esc(message)+'</p><button class="bigbtn score core-primary" data-action="launch-signin">Sign in for live commentary</button><button class="all-scores" data-action="launch-without-voice">Continue without commentary</button></main>';}
+async function launchLocalVoice(created,players,{resume=false}={}){const launchTicket=++launchGeneration;pendingLocalLaunch={created,players};view=resume?'game':'welcome';if(!resume)root.innerHTML='<main class="launch-progress"><div class="launch-pulse" aria-hidden="true">⚄</div><h1>Bringing your table to life.</h1><p>Connecting your saved commentator…</p><button class="all-scores" data-action="launch-without-voice">Continue without commentary</button></main>';
+ try{if(Capacitor.getPlatform()!=='android')throw Error('Live voice is available on the Android host. You can continue scoring here.');const {auth}=await import('./multiplayer/client.js');if(!auth||!commentaryServiceBase)throw Error('Sign in to connect live commentary.');const {createNativeCommentaryPlayer}=await import('./commentary/native-player.js'),{createLocalCommentary}=await import('./commentary/local-client.js');const transport=createAuthenticatedCommentaryTransport({auth,serviceBase:commentaryServiceBase,anonymousKey:import.meta.env.VITE_SUPABASE_ANON_KEY||''});const player=createNativeCommentaryPlayer({serviceBase:commentaryServiceBase,getAccessToken:transport.getAccessToken});localVoice?.dispose();const linked=await createLocalCommentary({auth,serviceBase:commentaryServiceBase,anonymousKey:import.meta.env.VITE_SUPABASE_ANON_KEY||'',player,game:created,players,root,scoreDialog:dialog,onNotice:notice,resume});if(launchTicket!==launchGeneration){void linked.stopForGame();return;}localVoice=linked;localVoiceGameId=created.id;pendingLocalLaunch=null;if(resume){localVoice.refreshSurface();return;}
+ welcomeGate=showWelcomeGate({root,session:localVoice.session,metadata:localVoice.metadata,onDone:()=>{welcomeGate=null;view='game';render();},onSkip:()=>{welcomeGate=null;localStorage.setItem('dice-clubhouse:game-commentary:'+game.id,'no');void localVoice?.stopForGame();localVoice=null;view='game';render();}});
+ }catch(error){if(launchTicket!==launchGeneration)return;if(resume){notice('Scores are ready. Live commentary could not reconnect.');return;}showLaunchFailure(error.message.includes('Sign in')?'Sign in to connect your commentator, or continue without voice.':error.message);}}
+async function prepareHostedStart(){const prefs=readCommentaryPreferences(),yes=await askGameCommentary(dialog,prefs);const session=await ensureHostedCommentary();if(session)await session.configure({profile:prefs.profile,enabled:yes,listenerMuted:yes?false:prefs.listenerMuted});pendingWelcome=yes;if(yes){view='welcome';root.innerHTML='<main class="launch-progress"><div class="launch-pulse" aria-hidden="true">⚄</div><h1>Opening your table.</h1><p>Getting the welcome ready…</p></main>';}return true;}
+function startHostedWelcome(metadata){if(!pendingWelcome){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata));return;}pendingWelcome=false;view='welcome';void ensureHostedCommentary().then(session=>{if(!session){view='game';render();return;}welcomeGate=showWelcomeGate({root,session,metadata,onDone:()=>{welcomeGate=null;view='game';render();},onSkip:()=>{welcomeGate=null;session.muteForGame();void session.configure({profile:readCommentaryPreferences().profile,enabled:false,listenerMuted:true});view='game';render();}});}).catch(()=>{view='game';render();notice('Welcome unavailable. You can keep playing.');});}
+
+function newScreen({players=2}={}){view='setup';cancelPulse(root);clearCelebration();phoneCleanup();
  root.classList.remove('playing');
  root.innerHTML=header()+`<main class="new-core"><div class="intro-kicker">YOUR TABLE. YOUR RULES.</div><h1>Make it a game.</h1><p class="core-muted">Local game · All players score on this device. Use Host / join online to play on separate phones.</p><button class="all-scores" data-action="online">Host / join online ↗</button>${Capacitor.getPlatform()==='android'?'<button class="all-scores" data-action="camera-test">Dice identification test</button>':''}<form id="createCore"><label>Game mode<select name="mode" id="modeSelect">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><p id="modeDescription" class="core-muted">${descriptions.standard}</p><div class="core-form-row"><label>Players<select id="playerCount" name="count">${Array.from({length:8},(_,i)=>`<option ${i===1?'selected':''}>${i+1}</option>`).join('')}</select></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${Capacitor.getPlatform()==='android'?'<option value="camera">C121 camera · review each roll</option>':''}${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · Bluetooth dice</option>':''}</select></label></div><label class="game-option"><input type="checkbox" name="hideTotals"><span>Hide score totals until the end<small>Keep category scores visible; reveal totals when the game finishes.</small></span></label><div id="nameInputs"></div><button class="bigbtn score core-primary" type="submit">Create game</button>${game?'<button type="button" class="all-scores" data-action="resume">Back to current game</button>':''}</form></main>`;
- nameInputs(2);
+ root.querySelector('#playerCount').value=String(players);nameInputs(players);root.querySelector('.new-core h1').textContent=players===1?'Your solo session.':'Bring your people.';
  root.querySelector('.new-core h1').insertAdjacentHTML('afterend',renderResumeEntry({local:true}));
 }
 function nameInputs(n){
  const old=[...root.querySelectorAll('[name="player"]')].map(x=>x.value);
  const prior=root.querySelector('#createCore')?new FormData(root.querySelector('#createCore')):null;
- root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label><details><summary>Personalize commentary (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?readPlayerProfileFields(prior,`player${i}`):{})}</details>`).join('');
+ root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||readLocalPlayerDefaults()[i]?.displayName||(i===0?localStorage.getItem('clubhouse-name'):'')||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label><details><summary>Personalize commentary (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?.has(`player${i}Blurb`)?readPlayerProfileFields(prior,`player${i}`):readLocalPlayerDefaults()[i]||{})}</details>`).join('');
 }
 function latest(){return game.turn?.rolls.filter(r=>!r.excluded).at(-1);}
 function options(){
@@ -195,6 +218,8 @@ function declareYahtzee(face){
  }
 }
 function render(){
+ if(view==='welcome')return;
+ if(view==='home'){showHome();return;}
  if(!game){newScreen();return;}
  root.classList.add('playing');
  root.style.setProperty('--turn-hue',[162,267,205,24,48,332,185,232][game.activeSeat]);
@@ -213,10 +238,11 @@ function render(){
  updateDiceStatus();
  updateHardwarePanel();
  applyScorePulse();
- hostedCommentary?.mountSurface?.({root,scoreDialog:dialog});
+ hostedCommentary?.mountSurface?.({root,scoreDialog:dialog});localVoice?.session.mountSurface?.({root,scoreDialog:dialog});
 
 }
 function ensureAutomaticTurn(){
+ if(view!=='game')return;
  const status=getDiceStatus();
  if(autoStarting||busy||onlineRoom||game?.status!=='active'||game.source!=='godice'||game.turn||status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected))return;
  autoStarting=true;
@@ -258,6 +284,7 @@ function queueSharedDice(){
  },350);
 }
 function scheduleAutomaticRoll(){
+ if(view!=='game')return;
  clearTimeout(settleTimer);
  if(hardwareCapture.candidate())settleTimer=setTimeout(async()=>{
   if(busy||dialog.open||document.querySelector('.dice-connection-dialog[open]'))return;
@@ -346,8 +373,8 @@ function celebrate(previous,next){
  const detail=document.createElement('span');detail.textContent=message.subtitle;box.append(detail);
  effectTimer=setTimeout(clearCelebration,2200);
 }
-document.addEventListener('visibilitychange',()=>{syncHostedCommentary();if(document.hidden){cancelPulse(root);clearCelebration();}});
-window.addEventListener('pagehide',()=>{resetHostedCommentary();cancelPulse(root);clearCelebration();});
+document.addEventListener('visibilitychange',()=>{localVoice?.setVisible(!document.hidden&&view!=='home');syncHostedCommentary();if(document.hidden){cancelPulse(root);clearCelebration();}});
+window.addEventListener('pagehide',()=>{localVoice?.dispose();localVoice=null;resetHostedCommentary();cancelPulse(root);clearCelebration();});
 window.addEventListener('pageshow',syncHostedCommentary);
 
 function showRules(){openDialog(`<h2>${esc(game.rules.name)} rules · version ${game.rules.version}</h2><p class="core-muted">Score totals: ${game.hideTotals?'hidden until the game ends':'visible during play'}.</p><p class="core-muted">${rulesDescription()}</p><p class="core-muted">Tap + in your column to score. Tap a recorded score to correct it. A scratched first Yahtzee earns no bonus; Joker placement still applies.</p><p class="core-muted">Corrections change category points without rewriting historical turns or granted bonuses. Suggested points are only saved when confirmed.</p>`);}
@@ -360,31 +387,36 @@ async function persist(next){
 async function send(action,commandId){
  if(busy)throw Error('Wait for the current save before submitting another action.');
  if(tournamentPaused())throw Error('The tournament is paused. Ask the host to resume.');
+ const scoreCommandId=commandId||id();if(['score','bonus','final-chain-roll'].includes(action.type))markScoreSubmitted(scoreCommandId);
  if(onlineRoom){
   busy=true;root.setAttribute('inert','');
-  try{const {sendOnline}=await import('./multiplayer/ui.js');await sendOnline(action,onlineRoom.revision);reportedFace=0;render();notice('Saved to the shared game.');}
+  try{const {sendOnline}=await import('./multiplayer/ui.js');await sendOnline(action,onlineRoom.revision,scoreCommandId);reportedFace=0;render();notice('Saved to the shared game.');}
   finally{busy=false;root.removeAttribute('inert');render();queueMicrotask(ensureAutomaticTurn);}
   return;
  }
+ const beforeLocal=game;
+ const startCommandId=id();
  const base=!game.turn&&game.source==='manual'&&['score','bonus','final-chain-roll'].includes(action.type)
-  ?command(game,{type:'start',seat:game.activeSeat},{id:id()}):game;
- await persist(command(base,{seat:base.activeSeat,...action},{id:commandId||id()}));
+  ?command(game,{type:'start',seat:game.activeSeat},{id:startCommandId}):game;
+ const acceptedAction={seat:base.activeSeat,...action};await persist(command(base,acceptedAction,{id:scoreCommandId}));
+ if(localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes'){const mirrored=[...(base!==beforeLocal?[{commandId:startCommandId,action:{type:'start',seat:beforeLocal.activeSeat}}]:[]),{commandId:scoreCommandId,action:acceptedAction}];queueLocalCommands(game.id,mirrored);if(localVoice&&localVoiceGameId===game.id)void localVoice.flush();}
 }
-function openDialog(html){delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
-async function openMultiplayer(joinCode='',view='home'){
+function openDialog(html){delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
+async function openMultiplayer(joinCode='',landing='home'){
+ view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
  if(!onlineRoom)localGame=game;
  dialog.close();pending=null;reportedFace=0;
  const {openOnline}=await import('./multiplayer/ui.js');
  await openOnline(root,{
-  notice,
-  greeting(metadata){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata)).catch(()=>notice('Commentary is unavailable. Keep playing.'));},
+  notice,beforeStart:prepareHostedStart,startFailed(){pendingWelcome=false;view='online';},voiceReady:()=>{const launch=pendingLocalLaunch;if(launch)return launchLocalVoice(launch.created,launch.players);},
+  greeting:startHostedWelcome,
   commentary(){return openCommentary();},
   table(room,userId,connected){if(!room){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;}else{hostedCommentaryActive=true;onlineRoom=room;onlineUserId=userId;onlineConnected=connected;syncHostedCommentary();}},
   account(user){if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
-  exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;render();},
+  exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;showHome();},
   game(room,userId,connected,changed){
-   hostedCommentaryActive=true;
+   hostedCommentaryActive=true;if(!pendingWelcome&&!welcomeGate)view='game';
    const gameChanged=game?.id!==room.game?.id||game?.revision!==room.game?.revision;
    const beganRolling=room.liveDice?.phase==='rolling'&&onlineRoom?.liveDice?.phase!=='rolling';
    if(changed&&!busy&&(gameChanged||(beganRolling&&room.hostId!==userId)||room.tournament?.status==='paused')){const choosing=dialog.open||reportedFace;dialog.close();pending=null;reportedFace=0;if(choosing)notice('The shared game updated. Choose your score again.');}
@@ -394,7 +426,7 @@ async function openMultiplayer(joinCode='',view='home'){
    if(redraw){render();celebrate(previous,game);}
   },
   connection(connected){onlineConnected=connected;syncHostedCommentary();if(onlineRoom)render();},
- },joinCode,view);
+ },joinCode,landing);
 }
 function cancelBonus(){if(dialog.dataset.bonusConfirmation){delete dialog.dataset.bonusConfirmation;reportedFace=0;render();}}
 dialog.addEventListener('cancel',cancelBonus);
@@ -453,24 +485,36 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',async e=>{
  if(e.target.id!=='createCore')return;e.preventDefault();if(busy)return;
- try{const f=new FormData(e.target);if(f.get('source')!=='camera'){const {disconnectCamera}=await import('./dice/camera-panel.js');await disconnectCamera();}const playerDrafts=commentarySession.readPlayers(f);const created=createCoreGame({names:f.getAll('player'),mode:f.get('mode'),source:f.get('source'),...(f.get('mode')==='competition'&&f.get('source')==='manual'?{rulesVersion:2}:{}),hideTotals:f.has('hideTotals'),id:id()});await persist(created);commentarySession.setPlayers(created.id,playerDrafts);}catch(e){notice(e.message);}
+ try{const f=new FormData(e.target);if(f.get('source')!=='camera'){const {disconnectCamera}=await import('./dice/camera-panel.js');await disconnectCamera();}const playerDrafts=commentarySession.readPlayers(f);saveLocalPlayerDefaults(playerDrafts);const created=createCoreGame({names:f.getAll('player'),mode:f.get('mode'),source:f.get('source'),...(f.get('mode')==='competition'&&f.get('source')==='manual'?{rulesVersion:2}:{}),hideTotals:f.has('hideTotals'),id:id()});const yes=await askGameCommentary(dialog,readCommentaryPreferences());localStorage.setItem('dice-clubhouse:game-commentary:'+created.id,yes?'yes':'no');view='game';localVoice?.dispose();localVoice=null;await persist(created);commentarySession.setPlayers(created.id,playerDrafts);if(yes)await launchLocalVoice(created,playerDrafts);}catch(e){notice(e.message);}
 });
 document.addEventListener('click',async e=>{
  const b=e.target.closest('[data-action]');if(!b||busy)return;
- const a=b.dataset.action;
+ const a=b.dataset.action;if(dialog.dataset.navigation==='true'){dialog.close();delete dialog.dataset.navigation;}
  root.querySelector('.game-menu')?.removeAttribute('open');
  try{
+  if(a==='home')await returnHome();
+  if(a==='game-menu')openNavigation();
+  if(a==='global-commentary')openGlobalCommentary();
+  if(a==='timing-log')showTimingLog();
+  if(a==='home-solo')newScreen({players:1});
+  if(a==='home-local')newScreen({players:2});
+  if(a==='home-online')await openMultiplayer();
+  if(a==='home-tournament')await openMultiplayer('','host-tournament');
+  if(a==='online-sessions')await openMultiplayer('','sessions');
+  if(a==='resume-game'){view='game';localVoice?.setVisible(true);render();if(!localVoice&&Capacitor.getPlatform()==='android'&&readCommentaryPreferences().profile.enabled&&localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes')void launchLocalVoice(game,[],{resume:true});}
+  if(a==='launch-signin')await openMultiplayer('','voice-signin');
+  if(a==='launch-without-voice'){launchGeneration++;localStorage.setItem('dice-clubhouse:game-commentary:'+game.id,'no');pendingLocalLaunch=null;void localVoice?.stopForGame();localVoice=null;view='game';render();}
   if(a==='commentary-settings')await openCommentary();
   if(a==='camera-settings'||a==='capture-camera'){if(onlineRoom)throw Error('Hosted camera games are not enabled yet.');const {openCameraGame}=await import('./dice/camera-panel.js');await openCameraGame({getGame:()=>game,commit:(action,commandId)=>send(action,commandId),autoCapture:a==='capture-camera'});}
   if(a==='camera-test'){const {openDiceIdentificationTest}=await import('./dice/camera-panel.js');await openDiceIdentificationTest();}
   if(a==='start-camera')await send({type:'start',source:'camera'});
   if(a==='connect-dice'){clearTimeout(settleTimer);hardwareCapture.cancel();updateHardwarePanel();const {openDiceConnections}=await import('#dice-panel');openDiceConnections();}
   if(a==='theme'){theme=theme==='dark'?'light':'dark';applyTheme();try{localStorage.setItem('yz_theme',theme);}catch{}b.textContent=(theme==='dark'?'Light':'Dark')+' mode';}
-  if(a==='online')await openMultiplayer(); if(a==='new'){if(onlineRoom)await openMultiplayer();else newScreen();}
+  if(a==='online')await openMultiplayer(); if(a==='new'){if(onlineRoom)await returnHome();localVoice?.setVisible(false);newScreen();}
   if(a==='saved-sessions')await openMultiplayer('','sessions');
-  if(a==='resume')render();
+  if(a==='resume'){view='game';render();}
   if(a==='history'){if(onlineRoom)await openMultiplayer();else await showHistory();}
-  if(a==='load'){game=(await listCore()).find(g=>g.id===b.dataset.id);reportedFace=0;dialog.close();render();}
+  if(a==='load'){view='game';game=(await listCore()).find(g=>g.id===b.dataset.id);reportedFace=0;dialog.close();render();}
   if(a==='start-hardware'){
    const status=getDiceStatus();if(onlineRoom)throw new Error('Shared GoDice capture is not enabled yet.');
    if(status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected))throw new Error('Connect five dice first.');
@@ -532,7 +576,7 @@ document.addEventListener('click',async e=>{
   }
   if(a==='rematch-ready'||a==='rematch-withdraw'){
    busy=true;render();
-   try{const {setOnlineReady}=await import('./multiplayer/ui.js');await setOnlineReady(a==='rematch-ready');notice(game.status==='finished'?(a==='rematch-ready'?'You’re ready for the next game.':'You’re not ready yet.'):`New game · ${game.players[game.activeSeat].name} starts.`);}
+   try{if(a==='rematch-ready'&&onlineRoom?.hostId===onlineUserId)await prepareHostedStart();const {setOnlineReady}=await import('./multiplayer/ui.js');await setOnlineReady(a==='rematch-ready');if(game.status==='finished'&&pendingWelcome){view='game';render();}notice(game.status==='finished'?(a==='rematch-ready'?'You’re ready for the next game.':'You’re not ready yet.'):`New game · ${game.players[game.activeSeat].name} starts.`);}
    finally{busy=false;render();}
   }
   if(a==='rules')showRules();
@@ -550,7 +594,7 @@ document.addEventListener('click',async e=>{
   }
  }catch(e){notice(e.message);}
 });
-async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join');if(join)await openMultiplayer(join);else render();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
+async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join');if(join)await openMultiplayer(join);else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
 initialize();
 
 

@@ -4,11 +4,11 @@ import {createCoreGame} from '../src/game/core.js';
 const stored=vi.hoisted(()=>({game:null}));
 vi.mock('../src/core-store.js',()=>({loadCore:async()=>stored.game,saveCore:vi.fn(async g=>{stored.game=g;}),listCore:async()=>[]}));
 import {publishDiceStatus,publishDiceEvent} from '../src/dice/live-status.js';
-const click=selector=>{const button=document.querySelector(selector);expect(button).not.toBeNull();expect(button.disabled).toBe(false);button.click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();expect(button.disabled).toBe(false);button.click();};
 it('creates a GoDice game with one display, automatically records three rolls and hands off after scoring',async()=>{
  stored.game=createCoreGame({id:'hardware-ui',names:['Dan','Amber']});
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.core-score-table')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('.core-score-table')).not.toBeNull());
  const status={enabled:true,paused:false,dice:Array.from({length:5},(_,i)=>({id:`die${i}`,epoch:1,name:`Die ${i+1}`,connected:true,face:null,state:'Connected'}))};
  publishDiceStatus(status);click('[data-action="new"]');
  const source=document.querySelector('[name="source"]');expect([...source.options].map(o=>o.value)).toEqual(['manual','godice']);source.value='godice';

@@ -19,10 +19,10 @@ vi.mock('qrcode',()=>({default:{toCanvas:vi.fn(async()=>{})}}));
 import QRCode from 'qrcode';
 import {requestRoom} from '../src/multiplayer/client.js';
 import {onlineInvitation,leaveOnline} from '../src/multiplayer/ui.js';
-const click=selector=>{const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
-const action=name=>click(`[data-action="${name}"]`);
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
+const action=name=>{if(!document.querySelector('[data-action="'+name+'"]'))document.querySelector('[data-action=game-menu]')?.click();click('[data-action="'+name+'"]');};
 const mp=name=>click(`[data-mp="${name}"]`);
-beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});
+beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});
 beforeEach(()=>{
  leaveOnline();vi.clearAllMocks();const time='2026-10-14T12:00:00Z';let room=startRoom(joinRoom(createRoom({id:'same-game',code:'ABCDEFGH',userId:'host',name:'Dan',mode:'standard',tournament:{name:'Weekend',gameCount:3,playerCount:2},time}),{userId:'guest',name:'Amber',time}),{userId:'host',time});
  for(let n=0;n<7;n++){const seat=room.game.activeSeat;room=playRoom(room,{userId:room.members[seat].userId,action:{type:'score',category:BASE_KEYS.find(key=>room.game.sheets[seat][key]===undefined),value:0},gameId:room.game.id,expectedRevision:room.revision,commandId:crypto.randomUUID(),time});}

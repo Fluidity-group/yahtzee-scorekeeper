@@ -1,3 +1,4 @@
+import {observeScoreEvent,playbackTiming,forgetPlaybackTimings} from './latency.js';
 import {conservativeLeaseDeadline} from './lease-clock.js';
 // Authenticated adapter contract: request({operation,roomId,...payload},{signal}) -> {result}.
 // This controller sends IDs/settings receipts only, never writer text, provider keys or game commands.
@@ -24,6 +25,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   const changedTargets=(next?.game?.events||[]).filter(e=>!seen.has(e.id)&&['score-undo','score-correction'].includes(e.type)).map(e=>e.target);
   const epochLost=run&&next&&Object.hasOwn(next,'leaseEpoch')&&next.leaseEpoch!==run.claim.epoch;
   const dependent=run&&changedTargets.some(id=>run.job.dependencyEventIds.includes(id)||run.job.eventId===id);
+  if(context?.game&&next?.game&&context.game.id===next.game.id&&next.visible!==false)for(const event of next.game.events||[])if(!seen.has(event.id))observeScoreEvent(event);
   context=next;
   if(changedTargets.length)publish({captions:state.captions.filter(caption=>!changedTargets.some(id=>caption.eventId===id||caption.dependencyEventIds.includes(id)))});
   if(switched||profileChanged||epochLost||dependent||!speakable())invalidate(switched?'context-changed':profileChanged?'profile-changed':epochLost?'lease-lost':dependent?'facts-invalidated':'playback-unavailable');
@@ -54,7 +56,8 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   current.sequence=event.sequence;
   if(event.status==='started')current.started=true;
   if(terminal.has(event.status))current.ended=true;
-  const payload={jobId:current.job.id,device:deviceId,epoch:current.claim.epoch,claimToken:current.claim.token,status:event.status,sequence:event.sequence};
+  const timing=playbackTiming(current.job,event);
+  const payload={...(timing?{timing:{basis:timing.basis,elapsedMs:timing.elapsedMs,nativeStartupMs:timing.nativeStartupMs}}:{}),jobId:current.job.id,device:deviceId,epoch:current.claim.epoch,claimToken:current.claim.token,status:event.status,sequence:event.sequence};
   // Preserve real native evidence only. A host receipt never marks other people as having heard.
   current.receipts=current.receipts.then(()=>invoke('playback-event',payload,undefined,current.roomId)).catch(()=>{});
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
@@ -88,12 +91,13 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     const job=captionJobs.find(job=>job.status==='ready'&&(!greetingAllowed(job)||['opening','return','next-game'].includes(job.purpose)&&job.lifecycleVerified===true)&&(!hydrated.has(job.id)||greetingAllowed(job))&&!attempted.has(job.id));if(!job)return;
     attempted.add(job.id);greetings.delete(job.id);greetingCommands.delete(job.sourceCommandId);if(['opening','return','next-game'].includes(job.purpose))playedGreetingCommands.add(job.sourceCommandId);
     const acquisitionSentAt=monotonicNow();
-    const acquired=await invoke('playback-acquire',{device:deviceId},signal);if(fence!==generation)return;
+    const combined=capability.atomicPlaybackStart===true?await invoke('playback-start',{device:deviceId,jobId:job.id},signal):null;if(combined&&!combined.claim?.claimed)return;
+    const acquired=combined?.lease||await invoke('playback-acquire',{device:deviceId},signal);if(fence!==generation)return;
     if(acquired.owner!==context.userId||acquired.device!==deviceId||!Number.isInteger(acquired.epoch))return;
     const acquiredTiming=conservativeLeaseDeadline(acquired,{sentAt:acquisitionSentAt,receivedAt:monotonicNow()});
     if(acquiredTiming.expired)return;
     lease={...acquired,monotonicDeadline:acquiredTiming.deadline};
-    const claim=await invoke('playback-claim',{jobId:job.id,device:deviceId,epoch:lease.epoch},signal);if(fence!==generation||!claim.claimed||monotonicNow()>=lease.monotonicDeadline)return;
+    const claim=combined?.claim||await invoke('playback-claim',{jobId:job.id,device:deviceId,epoch:lease.epoch},signal);if(fence!==generation||!claim.claimed||monotonicNow()>=lease.monotonicDeadline)return;
     const playbackClaim={roomId:context.roomId,jobId:job.id,token:claim.token,epoch:lease.epoch,deviceId,expiresAt:lease.expiresAt,monotonicDeadline:lease.monotonicDeadline};
     const active={job,claim:playbackClaim,roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve()};
     run=active;publish({playing:{jobId:job.id,caption:job.caption},status:'playing'});
@@ -132,6 +136,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   return result;
  }
  async function forgetHistory() {
+  forgetPlaybackTimings();
   if(disposed||!context?.userId||!context?.roomId)throw Error('Sign in to forget commentary history.');
   suppressed=new Set([...suppressed,...hydrated,...attempted,...state.captions.map(item=>item.id)]);
   invalidate('history-forgotten');initial=true;hydrated=new Set();attempted=new Set();greetings=new Set();greetingCommands=new Set();

@@ -1,4 +1,4 @@
-export const COMMENTARY_COLLECTIONS=Object.freeze(['settings','jobs','moments','leases','attempts','budgets','exposure','memoryRecords','feedback','playerProfiles','playerProfileVersions','preferenceSharing','memorySummaries','memoryCaches']);
+export const COMMENTARY_COLLECTIONS=Object.freeze(['settings','jobs','moments','leases','attempts','budgets','exposure','memoryRecords','feedback','playerProfiles','playerProfileVersions','preferenceSharing','memorySummaries','memoryCaches','localSessions']);
 export function emptyDurableCommentaryState(){return Object.fromEntries(COMMENTARY_COLLECTIONS.map(key=>[key,new Map()]));}
 export function encodeCommentaryState(state){
  if(!state||Object.keys(state).some(key=>!COMMENTARY_COLLECTIONS.includes(key)))throw Error('Unknown durable commentary collection.');
@@ -23,6 +23,7 @@ export class DurableCommentaryStore {
  serialized(fn){const result=this.tail.then(fn);this.tail=result.catch(()=>{});return result;}
  async initialize(){await this.refresh();return this;}
  refresh(){return this.serialized(async()=>{const row=await this.load();this.install(row);return this.snapshot();});}
+ read(collection,key){if(!this.state||!COMMENTARY_COLLECTIONS.includes(collection))throw Error('Initialized supported collection required.');return structuredClone(this.state[collection].get(key));}
  snapshot(){if(!this.state)throw Error('Await durable store initialization/refresh before snapshot.');return structuredClone(this.state);}
  transaction(fn){if(typeof fn!=='function')return Promise.reject(Error('Synchronous transaction callback required.'));return this.serialized(async()=>{
   for(let attempt=0;attempt<this.maxRetries;attempt++){

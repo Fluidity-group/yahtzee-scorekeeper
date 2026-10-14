@@ -13,14 +13,14 @@ vi.mock('../src/multiplayer/ui.js',()=>({
 }));
 import {createHostedCommentarySession} from '../src/ui/hosted-commentary-session.js';
 import {createAuthenticatedCommentaryTransport} from '../src/commentary/authenticated-transport.js';
-const click=selector=>{const el=document.querySelector(selector);expect(el).not.toBeNull();el.click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const el=document.querySelector(selector);expect(el).not.toBeNull();el.click();};
 beforeAll(async()=>{
  vi.stubEnv('VITE_COMMENTARY_URL','https://service.example.test/live-commentary');
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};
  const time='2026-10-14T20:00:00.000Z';mock.room={...startRoom(joinRoom(createRoom({id:roomId,code:'ABCDEFGH',userId:host,name:'Ann',time}),{userId:guest,name:'Bo',time}),{userId:host,time}),capabilities:{undoScore:true}};
  // A pending commentary subscriber must never become a scoring dependency.
  mock.update.mockImplementation(()=>new Promise(()=>{}));
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 afterAll(()=>{window.dispatchEvent(new Event('pagehide'));vi.unstubAllEnvs();});
 it('wires configured authenticated room/menu/connection/visibility/signout without waiting for commentary in scoring',async()=>{
@@ -28,7 +28,7 @@ it('wires configured authenticated room/menu/connection/visibility/signout witho
  expect(createAuthenticatedCommentaryTransport).toHaveBeenCalledWith({auth:mock.auth,serviceBase:'https://service.example.test/live-commentary',anonymousKey:expect.any(String)});
  expect(createHostedCommentarySession.mock.calls[0][0].nativeAudioAvailable).toBe(false);
  expect(mock.update).toHaveBeenCalledWith({room:mock.room,userId:host,connected:true,visible:!document.hidden});
- click('[data-action="choose"][data-key="fullHouse"]');const scoreDialog=document.querySelector('#coreDialog');expect(scoreDialog.open).toBe(true);click('[data-action="commentary-settings"]');expect(mock.open).not.toHaveBeenCalled();expect(scoreDialog.open).toBe(true);
+ click('[data-action="choose"][data-key="fullHouse"]');const scoreDialog=document.querySelector('#coreDialog');expect(scoreDialog.open).toBe(true);click('[data-action="game-menu"]');expect(mock.open).not.toHaveBeenCalled();expect(scoreDialog.open).toBe(true);expect(scoreDialog.textContent).toContain('Full House');
  click('#coreDialog [data-action="confirm-score"][data-value="25"]');await vi.waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="fullHouse"]').textContent).toBe('25'));expect(scoreDialog.open).toBe(false);expect(document.querySelector('#coreApp').hasAttribute('inert')).toBe(false);
  click('[data-action="commentary-settings"]');await vi.waitFor(()=>expect(mock.open).toHaveBeenCalledWith({scoreDialog}));
  mock.callbacks.connection(false);expect(mock.update.mock.calls.at(-1)[0].connected).toBe(false);

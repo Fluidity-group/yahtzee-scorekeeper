@@ -2,6 +2,10 @@ import {CommentaryError} from './service.js';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
 const allowed={
+ 'local-read':['operation','roomId'],
+ 'local-start':['operation','roomId','commandId','config','settings'],
+ 'local-command':['operation','roomId','commands','quiet'],
+ 'playback-start':['operation','roomId','device','jobId'],
  'feedback':['operation','roomId','jobId','value','basis'],
  'forget-history':['operation','roomId'],
  'player-profile-read':['operation','roomId'],
@@ -11,7 +15,7 @@ const allowed={
  'profile-update':['operation','roomId','expectedVersion','changes'],
  'playback-acquire':['operation','roomId','device'],'playback-heartbeat':['operation','roomId','device','epoch'],
  'playback-claim':['operation','roomId','jobId','device','epoch'],
- 'playback-event':['operation','roomId','jobId','device','epoch','claimToken','status','sequence'],
+ 'playback-event':['operation','roomId','jobId','device','epoch','claimToken','status','sequence','timing'],
 };
 // Inject confirmed-user authentication. This route exposes no enqueue/writer/provider endpoint.
 export function commentaryHandler({service,authenticate}){
@@ -31,6 +35,10 @@ export function commentaryHandler({service,authenticate}){
    if(!body||typeof body!=='object'||Array.isArray(body)||!allowed[body.operation]||Object.keys(body).some(key=>!allowed[body.operation].includes(key)))throw new CommentaryError('Unsupported commentary request.');
    const args=[user,body.roomId,body];let result;
    switch(body.operation){
+    case 'local-read':result=await service.readLocal(...args);break;
+    case 'local-start':result=await service.startLocal(...args);break;
+    case 'local-command':result=await service.commitLocal(...args);break;
+    case 'playback-start':result=await service.acquireAndClaim(...args);break;
     case 'feedback':result=await service.feedback(...args);break;
     case 'forget-history':result=await service.forgetHistory(...args);break;
     case 'player-profile-read':result=await service.getPlayerProfile(...args);break;

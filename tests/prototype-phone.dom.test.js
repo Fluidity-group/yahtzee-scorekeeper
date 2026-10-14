@@ -6,12 +6,12 @@ vi.mock('../src/core-store.js',()=>({
  saveCore:vi.fn(async game=>{stored.games=[game];}),
  listCore:vi.fn(async()=>stored.games),
 }));
-const click=selector=>{const element=document.querySelector(selector);expect(element).not.toBeNull();element.click();};
-const action=name=>click(`[data-action="${name}"]`);
+const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const element=document.querySelector(selector);expect(element).not.toBeNull();element.click();};
+const action=name=>{if(!document.querySelector('[data-action="'+name+'"]'))document.querySelector('[data-action=game-menu]')?.click();click('[data-action="'+name+'"]');};
 beforeAll(async()=>{
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};
  HTMLDialogElement.prototype.close=function(){this.open=false;};
- await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 async function newTable(hidden=false){
  action('new');const count=document.querySelector('#playerCount');count.value='4';count.dispatchEvent(new Event('change',{bubbles:true}));
