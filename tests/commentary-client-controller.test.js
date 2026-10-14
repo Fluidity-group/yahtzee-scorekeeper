@@ -3,19 +3,19 @@ import {createCommentaryClient} from '../src/commentary/client-controller.js';
 const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 function setup(){
  const ctx={roomId:'room',userId:'host',hostId:'host',game:{id:'game',events:[{id:'score',type:'score'}]},profileVersion:1,enabled:true,listenerMuted:false,paused:false,visible:true};
- let jobs=[],playerEvent;const lease={owner:'host',device:'phone',epoch:3,expiresAt:50000};
+ let jobs=[],playerEvent,monotonicTime=1000;const lease={owner:'host',device:'phone',epoch:3,expiresAt:50000,serverNowMs:35000,remainingMs:15000};
  const request=vi.fn(async payload=>({result:payload.operation==='profile-read'?{version:1,capabilities:{providerMode:'synthetic',liveProviders:false}}:payload.operation==='jobs-read'?jobs:payload.operation==='playback-acquire'||payload.operation==='playback-heartbeat'?lease:payload.operation==='playback-claim'?{claimed:true,token:'claim'}:{accepted:true}}));
  const player={play:vi.fn(async options=>{playerEvent=options.onEvent;}),stop:vi.fn(),renew:vi.fn()};
- const client=createCommentaryClient({request,player,deviceId:'phone',allowSyntheticPlayback:true});
+ const client=createCommentaryClient({request,player,deviceId:'phone',allowSyntheticPlayback:true,monotonicNow:()=>monotonicTime});
  client.update(ctx);
  const job=(id,eventId='score')=>({id,eventId,gameId:'game',profileVersion:1,status:'ready',caption:'The dice have hired an accountant.',acceptedAt:'2026-10-14',dependencyEventIds:[eventId]});
- return {ctx,client,request,player,lease,job,setJobs:value=>{jobs=value;},emit:event=>playerEvent(event)};
+ return {ctx,client,request,player,lease,job,advance:ms=>{monotonicTime+=ms;},setJobs:value=>{jobs=value;},emit:event=>playerEvent(event)};
 }
 describe('authenticated commentary client controller',()=>{
  it('hydrates captions silently and plays only a subsequent new eligible job',async()=>{
   const f=setup();f.setJobs([f.job('old')]);await f.client.refresh();expect(f.client.snapshot().captions).toHaveLength(1);expect(f.player.play).not.toHaveBeenCalled();
   f.setJobs([f.job('old'),f.job('new')]);await f.client.refresh();await tick();
-  expect(f.player.play).toHaveBeenCalledOnce();expect(f.player.play.mock.calls[0][0].claim).toEqual({roomId:'room',jobId:'new',token:'claim',epoch:3,deviceId:'phone',expiresAt:50000});
+  expect(f.player.play).toHaveBeenCalledOnce();expect(f.player.play.mock.calls[0][0].claim).toEqual({roomId:'room',jobId:'new',token:'claim',epoch:3,deviceId:'phone',expiresAt:50000,monotonicDeadline:15750});
   await f.client.refresh();expect(f.player.play).toHaveBeenCalledOnce();
   expect(f.request.mock.calls.every(([p])=>!('text' in p)&&!('facts' in p)&&!('heardBy' in p))).toBe(true);
   f.client.dispose();
@@ -86,7 +86,7 @@ describe('client concrete backend projection contract',()=>{
  it('sends the whitelisted playback-heartbeat operation and renews the exact fenced claim',async()=>{
   const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);await f.client.refresh();await tick();await f.client.heartbeat();
   expect(f.request).toHaveBeenCalledWith({operation:'playback-heartbeat',roomId:'room',device:'phone',epoch:3},{signal:expect.any(AbortSignal)});
-  expect(f.player.renew).toHaveBeenCalledWith({claim:{roomId:'room',jobId:'new',token:'claim',epoch:3,deviceId:'phone',expiresAt:50000}});f.client.dispose();
+  expect(f.player.renew).toHaveBeenCalledWith({claim:{roomId:'room',jobId:'new',token:'claim',epoch:3,deviceId:'phone',expiresAt:50000,monotonicDeadline:15750}});f.client.dispose();
  });
  it('keeps safe started/completed/interrupted remarks in recent captions but never replays terminal jobs',async()=>{
   const f=setup();f.setJobs([{...f.job('old'),status:'completed'}]);await f.client.refresh();expect(f.client.snapshot().captions.map(c=>c.id)).toEqual(['old']);
@@ -150,5 +150,28 @@ describe('server cancellation clears buffered native playback',()=>{
   const f=setup();await f.client.refresh();f.setJobs([f.job('playing')]);f.player.play.mockImplementationOnce(()=>new Promise(()=>{}));await f.client.refresh();await tick();
   f.client.update({...f.ctx,game:{id:'game',events:[{id:'score',type:'score'},{id:'unrelated',type:'score'}]}});f.setJobs([{...f.job('playing'),status:'started'}]);await f.client.refresh();
   expect(f.player.stop).not.toHaveBeenCalled();expect(f.player.play.mock.calls[0][0].signal.aborted).toBe(false);expect(f.client.snapshot().playing.jobId).toBe('playing');f.client.dispose();
+ });
+});
+
+describe('conservative lease request timing',()=>{
+ it('subtracts full acquire RTT and ignores wildly shifted server wall time',async()=>{
+  const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);f.lease.expiresAt+=1e12;f.lease.serverNowMs+=1e12;
+  const request=f.request.getMockImplementation();f.request.mockImplementation(async payload=>{const result=await request(payload);if(payload.operation==='playback-acquire')f.advance(4000);return result;});
+  await f.client.refresh();await tick();expect(f.player.play.mock.calls[0][0].claim.monotonicDeadline).toBe(15750);f.client.dispose();
+ });
+ it('does not claim or start after response consumed the entire lease',async()=>{
+  const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);const request=f.request.getMockImplementation();f.request.mockImplementation(async payload=>{const result=await request(payload);if(payload.operation==='playback-acquire')f.advance(16000);return result;});
+  await f.client.refresh();await tick();expect(f.player.play).not.toHaveBeenCalled();expect(f.request.mock.calls.some(([p])=>p.operation==='playback-claim')).toBe(false);f.client.dispose();
+ });
+ it('strictly rejects missing server timing projection even in synthetic playback mode',async()=>{
+  const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);delete f.lease.serverNowMs;await f.client.refresh();await tick();expect(f.player.play).not.toHaveBeenCalled();expect(f.client.snapshot().status).toBe('caption-only');f.client.dispose();
+ });
+ it('subtracts renewal RTT and stops if renewal returns too late',async()=>{
+  const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);await f.client.refresh();await tick();const request=f.request.getMockImplementation();f.request.mockImplementation(async payload=>{const result=await request(payload);if(payload.operation==='playback-heartbeat')f.advance(16000);return result;});
+  await f.client.heartbeat();expect(f.player.renew).not.toHaveBeenCalled();expect(f.player.stop).toHaveBeenCalledWith('lease-lost');f.client.dispose();
+ });
+ it('does not renew a completed run from an older pending heartbeat response',async()=>{
+  const f=setup();await f.client.refresh();f.setJobs([f.job('new')]);await f.client.refresh();await tick();let release;const request=f.request.getMockImplementation();f.request.mockImplementation(payload=>payload.operation==='playback-heartbeat'?new Promise(resolve=>{release=resolve;}):request(payload));
+  const pending=f.client.heartbeat();f.emit({jobId:'new',epoch:3,state:'completed',sequence:1});release({result:f.lease});await pending;expect(f.player.renew).not.toHaveBeenCalled();f.client.dispose();
  });
 });

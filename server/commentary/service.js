@@ -1,3 +1,4 @@
+import {projectLeaseClock} from './lease-clock.js';
 import {acceptedFacts,factsValid} from '../../src/commentary/facts.js';
 import {createProfile,updateProfile} from '../../src/commentary/profiles.js';
 import {resolveCommentaryVoice} from './voice-routing.js';
@@ -59,7 +60,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
  function cancel(state,job,reason){
   const exposure=job.claim?state.exposure.get(job.claim.token):null;if(reason==='invalid-event'){if(exposure)exposure.valid=false;memory(state).invalidateEvent(job.facts.gameId,job.facts.eventId);}
   if(['completed','failed','cancelled','silent'].includes(job.status)){if(['invalid-event','profile-changed'].includes(reason)){job.line=null;job.reason=reason;}return;}job.status='cancelled';job.reason=reason;job.line=null;if(job.claim){const receipt=state.exposure.get(job.claim.token);if(receipt?.status==='started'){receipt.status='interrupted';receipt.valid=reason!=='invalid-event';memoryExposure(state,job,receipt);}}}
- function lease(state,room,userId,device,epoch){const current=state.leases.get(room.id);if(!current||current.owner!==userId||current.device!==device||current.epoch!==epoch||current.expiresAt<=now())fail('Playback lease is stale.',409);return current;}
+ function lease(state,room,userId,device,epoch,serverNowMs=now()){const current=state.leases.get(room.id);if(!current||current.owner!==userId||current.device!==device||current.epoch!==epoch||current.expiresAt<=serverNowMs)fail('Playback lease is stale.',409);return current;}
  function reserve(state,job,stage,characters){
   const used=state.budgets.get(job.roomId)||{requests:0,characters:0};
   if(used.requests+1>budget.maxRequests||used.characters+characters>budget.maxCharacters)fail('Commentary budget exhausted.',429);
@@ -116,19 +117,19 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
  }
  async function acquire(userId,roomId,{device}={}){
   await authorized(userId,roomId,true);if(!token.test(device||''))fail('Invalid playback device.');
-  return store.transaction(state=>{const prior=state.leases.get(roomId);if(prior&&prior.expiresAt>now()&&(prior.owner!==userId||prior.device!==device))fail('Another host device owns playback.',409);const value={...(prior&&prior.expiresAt>now()?prior:{}),owner:userId,device,epoch:prior&&prior.expiresAt>now()?prior.epoch:(prior?.epoch||0)+1,expiresAt:now()+leaseMs};state.leases.set(roomId,value);return value;});
+  return store.transaction(state=>{const serverNowMs=now(),prior=state.leases.get(roomId);if(prior&&prior.expiresAt>serverNowMs&&(prior.owner!==userId||prior.device!==device))fail('Another host device owns playback.',409);const value={...(prior&&prior.expiresAt>serverNowMs?prior:{}),owner:userId,device,epoch:prior&&prior.expiresAt>serverNowMs?prior.epoch:(prior?.epoch||0)+1,expiresAt:serverNowMs+leaseMs};state.leases.set(roomId,value);return projectLeaseClock(value,serverNowMs);});
  }
  async function heartbeat(userId,roomId,{device,epoch}={}){
   const room=await authorized(userId,roomId,true);
   const result=await store.transaction(state=>{
-   const current=lease(state,room,userId,device,epoch);
+   const serverNowMs=now(),current=lease(state,room,userId,device,epoch,serverNowMs);
    if(current.activeJobId){
     const job=state.jobs.get(current.activeJobId);
     if(!job||!['claimed','streaming','started'].includes(job.status))return {rejected:true,reason:'active-playback-cancelled'};
     const reason=eligible(state,job,room,{started:job.status==='started'});
     if(reason){cancel(state,job,reason);return {rejected:true,reason};}
    }
-   current.expiresAt=now()+leaseMs;return {value:current};
+   current.expiresAt=serverNowMs+leaseMs;return {value:projectLeaseClock(current,serverNowMs)};
   });
   if(result.rejected)fail('Playback renewal rejected: '+result.reason,409);
   return result.value;

@@ -1,8 +1,9 @@
+import {conservativeLeaseDeadline} from './lease-clock.js';
 // Authenticated adapter contract: request({operation,roomId,...payload},{signal}) -> {result}.
 // This controller sends IDs/settings receipts only, never writer text, provider keys or game commands.
 const terminal=new Set(['completed','interrupted','failed']);
 const lifecycle=new Set(['started',...terminal]);
-export function createCommentaryClient({request,player,deviceId,onChange=()=>{},allowSyntheticPlayback=false}={}) {
+export function createCommentaryClient({request,player,deviceId,onChange=()=>{},allowSyntheticPlayback=false,monotonicNow=()=>performance.now()}={}) {
  if(typeof request!=='function'||!player||typeof player.play!=='function'||typeof player.stop!=='function'||!deviceId)throw Error('Authenticated transport, player and device ID required.');
  let context=null,generation=0,abort=new AbortController(),initial=true,hydrated=new Set(),attempted=new Set(),suppressed=new Set(),run=null,lease=null,pending=null,disposed=false;
  let state={status:'offline',captions:[],playing:null,error:null,measurement:null};
@@ -78,11 +79,14 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     if(!speakable()||run)return;
     const job=captionJobs.find(job=>job.status==='ready'&&!hydrated.has(job.id)&&!attempted.has(job.id));if(!job)return;
     attempted.add(job.id);
+    const acquisitionSentAt=monotonicNow();
     const acquired=await invoke('playback-acquire',{device:deviceId},signal);if(fence!==generation)return;
     if(acquired.owner!==context.userId||acquired.device!==deviceId||!Number.isInteger(acquired.epoch))return;
-    lease={...acquired};
-    const claim=await invoke('playback-claim',{jobId:job.id,device:deviceId,epoch:lease.epoch},signal);if(fence!==generation||!claim.claimed)return;
-    const playbackClaim={roomId:context.roomId,jobId:job.id,token:claim.token,epoch:lease.epoch,deviceId,expiresAt:lease.expiresAt};
+    const acquiredTiming=conservativeLeaseDeadline(acquired,{sentAt:acquisitionSentAt,receivedAt:monotonicNow()});
+    if(acquiredTiming.expired)return;
+    lease={...acquired,monotonicDeadline:acquiredTiming.deadline};
+    const claim=await invoke('playback-claim',{jobId:job.id,device:deviceId,epoch:lease.epoch},signal);if(fence!==generation||!claim.claimed||monotonicNow()>=lease.monotonicDeadline)return;
+    const playbackClaim={roomId:context.roomId,jobId:job.id,token:claim.token,epoch:lease.epoch,deviceId,expiresAt:lease.expiresAt,monotonicDeadline:lease.monotonicDeadline};
     const active={job,claim:playbackClaim,roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve()};
     run=active;publish({playing:{jobId:job.id,caption:job.caption},status:'playing'});
     // Detached from scoring and caption polling. Native callbacks establish playback evidence.
@@ -96,10 +100,13 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(!run||!lease||!speakable())return;
   const active=run,fence=generation;
   try{
+   const renewalSentAt=monotonicNow();
    const renewed=await invoke('playback-heartbeat',{device:deviceId,epoch:lease.epoch});
-   if(fence!==generation)return;
+   if(fence!==generation||run!==active)return;
    if(renewed.owner!==context.userId||renewed.device!==deviceId||renewed.epoch!==lease.epoch){invalidate('lease-lost');return;}
-   lease={...renewed};active.claim={...active.claim,expiresAt:renewed.expiresAt};
+   const renewedTiming=conservativeLeaseDeadline(renewed,{sentAt:renewalSentAt,receivedAt:monotonicNow()});
+   if(renewedTiming.expired){invalidate('lease-lost');return;}
+   lease={...renewed,monotonicDeadline:renewedTiming.deadline};active.claim={...active.claim,expiresAt:renewed.expiresAt,monotonicDeadline:renewedTiming.deadline};
    await player.renew?.({claim:active.claim});
   }catch{if(fence===generation)invalidate('lease-lost');}
  }
