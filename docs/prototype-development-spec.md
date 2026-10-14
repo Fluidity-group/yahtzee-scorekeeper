@@ -12,6 +12,10 @@ This document describes the new product direction. The root `yahtzee-build-spec.
 
 ## 2. Confirmed decisions
 
+- 14 October2026 SW029: Home first on cold launch; Solo, Local multiplayer (one shared phone/scorecard), Online and Tournament entry. Saved global commentary defaults and optional local player drafts; per-new-game Yes/No when enabled, then connected named welcome before scoring. Explicit Resume does not replay welcome. Local scoring works offline without an account; live voice requires authenticated networked Android host. This supersedes the older no-pass-and-play and universal multiplayer Internet/account requirements below for shared-phone scoring. Themed menu drawer and privacy-safe playback timing diagnostics; actual sound latency remains acceptance work. See SW029 task/release for qualified/deployed/physical distinctions.
+
+- 14 October2026 SW028: hosted lobby offers commentary voice/style/profanity/frequency and own player details before Start; explicit enabled accepted-start welcome includes selected commentator self-introduction. Dark editorial is adult, meaner and filthy when language is allowed, with specific consented player-blurb roasts. Player details are not a commentator persona. Undo is a compact bottom scorecard action with explanatory confirmation. See SW028 task/release for implemented/deployed/physical acceptance distinctions; this supersedes older friendly-only direction below.
+
 - 3 October2026 testing priority: establish C121 dice identification with a standalone Android test UI and fresh labeled evidence before further game UI integration. Diagnostic tests have no roll/score authority. See `decisions/2026-10-03-dice-identification-first.md` and `handovers/2026-10-03-c121-dice-identification.md`.
 
 - Camera development sequence accepted 1 October 2026: Tapo C121 local Wi-Fi streaming to Android first, with separate illumination trials; finish the ESP32 battery-powered dice housing after independently establishing adequate camera detail and recognition. Elevated side placement is allowed. See `decisions/2026-10-01-camera-platform-sequence.md`; this selects development direction, not physical acceptance.
@@ -226,3 +230,7 @@ SW-017 tournament candidate13 October2026: hosted manual mode supports fixed2–
 Manual Standard supports latest own score Undo before another meaningful accepted gameplay action, restoring the score owner turn and open category while retaining score-undo audit/excluded turns. Hosted current-game/revision/seat checks and durable transaction apply. Completed current-game Undo invalidates readiness and removes incomplete game from tournament standings. Other modes/hardware/older archived-game rollback are excluded.
 
 Shared opening/online UI surfaces account-owned Resume saved games & tournaments with Open/Completed labeled, color-coded cards, roster/category counts/turn/game progress. Returning reads same table; host role/guest seat/alias/progress persist, shared pause requires explicit host resume. Stable original invitation remains available. Future chronological achievements exclude undone score targets and excluded turns but retain audit. Physical two-account and cached-PWA activation acceptance remain separate from code/deployment verification; see SW019 handover.
+# Current scope amendment — 14 October 2026
+
+The fresh POC supersedes legacy-save/system compatibility requirements in this document: see [owner decision](decisions/2026-10-14-fresh-poc-baseline.md) and [six-sprint scope](plans/SW-023-six-sprint-poc-proposal.md). Reuse current rules/authority where sound, qualify new games/fixtures, and require no import of historical scores. The remaining document records the existing design baseline.
+
