@@ -1,5 +1,6 @@
 import {describe,it,expect,vi} from 'vitest';
 import {createRoom,joinRoom,startRoom,playRoom} from '../src/multiplayer/room.js';
+import {setTournamentPaused} from '../src/multiplayer/tournament.js';
 import {acceptedOutbox} from '../server/commentary/accepted-outbox.js';
 import {openingFacts} from '../src/commentary/opening-facts.js';
 import {createCommentaryService} from '../server/commentary/service.js';
@@ -15,7 +16,7 @@ async function fixture(options={}){
   throw Error('Unsupported synthetic RPC');
  });
  const store=await new DurableCommentaryStore({rpc,scopeId}).initialize();
- const lobby=joinRoom(createRoom({id:roomId,code:'ABCDEFGH',userId:host,name:'Alex',time:time()}),{userId:guest,name:'Sam',time:time()});room=startRoom(lobby,{userId:host,time:time()});
+ const lobby=joinRoom(createRoom({id:roomId,code:'ABCDEFGH',userId:host,name:'Alex',time:time(),...(options.tournament?{tournament:{name:'Friday Dice Club',playerCount:2,gameCount:2}}:{})}),{userId:guest,name:'Sam',time:time()});room=startRoom(lobby,{userId:host,time:time()});
  const providers={liveConfigured:true,writeLine:vi.fn(async()=>({text:'Alex, your stationery has formed a shadow government.',containsProfanity:false,mechanism:'misdirection',subject:'player-blurb'})),streamAudio:vi.fn(async function*(){yield new Uint8Array([1,2]);})};
  const getRoom=vi.fn(async id=>id===roomId?structuredClone(room):null);
  const configuration={store,getRoom,profile:{enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'balanced'},now:()=>store.databaseNowMs,monotonicNow:()=>mono,randomId:()=>`00000000-0000-4000-8000-${String(++sequence).padStart(12,'0')}`,budget:{maxRequests:100,maxCharacters:1000000},liveProviders:providers,...options};
@@ -91,4 +92,26 @@ it('monotonic chunk boundary catches changed table before yielding when timers h
 });
 it('restart never re-enters a dispatched generating job after process death',async()=>{
  const f=await fixture(),job=await f.service.enqueueCommitted(f.score()),attemptId='00000000-0000-4000-8000-000000000099';await f.store.transaction(state=>{Object.assign(state.jobs.get(job),{status:'generating',workerToken:attemptId});state.attempts.set(attemptId,{id:attemptId,jobId:job,stage:'writer',status:'submitted',providerDispatchedAt:initial});state.budgets.set(roomId,{requests:1,characters:1000});});const restarted=createCommentaryService({...f.configuration,store:await f.restart()});expect(await restarted.prepareTrusted(job)).toBeNull();expect(f.providers.writeLine).not.toHaveBeenCalled();expect((await f.restart()).snapshot().budgets.get(roomId).requests).toBe(1);
+});
+
+async function completedReturn(f){
+ const scored=f.score(),target=scored.moment.facts.eventId,time=new Date(initial).toISOString(),playing=f.room;
+ const beforeRoom=setTournamentPaused(playing,{userId:host,gameId:playing.game.id,expectedRevision:playing.revision,paused:true,time}),acceptedRoom=setTournamentPaused(beforeRoom,{userId:host,gameId:playing.game.id,expectedRevision:beforeRoom.revision,paused:false,time});f.setRoom(acceptedRoom);
+ const commandId='resume_0001',moment=acceptedOutbox({before:beforeRoom,after:acceptedRoom,actorId:host,commandId,operation:'resume',acceptedAt:time,openingFacts})[0];
+ const jobId=await f.service.enqueueCommitted({moment,beforeRoom,acceptedRoom,receipt:{room_id:roomId,command_id:commandId,actor_id:host,fingerprint:'accepted-resume'}});await f.service.prepareTrusted(jobId);
+ const lease=await f.service.acquire(host,roomId,{device}),claim=await f.service.claimPlayback(host,roomId,{jobId,device,epoch:lease.epoch}),body={jobId,device,epoch:lease.epoch,claimToken:claim.token};await heard(f,body);return {...body,target};
+}
+describe('completed return lifecycle validity and retained actual exposure',()=>{
+ it('own Undo invalidates captured score caption/history facts while retaining only reported host exposure',async()=>{
+  const f=await fixture({tournament:true}),body=await completedReturn(f),captions=await f.service.list(host,roomId);expect(captions.find(j=>j.id===body.jobId)).toMatchObject({status:'completed',purpose:'return',lifecycleVerified:true,caption:expect.any(String)});
+  const original=f.store.snapshot();expect(original.memoryRecords.get(body.jobId)).toMatchObject({validFacts:true,status:'completed',heardBy:[host]});expect(original.exposure.get(body.claimToken)).toMatchObject({status:'completed',valid:true,heardBy:[host]});
+  f.setRoom(playRoom(f.room,{userId:host,action:{type:'undo-score',target:body.target},commandId:'undo_0001',gameId:f.room.game.id,expectedRevision:f.room.revision,time:new Date(initial).toISOString()}));
+  const after=await f.service.list(host,roomId);expect(after.find(j=>j.id===body.jobId)).toMatchObject({caption:null,lifecycleVerified:false,reason:'invalid-event'});
+  const state=(await f.restart()).snapshot();expect(state.memoryRecords.get(body.jobId)).toMatchObject({validFacts:false,status:'completed',heardBy:[host]});expect(state.exposure.get(body.claimToken)).toMatchObject({status:'completed',valid:false,heardBy:[host]});expect(state.exposure.get(body.claimToken).expectedAudience).toEqual([host,guest]);expect(f.providers.writeLine).toHaveBeenCalledOnce();
+ });
+ it('unrelated later accepted score preserves completed valid return caption and never marks guest heard',async()=>{
+  const f=await fixture({tournament:true}),body=await completedReturn(f);f.score(guest,20,'score_0002');const after=await f.service.list(guest,roomId);
+  expect(after.find(j=>j.id===body.jobId)).toMatchObject({status:'completed',purpose:'return',lifecycleVerified:true,caption:'Alex, your stationery has formed a shadow government.'});
+  const state=(await f.restart()).snapshot();expect(state.memoryRecords.get(body.jobId)).toMatchObject({validFacts:true,heardBy:[host]});expect(state.exposure.get(body.claimToken)).toMatchObject({valid:true,heardBy:[host]});expect(state.exposure.get(body.claimToken).heardBy).not.toContain(guest);expect(f.providers.writeLine).toHaveBeenCalledOnce();
+ });
 });
