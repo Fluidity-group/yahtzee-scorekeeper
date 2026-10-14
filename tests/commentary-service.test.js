@@ -99,11 +99,12 @@ it('requires an explicit cadence profile and never silently chooses balanced for
  expect(()=>fixture({profile:{profanityAllowed:true,humorIntensity:'dark'}})).toThrow('Explicit valid commentary settings');
 });
 it('voice settings use host CAS and fence previous-voice jobs independently of intensity and profanity',async()=>{
- const f=fixture(),r=await ready(f);expect((await f.service.getProfile(host,roomId)).voiceOption).toBe('victor');
+ const f=fixture(),r=await ready(f);expect((await f.service.getProfile(host,roomId)).voiceOption).toBe('rachel');
  const results=await Promise.allSettled([f.service.setProfile(host,roomId,{expectedVersion:1,changes:{voiceOption:'ditzy'}}),f.service.setProfile(host,roomId,{expectedVersion:1,changes:{voiceOption:'victor'}})]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
  const settings=await f.service.getProfile(host,roomId);expect(settings).toMatchObject({version:2,voiceOption:'ditzy',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced'});expect(f.store.snapshot().jobs.get(r.id).reason).toBe('profile-changed');
  await expect(f.service.audio(host,roomId,r.body)).rejects.toMatchObject({status:409});await expect(f.service.setProfile(host,roomId,{expectedVersion:2,changes:{voiceOption:'https://arbitrary.invalid'}})).rejects.toMatchObject({status:400});
 });
 it('synthetic TTS receives only the server-resolved selected voice and remains live-provider disabled',async()=>{
- const f=fixture(),r=await ready(f),stream=await f.service.audio(host,roomId,r.body);await new Response(stream).arrayBuffer();expect(f.providers.streamAudio.mock.calls[0][0].voice).toEqual({voiceOption:'victor',voiceId:'cPoqAvGWCPfCfyPMwe4z'});expect((await f.service.getProfile(host,roomId)).capabilities.liveProviders).toBe(false);
+ const f=fixture(),r=await ready(f),stream=await f.service.audio(host,roomId,r.body);await new Response(stream).arrayBuffer();expect(f.providers.streamAudio.mock.calls[0][0].voice).toEqual({voiceOption:'rachel',voiceId:'TYKLc7ViOIGE13dSZYlK'});expect((await f.service.getProfile(host,roomId)).capabilities.liveProviders).toBe(false);
 });
+

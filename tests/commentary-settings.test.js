@@ -26,7 +26,7 @@ describe('commentary profile/setup and drawer contracts',()=>{
   const form=root.querySelector('form');form.elements.enabled.checked=true;change(form.elements.enabled);expect(form.elements.frequency.required).toBe(true);
   submit(root);await settle();expect(callback).not.toHaveBeenCalled();expect(root.querySelector('[role="alert"]').textContent).toContain('Explicit');
   form.elements.frequency.value='highlights';submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights',voiceOption:'victor'}});
+  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights',voiceOption:'rachel'}});
  });
  it('separates host table settings from local listener mute and versions shared profile edits',async()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'balanced'});
@@ -59,7 +59,7 @@ describe('settings save lifecycle',()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'lively'});
   const root=mount({profile,enabled:false});const callback=vi.fn();bindCommentarySettings(root,{onTableSettings:callback});
   root.querySelector('form').elements.profanityAllowed.checked=false;submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,humorIntensity:'dark',profanityAllowed:false,frequency:'lively',voiceOption:'victor'}});
+  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,humorIntensity:'dark',profanityAllowed:false,frequency:'lively',voiceOption:'rachel'}});
  });
  it('coalesces repeated submit while the save callback is in flight',async()=>{
   const root=mount();let finish;const callback=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));bindCommentarySettings(root,{onTableSettings:callback});
@@ -68,11 +68,18 @@ describe('settings save lifecycle',()=>{
  });
 });
 
-it('defaults to the audition-selected Dark voice and keeps switching voice independent of humor',async()=>{
+it('defaults to the owner-selected Rachel voice and keeps switching voice independent of humor',async()=>{
  const root=mount();const form=root.querySelector('form');const callback=vi.fn();bindCommentarySettings(root,{onTableSettings:callback});
- expect(form.elements.voiceOption.value).toBe('victor');expect(form.elements.humorIntensity.value).toBe('dark');expect(form.elements.frequency.value).toBe('');
+ expect(form.elements.voiceOption.value).toBe('rachel');expect(form.elements.humorIntensity.value).toBe('dark');expect(form.elements.frequency.value).toBe('');
  form.elements.enabled.checked=true;form.elements.frequency.value='balanced';form.elements.voiceOption.value='ditzy';submit(root);await settle();
  expect(callback.mock.calls[0][0].profile).toMatchObject({voiceOption:'ditzy',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',version:1});
- form.elements.voiceOption.value='victor';submit(root);await settle();
- expect(callback.mock.calls[1][0].profile).toMatchObject({voiceOption:'victor',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',version:2});
+ form.elements.voiceOption.value='rachel';submit(root);await settle();
+ expect(callback.mock.calls[1][0].profile).toMatchObject({voiceOption:'rachel',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',version:2});
+});
+
+
+it('offers Rachel, Victor and Ditzy as voice choices independent from humor, rejecting provider IDs in client profiles',()=>{
+ const root=mount();const voices=[...root.querySelector('[name="voiceOption"]').options];expect(voices.map(option=>option.value)).toEqual(['rachel','victor','ditzy']);expect(voices[0].textContent).toBe('Rachel');expect(voices[1].textContent).toBe('Victor');
+ const defaults=createProfile({humorIntensity:'playful',profanityAllowed:false,frequency:'highlights'});expect(defaults.voiceOption).toBe('rachel');
+ expect(()=>createProfile({...defaults,voiceOption:'TYKLc7ViOIGE13dSZYlK'})).toThrow('settings');
 });

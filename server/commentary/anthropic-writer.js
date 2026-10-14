@@ -29,7 +29,7 @@ export async function listAnthropicModels({key,workspaceId,fetchImpl=fetch,deadl
 export function buildAnthropicWriterRequest(input,{model,maxOutputTokens}={}){
  if(typeof model!=='string'||!/^claude-[a-z0-9-]{1,80}$/.test(model)||!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<1||maxOutputTokens>1024)fail('request-config-invalid');
  const prompt=buildCommentaryPrompt(input),body={model,max_tokens:maxOutputTokens,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}};
- const payload=JSON.stringify(body);return {body,payload,packet:prompt.packet,submittedCharacters:[...payload].length,promptVersion:2};
+ const payload=JSON.stringify(body);return {body,payload,packet:prompt.packet,submittedCharacters:[...payload].length,promptVersion:3};
 }
 // This adapter is separate from the in-memory rehearsal service. A durable budget gate
 // and explicit paid allowance are mandatory for live invocation, never implied by a key.
@@ -68,3 +68,4 @@ export function createAnthropicWriter({model,workspaceId,getKey,fetchImpl=fetch,
  }
  return {write,get submittedRequests(){return submitted;},liveConfigured:allowPaid===true,model};
 }
+
