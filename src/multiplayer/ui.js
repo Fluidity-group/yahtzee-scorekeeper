@@ -12,14 +12,15 @@ const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 let root,callbacks,user,room=null,timer,screen='home',working=false,connected=false,email='',invite='',displayName='';
 let generation=0;
 let landingView='home';
-let onlineOpen=false;
+let onlineOpen=false,silentGreetingHydration=true;
 const current=ticket=>onlineOpen&&ticket===generation;
-let stopWatching,watchingCode;
+let stopWatching,watchingCode,stopAuthWatching;
 let standingsKey='',standingsPending=null;
 const remember=(key,value)=>{try{localStorage.setItem(key,value);}catch{}};
 const recall=key=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
 function message(text){const box=root.querySelector('#mpMessage');if(box)box.textContent=text;else callbacks.notice(text);}
 function shell(body){
+ callbacks?.table?.(null);
  root.classList.remove('playing');
  root.innerHTML=`<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><button class="hbtn" data-mp="exit">Local games</button></header><main class="mp-screen">${body}<p id="mpMessage" role="status" aria-live="polite"></p></main>`;
 }
@@ -62,16 +63,25 @@ function lobby(){
  }
  QRCode.toCanvas(root.querySelector('#roomQr'),inviteUrl(),{width:208,margin:3,errorCorrectionLevel:'M',color:{dark:'#102029',light:'#ffffff'}}).catch(()=>{if(current(ticket)&&screen==='lobby')message('QR unavailable. Share the room code instead.');});
 }
-function accept(next){
+function lifecycleGreeting(before,next,ack){
+ const marker=next.commentaryLifecycle;
+ if(next.capabilities?.commentaryAtomicCommit!==true||!marker||typeof marker.commandId!=='string'||!/^[A-Za-z0-9_-]{8,100}$/.test(marker.commandId)||marker.gameId!==next.game?.id||!Number.isSafeInteger(marker.acceptedRoomRevision)||marker.acceptedRoomRevision>next.revision||!['opening','return','next-game'].includes(marker.purpose))return;
+ const explicit=ack&&ack.acceptedCommandId===marker.commandId&&ack.acceptedRoomRevision===marker.acceptedRoomRevision;
+ const continuous=!silentGreetingHydration&&connected&&!document.hidden&&before?.id===next.id&&(marker.purpose==='opening'&&!before.game&&before.status==='lobby'&&next.status==='active'||marker.purpose==='return'&&before.game?.id===next.game.id&&before.tournament?.status==='paused'&&next.tournament?.status==='playing'||marker.purpose==='next-game'&&before.game?.status==='finished'&&before.game.id!==next.game.id&&next.game.status==='active');
+ if(explicit||continuous)callbacks?.greeting?.({sourceCommandId:marker.commandId,gameId:marker.gameId});
+}
+function accept(next,ack=null){
  if(room?.code===next.code&&next.revision<room.revision)return;
- const changed=!room||next.revision!==room.revision||next.code!==room.code||(next.capabilities&&(next.capabilities.rematch!==room.capabilities?.rematch||next.capabilities.tournaments!==room.capabilities?.tournaments||next.capabilities.undoScore!==room.capabilities?.undoScore));
+ const changed=!room||next.revision!==room.revision||next.code!==room.code||(next.capabilities&&(next.capabilities.rematch!==room.capabilities?.rematch||next.capabilities.tournaments!==room.capabilities?.tournaments||next.capabilities.undoScore!==room.capabilities?.undoScore||next.capabilities.commentaryAtomicCommit!==room.capabilities?.commentaryAtomicCommit));
+ const before=room;
  room={...next,...(!next.capabilities&&room?.code===next.code?{capabilities:room.capabilities}: {}),...(room?.code===next.code&&room.revision===next.revision&&room.tournamentStandings?{tournamentStandings:room.tournamentStandings}:{})};connected=true;remember('clubhouse-room',room.code);
  if(watchingCode!==room.code){
   stopWatching?.();watchingCode=room.code;const ticket=generation;
   stopWatching=watchRoom(room.code,next=>{if(ticket===generation&&!working)accept(next);});
  }
- if(room.game){screen='game';callbacks.game(room,user.id,connected,changed);if(room.tournament&&room.game.status==='finished'&&room.capabilities?.tournaments)loadResultStandings();}
+ if(room.game){screen='game';callbacks.game(room,user.id,connected,changed);lifecycleGreeting(before,room,ack);if(room.tournament&&room.game.status==='finished'&&room.capabilities?.tournaments)loadResultStandings();}
  else if(changed||screen!=='lobby')lobby();
+ if(!document.hidden)silentGreetingHydration=false;
 }
 function schedule(){clearTimeout(timer);if(!room)return;timer=setTimeout(refresh,connected?15000:3000);}
 async function refresh(){
@@ -79,21 +89,21 @@ async function refresh(){
  if(!code)return;
  if(working||document.hidden){schedule();return;}
  try{const data=await requestRoom({operation:'read',code});if(ticket===generation)accept(data.room);}
- catch(error){if(ticket!==generation)return;connected=false;if(screen==='game')callbacks.connection(false);else message('Reconnecting… Your place at the table is saved.');}
+ catch(error){if(ticket!==generation)return;connected=false;silentGreetingHydration=true;if(screen==='game')callbacks.connection(false);else message('Reconnecting… Your place at the table is saved.');}
  finally{if(ticket===generation)schedule();}
 }
 async function mutate(payload){
  const ticket=generation;
  working=true;connected=false;
- try{const data=await requestRoom(payload);if(!current(ticket))return null;accept(data.room);schedule();return data.room;}
- catch(error){if(!current(ticket))return null;connected=false;if(screen==='game')callbacks.connection(false);throw error;}
+ try{const data=await requestRoom(payload);if(!current(ticket))return null;accept(data.room,payload.operation!=='read'?data:null);if(['start','resume','ready'].includes(payload.operation)&&typeof data.greetingJobId==='string'&&Number.isSafeInteger(data.commentaryProfileVersion))callbacks?.greeting?.({jobId:data.greetingJobId,gameId:data.room.game?.id,profileVersion:data.commentaryProfileVersion});schedule();return data.room;}
+ catch(error){if(!current(ticket))return null;connected=false;silentGreetingHydration=true;if(screen==='game')callbacks.connection(false);throw error;}
  finally{if(current(ticket))working=false;}
 }
 async function rooms(){
  const ticket=generation,data=await requestRoom({operation:'list'});if(!current(ticket))return;screen='rooms';
  shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Your tables &amp; tournaments.</h1>${data.rooms.length?data.rooms.map(r=>`<button class="history-row" data-mp="resume" data-code="${esc(r.code)}"><strong>${esc(r.tournament?.name||r.members.map(m=>m.name).join(', '))}</strong><span>${esc(MODES[r.mode].name)} · ${esc(r.tournament?.status||r.status)}${r.tournament?` · Game ${r.gameSequence??1} of ${r.tournament.gameCount}`:''}</span>${r.tournament?`<small>${esc(r.members.map(m=>m.name).join(' · '))} · Progress saved</small>`:''}</button>`).join(''):'<p class="core-muted">Your hosted and joined games will appear here.</p>'}`);
 }
-export function leaveOnline(){generation++;onlineOpen=false;working=false;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;standingsKey='';standingsPending=null;}
+export function leaveOnline(){silentGreetingHydration=true;callbacks?.table?.(null);stopAuthWatching?.();stopAuthWatching=null;generation++;onlineOpen=false;working=false;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;standingsKey='';standingsPending=null;}
 async function tournaments(){
  const ticket=generation;screen='tournaments';
  shell('<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Your tournaments.</h1><p role="status">Finding your saved tournaments…</p>');
@@ -129,12 +139,19 @@ async function accountDestination(){
 }
 export async function openOnline(element,handlers,joinCode='',view='home'){
  leaveOnline();onlineOpen=true;const ticket=generation;root=element;callbacks=handlers;invite=joinCode;displayName=recall('clubhouse-name');landingView=view;
+ if(auth?.onAuthStateChange){
+  const watcher=auth.onAuthStateChange((event,session)=>{
+   if(!onlineOpen)return;callbacks?.account?.(session?.user||null);
+   if(event==='SIGNED_OUT'){user=null;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;accountScreen();}
+  });
+  stopAuthWatching=()=>watcher?.data?.subscription?.unsubscribe();
+ }
  if(!configured){screen='setup';shell('<div class="intro-kicker">MULTIPLAYER</div><h1>The table is almost ready.</h1><p class="core-muted">Online rooms need the project’s Supabase connection and published web address. Local games are ready to play.</p>');return;}
  screen='connecting';shell('<h1>Opening online games…</h1><p class="core-muted">Checking your game account. Local camera and manual games do not need a sign-in.</p>');
  try{
-  const {data:{session},error}=await waitForOnline(auth.getSession());if(!current(ticket))return;if(error)throw error;user=session?.user;
+  const {data:{session},error}=await waitForOnline(auth.getSession());if(!current(ticket))return;if(error)throw error;user=session?.user;callbacks?.account?.(user||null);
   if(!user)accountScreen();else{try{await accountDestination();}catch(error){if(current(ticket)){home();message(onlineErrorMessage(error));}}}
- }catch(error){if(current(ticket)){user=null;accountScreen();message(onlineErrorMessage(error));}}
+ }catch(error){if(current(ticket)){user=null;callbacks?.account?.(null);accountScreen();message(onlineErrorMessage(error));}}
 }
 export async function sendOnline(action,expectedRevision){
  if(!connected||working)throw new Error('Reconnecting. Wait for the game to sync before scoring.');
@@ -186,7 +203,7 @@ export async function sendHostState(action){
  await mutate({operation:'command',code:room.code,gameId:room.game.id,action,expectedRevision:room.revision,commandId:crypto.randomUUID()});
  return true;
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&room)refresh();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)silentGreetingHydration=true;else if(room)refresh();});
 document.addEventListener('change',e=>{
  if(!onlineOpen||!e.target.matches('[name="tableType"]'))return;
  const tournament=e.target.value==='tournament',fields=root.querySelector('.mp-tournament-fields'),source=root.querySelector('[name="source"]');
@@ -204,7 +221,7 @@ document.addEventListener('click',async e=>{
   if(a==='host')hostForm();if(a==='join')joinForm();
   if(a==='change-email')accountScreen();
   if(a==='password')passwordScreen();
-  if(a==='signout'){const {error}=await waitForOnline(auth.signOut());if(!current(ticket))return;if(error)throw error;user=null;accountScreen();}
+  if(a==='signout'){const {error}=await waitForOnline(auth.signOut());if(!current(ticket))return;if(error)throw error;user=null;callbacks?.account?.(null);accountScreen();}
   if(a==='rooms')await rooms();
   if(a==='sessions'||a==='sessions-open'||a==='sessions-completed')await sessions(a==='sessions-completed'?'completed':'open');
   if(a==='tournaments')await tournaments();
@@ -213,7 +230,7 @@ document.addEventListener('click',async e=>{
   if(a==='start'){
    const status=getDiceStatus();
    if(room.source==='godice'&&(status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected)))throw new Error('Connect five GoDice on this host before starting.');
-   await mutate({operation:'start',code:room.code,rulesVersion:room.game?.rules.version??room.rulesVersion??1,expectedRevision:room.revision});
+   await mutate({operation:'start',code:room.code,rulesVersion:room.game?.rules.version??room.rulesVersion??1,expectedRevision:room.revision,commandId:crypto.randomUUID()});
   }
   if(a==='copy'){
    const link=inviteUrl();
@@ -230,9 +247,9 @@ document.addEventListener('submit',async e=>{
   if(kind==='email'){
    email=String(f.get('email')).trim();const {error}=await waitForOnline(auth.signInWithOtp({email}));if(!current(ticket))return;if(error)throw error;accountScreen(true);
   }else if(kind==='password'){
-   const {data,error}=await waitForOnline(auth.signInWithPassword({email:String(f.get('email')).trim(),password:String(f.get('password'))}));if(!current(ticket))return;if(error)throw error;user=data.user;await accountDestination();
+   const {data,error}=await waitForOnline(auth.signInWithPassword({email:String(f.get('email')).trim(),password:String(f.get('password'))}));if(!current(ticket))return;if(error)throw error;user=data.user;callbacks?.account?.(user);await accountDestination();
   }else if(kind==='verify'){
-   const {data,error}=await waitForOnline(auth.verifyOtp({email,token:String(f.get('token')).trim(),type:'email'}));if(!current(ticket))return;if(error)throw error;user=data.user;await accountDestination();
+   const {data,error}=await waitForOnline(auth.verifyOtp({email,token:String(f.get('token')).trim(),type:'email'}));if(!current(ticket))return;if(error)throw error;user=data.user;callbacks?.account?.(user);await accountDestination();
   }else{
    displayName=String(f.get('name')).trim();remember('clubhouse-name',displayName);
    const payload=kind==='host'?{operation:'create',name:displayName,mode:f.get('mode'),source:f.get('source')||'manual',hideTotals:f.has('hideTotals'),requestId:crypto.randomUUID()}:{operation:'join',code:f.get('code'),name:displayName};
@@ -247,5 +264,11 @@ document.addEventListener('submit',async e=>{
  }catch(error){if(current(ticket))message(onlineErrorMessage(error));}
  finally{if(current(ticket)){working=false;form.querySelector('button[type="submit"],button.bigbtn')?.removeAttribute('disabled');}}
 });
+
+
+
+
+
+
 
 

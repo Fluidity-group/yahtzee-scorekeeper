@@ -3,7 +3,7 @@ const row=room=>({id:room.id,code:room.code,host_id:room.hostId,member_ids:room.
 
 // Service credentials belong only to the database/auth transport. Never return
 // upstream bodies, URLs or exceptions as an application error.
-export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)=>fetch(...args),now=()=>Date.now()}){
+export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)=>fetch(...args),now=()=>Date.now(),commentaryScopeId=null}){
  async function db(path,options={}){
   try{
    const response=await fetchImplementation(`${url}/rest/v1/clubhouse_rooms${path}`,{...options,headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json',Prefer:'return=representation'}});
@@ -13,6 +13,10 @@ export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)
   }catch{throw new Error('Database request failed');}
  }
  const store={
+  async commentaryAvailable(){
+   if(!uuid.test(commentaryScopeId||''))return false;
+   try{const response=await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}'});if(response.status===404)return false;if(!response.ok)throw Error();const available=await response.json();if(typeof available!=='boolean')throw Error();return available;}catch{throw new Error('Database request failed');}
+  },
   async competitionAvailable(){
    try{const response=await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_competition_v2_available`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}'});
     if(response.status===404)return false;
@@ -40,8 +44,9 @@ export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)
   async history(roomId,before){
    return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before?`&sequence_number=lt.${before}`:''}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
   },
-  async commit(room,revision,{actor,commandId=null,fingerprint=null}={}){
-   const result=await resource('rpc/clubhouse_commit_game',{method:'POST',body:JSON.stringify({p_room_id:room.id,p_expected_revision:revision,p_state:room,p_actor_id:actor,p_command_id:commandId,p_fingerprint:fingerprint})});
+  async commit(room,revision,{actor,commandId=null,fingerprint=null,outboxRows=null}={}){
+   if(outboxRows!==null&&!uuid.test(commentaryScopeId||''))throw new Error('Atomic commentary scope unavailable');
+   const result=await resource(outboxRows===null?'rpc/clubhouse_commit_game':'rpc/clubhouse_commit_game_commentary',{method:'POST',body:JSON.stringify({p_room_id:room.id,p_expected_revision:revision,p_state:room,p_actor_id:actor,p_command_id:commandId,p_fingerprint:fingerprint,...(outboxRows!==null?{p_scope:commentaryScopeId,p_outbox:outboxRows}:{})})});
    if(typeof result!=='boolean')throw new Error('Database request failed');return result;
   },
   async byId(id){return (await db(`?id=eq.${encodeURIComponent(id)}&select=state`))[0]?.state;},

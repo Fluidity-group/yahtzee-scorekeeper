@@ -26,7 +26,7 @@ describe('commentary profile/setup and drawer contracts',()=>{
   const form=root.querySelector('form');form.elements.enabled.checked=true;change(form.elements.enabled);expect(form.elements.frequency.required).toBe(true);
   submit(root);await settle();expect(callback).not.toHaveBeenCalled();expect(root.querySelector('[role="alert"]').textContent).toContain('Explicit');
   form.elements.frequency.value='highlights';submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights',voiceOption:'rachel'}});
+  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights',voiceOption:'rachel'}});
  });
  it('separates host table settings from local listener mute and versions shared profile edits',async()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'balanced'});
@@ -59,7 +59,7 @@ describe('settings save lifecycle',()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'lively'});
   const root=mount({profile,enabled:false});const callback=vi.fn();bindCommentarySettings(root,{onTableSettings:callback});
   root.querySelector('form').elements.profanityAllowed.checked=false;submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,humorIntensity:'dark',profanityAllowed:false,frequency:'lively',voiceOption:'rachel'}});
+  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,enabled:false,humorIntensity:'dark',profanityAllowed:false,frequency:'lively',voiceOption:'rachel'}});
  });
  it('coalesces repeated submit while the save callback is in flight',async()=>{
   const root=mount();let finish;const callback=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));bindCommentarySettings(root,{onTableSettings:callback});
@@ -83,3 +83,4 @@ it('offers Rachel, Victor and Ditzy as voice choices independent from humor, rej
  const defaults=createProfile({humorIntensity:'playful',profanityAllowed:false,frequency:'highlights'});expect(defaults.voiceOption).toBe('rachel');
  expect(()=>createProfile({...defaults,voiceOption:'TYKLc7ViOIGE13dSZYlK'})).toThrow('settings');
 });
+

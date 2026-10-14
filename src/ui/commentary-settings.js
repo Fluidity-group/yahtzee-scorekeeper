@@ -48,7 +48,7 @@ export function bindCommentarySettings(root, { onTableSettings = () => {}, onLis
    const previous = form.dataset.profile ? JSON.parse(form.dataset.profile) : null;
    let profile = previous;
    if (enabled.checked || frequency.value) {
-    const values = { humorIntensity:form.elements.namedItem('humorIntensity').value,
+    const values = { enabled:enabled.checked, humorIntensity:form.elements.namedItem('humorIntensity').value,
      profanityAllowed:form.elements.namedItem('profanityAllowed').checked, frequency:frequency.value, voiceOption:form.elements.namedItem('voiceOption').value };
     profile = previous ? updateProfile(previous, values) : createProfile(values);
    }
@@ -60,4 +60,5 @@ export function bindCommentarySettings(root, { onTableSettings = () => {}, onLis
  form.addEventListener('change', change); form.addEventListener('submit', submit); close?.addEventListener('click', dismiss);
  return () => { form.removeEventListener('change', change); form.removeEventListener('submit', submit); close?.removeEventListener('click', dismiss); };
 }
+
 

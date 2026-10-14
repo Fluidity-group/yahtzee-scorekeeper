@@ -66,13 +66,13 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   if(live&&!settings(state,room.id).enabled)return 'disabled';
   if(job.sourceType==='accepted-settings'){
    const proof=job.evidence;
-   if(room.hostId!==proof.hostId||JSON.stringify(room.members.map(m=>m.userId))!==JSON.stringify(proof.accountIds)||JSON.stringify(room.game.players)!==JSON.stringify(proof.players)||JSON.stringify(room.game.rules)!==JSON.stringify(proof.rules)||room.game.hideTotals!==proof.hideTotals)return 'source-changed';
+   if(room.hostId!==proof.hostId||JSON.stringify(room.members.map(m=>m.userId))!==JSON.stringify(proof.accountIds)||JSON.stringify(room.game.players)!==JSON.stringify(proof.players)||JSON.stringify(room.game.rules)!==JSON.stringify(proof.rules)||room.game.hideTotals!==proof.hideTotals)return 'invalid-event';
    if(proof.events.some((event,index)=>JSON.stringify(event)!==JSON.stringify(room.game.events[index])))return 'invalid-event';
    if(room.game.events.slice(proof.events.length).some(event=>['score-undo','score-correction'].includes(event.type)&&job.facts.scoreDependencies.includes(event.target)))return 'invalid-event';
    if(!started&&JSON.stringify(room.game.sheets)!==JSON.stringify(proof.sheets))return 'progress-changed-before-start';
   }else if(job.facts.observation==='accepted-lifecycle-only'){
    const validity=validateLifecycleMoment({...job.evidence,room,jobProfileVersion:job.profile.version,currentProfileVersion:settings(state,room.id).version,started,cancelled:job.status==='cancelled'});
-   if(!validity.valid)return validity.reason;
+   if(!validity.valid)return ['source-score-invalidated','source-history-changed','source-facts-mismatch','seat-identity-changed','ownership-changed','rules-disclosure-changed','source-revision-mismatch','invalid-lifecycle-source','receipt-mismatch'].includes(validity.reason)?'invalid-event':validity.reason;
   }else if(!factsValid(job.facts,room.game))return 'invalid-event';
   if(room.tournament?.status==='paused'||room.paused===true)return 'paused';
   if(settings(state,room.id).version!==job.profile.version)return 'profile-changed';
@@ -163,7 +163,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   if(result.rejected)fail('Playback renewal rejected: '+result.reason,409);
   return result.value;
  }
- async function list(userId,roomId){const room=await authorized(userId,roomId);return store.transaction(state=>{purge(state);for(const job of state.jobs.values())if(job.roomId===roomId){const reason=eligible(state,job,room,{started:job.status==='started'});if(reason)cancel(state,job,reason);}return [...state.jobs.values()].filter(j=>j.roomId===roomId&&j.facts.gameId===room.game?.id).slice(-20).map(j=>({id:j.id,gameId:j.facts.gameId,eventId:j.facts.eventId,sourceCommandId:j.facts.commandId,acceptedAt:j.facts.acceptedAt,purpose:j.facts.purpose||'score',lifecycleVerified:j.facts.observation==='accepted-lifecycle-only',dependencyEventIds:[...(j.facts.scoreDependencies||[])],status:j.status,caption:j.line?.text||null,reason:j.reason||null,profileVersion:j.profile.version,...feedbackProjection(state,j,userId)}));});}
+ async function list(userId,roomId){const room=await authorized(userId,roomId);return store.transaction(state=>{purge(state);for(const job of state.jobs.values())if(job.roomId===roomId){const reason=eligible(state,job,room,{started:job.status==='started'});if(reason)cancel(state,job,reason);}return [...state.jobs.values()].filter(j=>j.roomId===roomId&&j.facts.gameId===room.game?.id).slice(-20).map(j=>({id:j.id,gameId:j.facts.gameId,eventId:j.facts.eventId,sourceCommandId:j.facts.commandId,acceptedAt:j.facts.acceptedAt,purpose:j.facts.purpose||'score',lifecycleVerified:j.facts.observation==='accepted-lifecycle-only'&&!eligible(state,j,room,{started:['started','completed','interrupted'].includes(j.status)}),dependencyEventIds:[...(j.facts.scoreDependencies||[])],status:j.status,caption:j.line?.text||null,reason:j.reason||null,profileVersion:j.profile.version,...feedbackProjection(state,j,userId)}));});}
  async function claimPlayback(userId,roomId,{jobId,device,epoch}={}){
   const room=await authorized(userId,roomId,true);return store.transaction(state=>{
    const current=lease(state,room,userId,device,epoch),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId)fail('Commentary job not found.',404);
@@ -193,7 +193,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    const serverNowMs=now(),current=lease(state,room,userId,device,epoch,serverNowMs),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)fail('Playback claim is stale.',409);
    const reason=eligible(state,job,room);if(reason){cancel(state,job,reason);fail('Commentary was cancelled.',409);}
    if(job.status!=='claimed')fail('Audio already requested.',409);if(!providers?.streamAudio)fail('Voice provider is disabled.',503);
-   const attempt=reserve(state,job,'tts',[...job.line.text].length);job.status='streaming';return {attempt,text:job.line.text,profile:job.profile,remainingMs:current.expiresAt-serverNowMs};
+   const attempt=reserve(state,job,'tts',[...job.line.text].length);job.activeTtsAttemptId=attempt.id;job.status='streaming';return {attempt,text:job.line.text,profile:job.profile,remainingMs:current.expiresAt-serverNowMs};
   });
   const controller=new AbortController();let bytes=0,firstByteAt=null,firstByteElapsed=null,leaseDeadline=requestStarted+start.remainingMs,leaseTimer,validationTimer,validationPending=null,iterator,lastValidatedAt=monotonicNow();
   const started=monotonicNow(),timer=setTimeout(()=>controller.abort(),streamTimeoutMs),firstTimer=setTimeout(()=>controller.abort(),firstByteTimeoutMs);
@@ -290,3 +290,5 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
 
  return {enqueueCommitted,feedback,getPlayerProfile,setPlayerProfile,deletePlayerProfile,forgetHistory,authorized,getProfile,setProfile,enqueueAccepted,prepareTrusted,acquire,heartbeat,list,claimPlayback,playbackEvent,audio};
 }
+
+

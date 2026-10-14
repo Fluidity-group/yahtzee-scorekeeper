@@ -18,6 +18,8 @@ import { MODES, createCoreGame, command, results, scoreOptions, rollLimit, rollA
 import { saveCore, loadCore, listCore } from './core-store.js';
 import {renderPlayerProfileFields,readPlayerProfileFields} from './ui/commentary-settings.js';
 import {createSessionCommentary} from './ui/commentary-session.js';
+import {createHostedCommentarySession} from './ui/hosted-commentary-session.js';
+import {createAuthenticatedCommentaryTransport} from './commentary/authenticated-transport.js';
 
 const esc = v => String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const id = () => crypto.randomUUID();
@@ -29,6 +31,41 @@ let settleTimer=null,autoStarting=false;
 let hardwareHeld=Array(5).fill(false),hardwareTurnId=null;
 let noticeTimer, effectTimer, activeEffect=null;
 let onlineRoom=null,onlineUserId=null,onlineConnected=false,localGame=null;
+const commentaryServiceBase=(import.meta.env.VITE_COMMENTARY_URL||'').trim();
+let hostedCommentaryActive=false,hostedCommentary=null,hostedCommentaryPlayer=null,hostedCommentarySetup=null,hostedCommentaryGeneration=0;
+const commentaryContext=()=>({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,visible:!document.hidden});
+function resetHostedCommentary(){
+ hostedCommentaryGeneration++;hostedCommentary?.dispose();hostedCommentary=null;
+ const player=hostedCommentaryPlayer;hostedCommentaryPlayer=null;hostedCommentarySetup=null;
+ if(player?.dispose)void Promise.resolve(player.dispose()).catch(()=>{});
+}
+async function ensureHostedCommentary(){
+ if(!hostedCommentaryActive||!onlineRoom||!onlineUserId||!commentaryServiceBase)return null;
+ if(hostedCommentary)return hostedCommentary;
+ if(hostedCommentarySetup)return hostedCommentarySetup;
+ const ticket=hostedCommentaryGeneration;
+ const task=(async()=>{
+  const {auth}=await import('./multiplayer/client.js');if(!auth)return null;
+  const transport=createAuthenticatedCommentaryTransport({auth,serviceBase:commentaryServiceBase,anonymousKey:import.meta.env.VITE_SUPABASE_ANON_KEY||''});
+  const android=Capacitor.getPlatform()==='android';
+  const player=android?(await import('./commentary/native-player.js')).createNativeCommentaryPlayer({serviceBase:commentaryServiceBase,getAccessToken:transport.getAccessToken}):{play:async()=>false,stop:()=>{},dispose:async()=>{}};
+  const session=createHostedCommentarySession({request:transport.request,player,deviceId:id(),onNotice:notice,nativeAudioAvailable:android});
+  if(ticket!==hostedCommentaryGeneration){session.dispose();await player.dispose?.();return null;}
+  hostedCommentary=session;hostedCommentaryPlayer=player;session.update(commentaryContext());session.mountSurface?.({root,scoreDialog:dialog});return session;
+ })();hostedCommentarySetup=task;
+ try{return await task;}finally{if(hostedCommentarySetup===task)hostedCommentarySetup=null;}
+}
+function syncHostedCommentary(){
+ if(hostedCommentary){hostedCommentary.update(commentaryContext());return;}
+ if(hostedCommentaryActive&&onlineRoom&&commentaryServiceBase)void ensureHostedCommentary().catch(()=>notice('Commentary is unavailable. Keep playing.'));
+}
+async function openCommentary(){
+ if(!onlineRoom)return commentarySession.open({isHost:true,gameId:game?.id||'setup',players:game?.players||[],scoreDialog:dialog});
+ if(dialog.open){notice('Finish or close score entry before opening commentary.');return;}
+ if(!commentaryServiceBase){notice('Live commentary is not connected for this build.');return;}
+ try{const session=await ensureHostedCommentary();if(session)await session.open({scoreDialog:dialog});else notice('Sign in at your table to use commentary.');}
+ catch{notice('Commentary is unavailable. Keep playing.');}
+}
 const isDiceHost=()=>!onlineRoom||onlineRoom.hostId===onlineUserId;
 const sharedRolling=()=>onlineRoom&&game?.turn?.source==='godice'&&['rolling','paused'].includes(onlineRoom.liveDice?.phase);
 let sharedDiceTimer=null,sharedDicePending=null,lastSharedDice='',lastSharedKey='';
@@ -83,7 +120,7 @@ function options(){
 function turnPanel(){
  if(game.finalChain)return finalChainPanel();
  if(game.status==='finished'){
-  if(onlineRoom)return renderHostedResults({room:onlineRoom,userId:onlineUserId,connected:onlineConnected,busy});
+  if(onlineRoom)return renderHostedResults({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,busy});
   const r=results(game),title=r.solo?'Game complete':r.winners.length>1?'A shared victory':`${esc(game.players[r.winners[0]].name)} wins`;
   return `<section class="compact-result"><strong>${title}</strong><button class="hbtn" data-action="new">Play again</button></section>`;
  }
@@ -164,7 +201,7 @@ function render(){
  hardwareCapture.sync(game,getDiceStatus());
  if(hardwareTurnId!==game.turn?.id){hardwareTurnId=game.turn?.id;hardwareHeld=Array(5).fill(false);}
  const totals=results(game).totals,active=game.status==='active';
- root.innerHTML=header()+`<div class="game-strip"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel()}${renderPhoneScorecard(game,{viewerSeat:onlineRoom?onlineRoom.members.findIndex(member=>member.userId===onlineUserId):game.activeSeat,scoreCell,bonusCell,totals,winners:results(game).winners,peerOffset})}</main>`;
+ root.innerHTML=header()+`<div class="game-strip"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel()}<div data-hosted-commentary-inline></div>${renderPhoneScorecard(game,{viewerSeat:onlineRoom?onlineRoom.members.findIndex(member=>member.userId===onlineUserId):game.activeSeat,scoreCell,bonusCell,totals,winners:results(game).winners,peerOffset})}</main>`;
  if(onlineRoom?.tournament){
   root.querySelector('main').insertAdjacentHTML('afterbegin',renderTournamentBanner(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));
   if(tournamentPaused())root.querySelectorAll('.core-score-table button').forEach(button=>{button.disabled=true;});
@@ -176,6 +213,7 @@ function render(){
  updateDiceStatus();
  updateHardwarePanel();
  applyScorePulse();
+ hostedCommentary?.mountSurface?.({root,scoreDialog:dialog});
 
 }
 function ensureAutomaticTurn(){
@@ -308,8 +346,9 @@ function celebrate(previous,next){
  const detail=document.createElement('span');detail.textContent=message.subtitle;box.append(detail);
  effectTimer=setTimeout(clearCelebration,2200);
 }
-document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelPulse(root);clearCelebration();}});
-window.addEventListener('pagehide',()=>{cancelPulse(root);clearCelebration();});
+document.addEventListener('visibilitychange',()=>{syncHostedCommentary();if(document.hidden){cancelPulse(root);clearCelebration();}});
+window.addEventListener('pagehide',()=>{resetHostedCommentary();cancelPulse(root);clearCelebration();});
+window.addEventListener('pageshow',syncHostedCommentary);
 
 function showRules(){openDialog(`<h2>${esc(game.rules.name)} rules · version ${game.rules.version}</h2><p class="core-muted">Score totals: ${game.hideTotals?'hidden until the game ends':'visible during play'}.</p><p class="core-muted">${rulesDescription()}</p><p class="core-muted">Tap + in your column to score. Tap a recorded score to correct it. A scratched first Yahtzee earns no bonus; Joker placement still applies.</p><p class="core-muted">Corrections change category points without rewriting historical turns or granted bonuses. Suggested points are only saved when confirmed.</p>`);}
 async function persist(next){
@@ -331,24 +370,29 @@ async function send(action,commandId){
   ?command(game,{type:'start',seat:game.activeSeat},{id:id()}):game;
  await persist(command(base,{seat:base.activeSeat,...action},{id:commandId||id()}));
 }
-function openDialog(html){delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();}
+function openDialog(html){delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',view='home'){
+ hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
  if(!onlineRoom)localGame=game;
  dialog.close();pending=null;reportedFace=0;
  const {openOnline}=await import('./multiplayer/ui.js');
  await openOnline(root,{
   notice,
-  exit(){game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;render();},
+  greeting(metadata){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata)).catch(()=>notice('Commentary is unavailable. Keep playing.'));},
+  table(room){if(!room){hostedCommentaryActive=false;resetHostedCommentary();}},
+  account(user){if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
+  exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;render();},
   game(room,userId,connected,changed){
+   hostedCommentaryActive=true;
    const gameChanged=game?.id!==room.game?.id||game?.revision!==room.game?.revision;
    const beganRolling=room.liveDice?.phase==='rolling'&&onlineRoom?.liveDice?.phase!=='rolling';
    if(changed&&!busy&&(gameChanged||(beganRolling&&room.hostId!==userId)||room.tournament?.status==='paused')){const choosing=dialog.open||reportedFace;dialog.close();pending=null;reportedFace=0;if(choosing)notice('The shared game updated. Choose your score again.');}
    const redraw=changed||!onlineConnected;
    const previous=onlineRoom?.code===room.code?game:null;
-   onlineRoom=room;onlineUserId=userId;onlineConnected=connected;game=room.game;
+   onlineRoom=room;onlineUserId=userId;onlineConnected=connected;game=room.game;syncHostedCommentary();
    if(redraw){render();celebrate(previous,game);}
   },
-  connection(connected){onlineConnected=connected;if(onlineRoom)render();},
+  connection(connected){onlineConnected=connected;syncHostedCommentary();if(onlineRoom)render();},
  },joinCode,view);
 }
 function cancelBonus(){if(dialog.dataset.bonusConfirmation){delete dialog.dataset.bonusConfirmation;reportedFace=0;render();}}
@@ -415,7 +459,7 @@ document.addEventListener('click',async e=>{
  const a=b.dataset.action;
  root.querySelector('.game-menu')?.removeAttribute('open');
  try{
-  if(a==='commentary-settings')commentarySession.open({isHost:isDiceHost(),gameId:game?.id||'setup',players:onlineRoom?[]:game?.players||[],scoreDialog:dialog});
+  if(a==='commentary-settings')await openCommentary();
   if(a==='camera-settings'||a==='capture-camera'){if(onlineRoom)throw Error('Hosted camera games are not enabled yet.');const {openCameraGame}=await import('./dice/camera-panel.js');await openCameraGame({getGame:()=>game,commit:(action,commandId)=>send(action,commandId),autoCapture:a==='capture-camera'});}
   if(a==='camera-test'){const {openDiceIdentificationTest}=await import('./dice/camera-panel.js');await openDiceIdentificationTest();}
   if(a==='start-camera')await send({type:'start',source:'camera'});
@@ -517,3 +561,9 @@ initialize();
 
 
 
+
+
+
+
+
+dialog.addEventListener('close',()=>hostedCommentary?.refreshSurface?.());

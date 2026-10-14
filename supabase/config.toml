@@ -4,3 +4,8 @@ project_id = "dice-clubhouse"
 # The function validates every user token against Supabase Auth itself, including
 # projects using asymmetric signing keys. An API key alone cannot authorise play.
 verify_jwt = false
+
+[functions.live-commentary]
+# Auth UUID is verified against Supabase Auth inside the function.
+verify_jwt = false
+

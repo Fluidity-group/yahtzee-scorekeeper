@@ -175,3 +175,34 @@ describe('conservative lease request timing',()=>{
   const pending=f.client.heartbeat();f.emit({jobId:'new',epoch:3,state:'completed',sequence:1});release({result:f.lease});await pending;expect(f.player.renew).not.toHaveBeenCalled();f.client.dispose();
  });
 });
+
+describe('verified lifecycle captions and explicit greeting allowance',()=>{
+ const greeting=f=>({...f.job('approved-greeting'),eventId:'lifecycle-accepted_intro_1',sourceCommandId:'accepted_intro_1',acceptedAt:'2026-10-14T20:00:00.000Z',purpose:'opening',lifecycleVerified:true,dependencyEventIds:['score']});
+ it('shows server-verified bounded lifecycle captions but never welcomes on hydration without an explicit accepted allowlist',async()=>{
+  const f=setup();f.setJobs([greeting(f)]);await f.client.refresh();expect(f.client.snapshot().captions).toHaveLength(1);expect(f.player.play).not.toHaveBeenCalled();
+  expect(f.client.allowGreeting({jobId:'approved-greeting',gameId:'game',profileVersion:1})).toBe(true);await f.client.refresh();await tick();expect(f.player.play).toHaveBeenCalledOnce();
+  expect(f.client.allowGreeting({jobId:'approved-greeting',gameId:'game',profileVersion:1})).toBe(false);await f.client.refresh();expect(f.player.play).toHaveBeenCalledOnce();f.client.dispose();
+ });
+ it('an explicitly allowed pending intro survives initial hydration and plays once after becoming ready',async()=>{
+  const f=setup(),intro=greeting(f);expect(f.client.allowGreeting({jobId:intro.id,gameId:'game',profileVersion:1})).toBe(true);f.setJobs([{...intro,status:'pending',caption:null}]);await f.client.refresh();expect(f.player.play).not.toHaveBeenCalled();f.setJobs([intro]);await f.client.refresh();await tick();expect(f.player.play).toHaveBeenCalledOnce();f.client.dispose();
+ });
+ it('rejects unverified/blank/malformed lifecycle references and wrong game/profile/guest allowances',async()=>{
+  const f=setup(),intro=greeting(f);f.setJobs([{...intro,id:'unverified',lifecycleVerified:false},{...intro,id:'blank-ref',eventId:''},{...intro,id:'bad-time',acceptedAt:'unknown'},{...intro,id:'bad-purpose',purpose:'hydrate'}]);await f.client.refresh();expect(f.client.snapshot().captions).toHaveLength(0);
+  expect(f.client.allowGreeting({jobId:intro.id,gameId:'other',profileVersion:1})).toBe(false);expect(f.client.allowGreeting({jobId:intro.id,gameId:'game',profileVersion:2})).toBe(false);f.client.update({...f.ctx,userId:'guest'});expect(f.client.allowGreeting({jobId:intro.id,gameId:'game',profileVersion:1})).toBe(false);f.client.dispose();
+ });
+ it('captured score correction cancels a playing intro; an unrelated new score does not',async()=>{
+  const f=setup(),intro=greeting(f);f.client.allowGreeting({jobId:intro.id,gameId:'game',profileVersion:1});f.setJobs([intro]);await f.client.refresh();await tick();
+  f.client.update({...f.ctx,game:{id:'game',events:[{id:'score',type:'score'},{id:'other-score',type:'score'}]}});f.setJobs([{...intro,status:'started'}]);await f.client.refresh();expect(f.player.stop).not.toHaveBeenCalled();
+  f.client.update({...f.ctx,game:{id:'game',events:[{id:'score',type:'score'},{id:'correct',type:'score-correction',target:'score'}]}});expect(f.player.stop).toHaveBeenCalledWith('facts-invalidated');f.client.dispose();
+ });
+});
+
+
+it('source-command allowance can arrive after pending hydration and matches only the verified lifecycle source once',async()=>{
+ const f=setup(),intro={...f.job('late-worker-greeting'),eventId:'lifecycle-late_source_01',sourceCommandId:'late_source_01',acceptedAt:'2026-10-14T20:00:00.000Z',purpose:'return',lifecycleVerified:true};
+ f.setJobs([{...intro,status:'pending',caption:null}]);await f.client.refresh();expect(f.client.allowGreeting({sourceCommandId:'late_source_01',gameId:'game'})).toBe(true);
+ f.setJobs([intro]);await f.client.refresh();await tick();expect(f.player.play).toHaveBeenCalledOnce();expect(f.client.allowGreeting({sourceCommandId:'late_source_01',gameId:'game'})).toBe(false);f.client.dispose();
+});
+it('does not mistake a source-command marker for a score replay allowance or an unbound lifecycle job',async()=>{
+ const f=setup();f.client.allowGreeting({sourceCommandId:'wanted_source_01',gameId:'game'});f.setJobs([{...f.job('ordinary-old-score'),sourceCommandId:'wanted_source_01'}, {...f.job('wrong-lifecycle'),eventId:'lifecycle-wrong_source_01',sourceCommandId:'wanted_source_01',purpose:'return',lifecycleVerified:true,acceptedAt:'2026-10-14T20:00:00.000Z'}]);await f.client.refresh();await tick();expect(f.player.play).not.toHaveBeenCalled();expect(f.client.snapshot().captions.map(c=>c.id)).toEqual(['ordinary-old-score']);f.client.dispose();
+});

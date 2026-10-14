@@ -29,7 +29,7 @@ final class CommentaryStreamDataSource extends BaseDataSource {
         if(spec.position!=0)throw new IOException("Streaming audio is not seekable");
         this.spec=spec; transferInitializing(spec);
         HttpURLConnection request=(HttpURLConnection)new URL(endpoint).openConnection(); connection=request;
-        request.setInstanceFollowRedirects(false);request.setConnectTimeout(5000);request.setReadTimeout(5000);
+        request.setInstanceFollowRedirects(false);request.setConnectTimeout(5000);request.setReadTimeout(12000);
         request.setRequestMethod("GET");
         request.setRequestProperty("Authorization","Bearer "+token);
         request.setRequestProperty("X-Commentary-Claim",claim);request.setRequestProperty("X-Commentary-Epoch",String.valueOf(epoch));request.setRequestProperty("X-Commentary-Device",device);request.setRequestProperty("Accept","audio/mpeg");
@@ -53,3 +53,4 @@ final class CommentaryStreamDataSource extends BaseDataSource {
         try{if(input!=null)input.close();}finally{input=null;if(started){started=false;transferEnded();}}
     }
 }
+

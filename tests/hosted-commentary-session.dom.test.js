@@ -5,7 +5,7 @@ const host='11111111-1111-4111-8111-111111111111',guest='22222222-2222-4222-8222
 const wait=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
 beforeAll(()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};});
 function fixture(userId=host){
- let profile={schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',voiceOption:'rachel',capabilities:{liveProviders:false,providerMode:'synthetic'}},personal={accountId:userId,version:0,displayName:'',gender:'',blurb:'',shareWithRoom:false},jobs=[];
+ let profile={schemaVersion:1,version:1,enabled:false,humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',voiceOption:'rachel',capabilities:{liveProviders:false,providerMode:'synthetic'}},personal={accountId:userId,version:0,displayName:'',gender:'',blurb:'',shareWithRoom:false},jobs=[];
  const room={id:roomId,hostId:host,members:[{userId:host},{userId:guest}],game:{id:'44444444-4444-4444-8444-444444444444',events:[{id:'score',type:'score'}]}};
  const request=vi.fn(async p=>{
   if(p.operation==='profile-read')return {result:{...profile}};
@@ -16,7 +16,7 @@ function fixture(userId=host){
   if(p.operation==='jobs-read')return {result:jobs};
   if(p.operation==='feedback'){jobs=jobs.map(j=>j.id===p.jobId?{...j,feedbackValue:p.value}:j);return {result:{jobId:p.jobId,value:p.value,basis:p.basis}};}
   if(p.operation==='forget-history'){jobs=[];return {result:{affectedJobs:1}};}
-  if(p.operation==='playback-acquire'||p.operation==='playback-heartbeat')return {result:{owner:host,device:'phone',epoch:1,expiresAt:9999999999999}};
+  if(p.operation==='playback-acquire'||p.operation==='playback-heartbeat')return {result:{owner:host,device:'phone',epoch:1,expiresAt:10015000,serverNowMs:10000000,remainingMs:15000}};
   if(p.operation==='playback-claim')return {result:{claimed:true,token:'claim-token'}};
   return {result:{accepted:true}};
  });
@@ -34,7 +34,7 @@ describe('hosted commentary session integration',()=>{
   const f=fixture();await f.session.open();const form=document.querySelector('[data-commentary-form]');expect(form.elements.voiceOption.value).toBe('rachel');expect(form.elements.humorIntensity.value).toBe('dark');expect(form.elements.frequency.value).toBe('');
   form.elements.enabled.checked=true;form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait();expect(f.request.mock.calls.some(([p])=>p.operation==='profile-update')).toBe(false);
   form.elements.frequency.value='highlights';form.elements.voiceOption.value='ditzy';form.elements.profanityAllowed.checked=false;form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait();
-  expect(f.request).toHaveBeenCalledWith({operation:'profile-update',roomId,expectedVersion:1,changes:{frequency:'highlights',voiceOption:'ditzy',humorIntensity:'dark',profanityAllowed:false}},{signal:expect.any(AbortSignal)});f.session.dispose();
+  expect(f.request).toHaveBeenCalledWith({operation:'profile-update',roomId,expectedVersion:1,changes:{enabled:true,frequency:'highlights',voiceOption:'ditzy',humorIntensity:'dark',profanityAllowed:false}},{signal:expect.any(AbortSignal)});f.session.dispose();
  });
  it('guests have disabled table settings but can edit/share their own optional profile without sending account UUID authority',async()=>{
   const f=fixture(guest);await f.session.open();expect(document.querySelector('[data-commentary-form] fieldset').disabled).toBe(true);const form=document.querySelector('[data-hosted-personal]');form.elements.accountGender.value='nonbinary';form.elements.accountBlurb.value='I pretend every score is a spreadsheet.';form.elements.shareWithRoom.checked=true;form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait();
@@ -75,3 +75,21 @@ it('browser host remains caption-only unless native audio availability is explic
  f.setJobs([{...f.job,status:'ready',profileVersion:2}]);await session.refresh();await wait();expect(f.player.play).not.toHaveBeenCalled();expect(f.request.mock.calls.some(([p])=>p.operation==='playback-acquire')).toBe(false);session.dispose();
 });
 
+
+
+
+it('silently rehydrates fresh background jobs on foreground return rather than replaying unseen remarks',async()=>{
+ const f=fixture();await f.session.open();const form=document.querySelector('[data-commentary-form]');form.elements.enabled.checked=true;form.elements.frequency.value='balanced';form.elements.listenerMuted.checked=false;form.elements.listenerMuted.dispatchEvent(new Event('change',{bubbles:true}));form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await wait();
+ f.session.update({...f.context,visible:false});f.setJobs([{...f.job,status:'ready',profileVersion:2}]);await f.session.refresh();f.session.update({...f.context,visible:true});await f.session.refresh();await wait();expect(f.player.play).not.toHaveBeenCalled();f.session.dispose();
+});
+
+it('shows only eligible utterances inline without a drawer, survives replacement, preserves score input focus and clears forgotten remarks',async()=>{
+ const f=fixture(guest);document.body.innerHTML='<main id="game"><div data-hosted-commentary-inline></div></main><dialog id="score"><input value="23"></dialog>';
+ const root=document.querySelector('#game'),score=document.querySelector('#score');f.session.mountSurface({root,scoreDialog:score});
+ f.setJobs([{...f.job,status:'ready',feedbackBasis:null}]);await f.session.refresh();expect(root.textContent).toBe('');
+ f.setJobs([f.job]);await f.session.refresh();expect(root.textContent).toContain('A remarkable joke');expect(document.querySelector('.hosted-commentary-drawer')).toBeNull();
+ const like=root.querySelector('[data-caption-feedback="like"]');expect(like.getAttribute('aria-label')).toBe('Like this remark');like.click();await wait();expect(f.request.mock.calls.find(([p])=>p.operation==='feedback')[0]).toEqual({operation:'feedback',roomId,jobId:f.job.id,value:'like',basis:'caption'});
+ root.innerHTML='<div data-hosted-commentary-inline></div>';f.session.mountSurface({root,scoreDialog:score});expect(root.querySelector('[aria-pressed="true"]')).not.toBeNull();
+ score.showModal();score.querySelector('input').focus();f.session.refreshSurface();expect([...root.querySelectorAll('button')].every(b=>b.disabled)).toBe(true);await f.session.refresh();expect(document.activeElement).toBe(score.querySelector('input'));expect(score.querySelector('input').value).toBe('23');
+ score.close();f.session.refreshSurface();root.querySelector('[data-inline-commentary-more]').click();await wait();expect(document.querySelector('.hosted-commentary-drawer')).not.toBeNull();document.querySelector('[data-caption-forget]').click();await wait();expect(root.textContent).toBe('');f.session.dispose();
+});

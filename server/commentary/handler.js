@@ -1,5 +1,5 @@
 import {CommentaryError} from './service.js';
-const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store'};
+const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store'};
 const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
 const allowed={
  'feedback':['operation','roomId','jobId','value','basis'],
@@ -48,3 +48,4 @@ export function commentaryHandler({service,authenticate}){
   }catch(error){return error instanceof CommentaryError?reply({error:error.message},error.status):reply({error:'Commentary is unavailable. Scoring can continue.'},500);}
  };
 }
+

@@ -9,11 +9,13 @@ const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 export function createHostedCommentarySession({request,player,deviceId,onNotice=()=>{},pollMs=2500,allowSyntheticPlayback=false,nativeAudioAvailable=false}={}) {
  let current=null,profile=null,personal=null,epoch=0,abort=new AbortController(),drawer=null,captionCleanup=()=>{},settingsCleanup=()=>{},timer=null,refreshing=null,disposed=false,listenerMuted=true;
  const intents=new Map();
+ let surfaceRoot=null,scoreDialog=null,inlineCleanup=()=>{},inlineNode=null,inlineMarkup=null;
  const key=()=>`${current?.room?.id||''}/${current?.userId||''}`;
  const authorized=()=>!disposed&&uuid.test(current?.userId||'')&&current?.room?.members?.some(member=>member.userId===current.userId)&&!!current.room.game;
  const isHost=()=>authorized()&&current.room.hostId===current.userId;
- const intent=()=>intents.get(key())||{enabled:false,frequencyChosen:false};
- const controller=createCommentaryClient({request,player,deviceId,allowSyntheticPlayback,onChange:()=>renderCaptions()});
+ const intent=()=>({...intents.get(key()),enabled:profile?.enabled===true,frequencyChosen:profile?.enabled===true||intents.get(key())?.frequencyChosen===true});
+ const makeController=()=>createCommentaryClient({request,player,deviceId,allowSyntheticPlayback,onChange:()=>{renderCaptions();refreshSurface();}});
+ let controller=makeController();
  const invoke=async(operation,payload={},signal=abort.signal)=>{
   if(!authorized())throw Error('Sign in at your table to use commentary.');
   const fence=epoch,result=await request({operation,roomId:current.room.id,...payload},{signal});
@@ -27,6 +29,22 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
   captionCleanup();root.innerHTML=renderCommentaryCaptions({...controller.snapshot(),canForgetHistory:authorized()});
   captionCleanup=bindCommentaryCaptions(root,{onClose:close,onFeedback:value=>controller.feedback(value),onForgetHistory:()=>controller.forgetHistory()});
  }
+ function refreshSurface(){
+  const root=surfaceRoot?.querySelector('[data-hosted-commentary-inline]');
+  if(!root){inlineCleanup();inlineCleanup=()=>{};inlineNode=null;inlineMarkup=null;return;}
+  const state=controller.snapshot(),caption=authorized()&&current.visible!==false&&current.connected!==false?state.captions?.filter(item=>['playback','caption'].includes(item.feedbackBasis)).at(-1):null;
+  const disabled=scoreDialog?.open===true;
+  const selected=['like','dislike'].includes(caption?.feedbackValue)?caption.feedbackValue:'';
+  const spoken=caption?.feedbackBasis==='playback';
+  const markup=caption?`<section class="hosted-commentary-inline" aria-label="Latest table commentary"><p>${esc(caption.caption)}</p><div class="hosted-commentary-inline-controls"><div class="caption-feedback" data-caption-feedback-group data-job-id="${esc(caption.id)}" data-feedback-basis="${caption.feedbackBasis}" data-feedback-value="${selected}" aria-label="${spoken?'Rate this spoken remark':'Rate this remark'}"><button type="button" data-caption-feedback="like" aria-label="${spoken?'Like this spoken remark':'Like this remark'}" aria-pressed="${selected==='like'}"${disabled?' disabled':''}>Like</button><button type="button" data-caption-feedback="dislike" aria-label="${spoken?'Dislike this spoken remark':'Dislike this remark'}" aria-pressed="${selected==='dislike'}"${disabled?' disabled':''}>Dislike</button><span data-caption-feedback-status role="status" aria-live="polite"></span></div><button type="button" data-inline-commentary-more${disabled?' disabled':''}>More commentary</button></div></section>`:'';
+  if(root===inlineNode&&markup===inlineMarkup)return;
+  const focused=root.contains(document.activeElement)?document.activeElement.dataset.captionFeedback||'more':null;
+  inlineCleanup();root.innerHTML=markup;inlineNode=root;inlineMarkup=markup;
+  inlineCleanup=bindCommentaryCaptions(root,{onFeedback:value=>{if(scoreDialog?.open)throw Error('Finish score entry first');return controller.feedback(value);}});
+  root.querySelector('[data-inline-commentary-more]')?.addEventListener('click',()=>{if(!scoreDialog?.open)void open({scoreDialog});});
+  if(focused&&!disabled)root.querySelector(focused==='more'?'[data-inline-commentary-more]':`[data-caption-feedback="${focused}"]`)?.focus({preventScroll:true});
+ }
+ function mountSurface({root,scoreDialog:dialog=null}={}){surfaceRoot=root;scoreDialog=dialog;refreshSurface();}
  function close(){captionCleanup();settingsCleanup();captionCleanup=settingsCleanup=()=>{};if(drawer?.open)drawer.close();drawer?.remove();drawer=null;}
  function reset(){epoch++;abort.abort();abort=new AbortController();refreshing=null;profile=personal=null;close();}
  async function refresh(){
@@ -38,9 +56,11 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
  }
  function update(next){
   if(disposed)return;
+  const returning=current&&(current.visible===false||current.connected===false)&&next?.visible!==false&&next?.connected!==false;
+  if(returning){controller.dispose();controller=makeController();}
   const before=`${current?.room?.id}/${current?.room?.game?.id}/${current?.userId}`,after=`${next?.room?.id}/${next?.room?.game?.id}/${next?.userId}`;
   if(before!==after||current?.room?.hostId!==next?.room?.hostId)reset();
-  current=next;sync();
+  current=next;sync();refreshSurface();
   clearInterval(timer);timer=null;
   if(authorized()&&current.connected!==false){void refresh();if(pollMs>0)timer=setInterval(()=>{void refresh();},pollMs);}
  }
@@ -78,19 +98,25 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
    const settings=intent(),shown=profile?{...profile,frequency:settings.frequencyChosen?profile.frequency:''}:null;
    panel.innerHTML='<div data-hosted-settings></div><div data-hosted-personal-root></div><div data-hosted-captions></div><p class="hosted-commentary-retention">Commentary history and ratings last up to 90 days. Forget history removes these memories; your profile remains editable above.</p>';
    let settingsVersion=profile?.version||1;
-   const settingsRoot=panel.querySelector('[data-hosted-settings]');settingsRoot.innerHTML=renderCommentarySettings({profile:shown,enabled:settings.enabled,listenerMuted:listenerMuted||!isHost()||!nativeAudioAvailable,isHost:isHost(),connected:!!profile?.capabilities?.liveProviders,id:'hosted-commentary'}).replace('Enable table commentary','Enable commentary on the host phone');
+   const settingsRoot=panel.querySelector('[data-hosted-settings]');settingsRoot.innerHTML=renderCommentarySettings({profile:shown,enabled:settings.enabled,listenerMuted:listenerMuted||!isHost()||!nativeAudioAvailable,isHost:isHost(),connected:!!profile?.capabilities?.liveProviders,id:'hosted-commentary'});
    settingsCleanup=bindCommentarySettings(settingsRoot,{onClose:close,onListenerMute:value=>{listenerMuted=value;sync();},onTableSettings:async value=>{
     if(!isHost())throw Error('The host controls table commentary.');
     if(!value.profile&&value.enabled)throw Error('Choose a commentary frequency.');
+    const expectedGameId=current.room.game.id;let greeting=null;
     const explicit=value.profile&&['highlights','balanced','lively'].includes(value.profile.frequency);
-    if(explicit){try{profile=await invoke('profile-update',{expectedVersion:settingsVersion,changes:{humorIntensity:value.profile.humorIntensity,profanityAllowed:value.profile.profanityAllowed,frequency:value.profile.frequency,voiceOption:value.profile.voiceOption}});settingsVersion=profile.version;}catch{throw Error('Could not save table settings. Reopen commentary and try again.');}}
-    intents.set(key(),{enabled:value.enabled,frequencyChosen:!!explicit});sync();await refresh();
+    const form=settingsRoot.querySelector('[data-commentary-form]');
+    try{profile=await invoke('profile-update',{expectedVersion:settingsVersion,changes:{enabled:value.enabled,humorIntensity:form.elements.humorIntensity.value,profanityAllowed:form.elements.profanityAllowed.checked,frequency:explicit?value.profile.frequency:profile.frequency,voiceOption:form.elements.voiceOption.value}});settingsVersion=profile.version;greeting=profile.greetingJobId?{jobId:profile.greetingJobId,gameId:expectedGameId,profileVersion:profile.version}:null;}catch{throw Error('Could not save table settings. Reopen commentary and try again.');}
+    intents.set(key(),{enabled:value.enabled,frequencyChosen:!!explicit});sync();await refresh();if(greeting&&controller.allowGreeting(greeting))await controller.refresh();
    }});
    const personalRoot=panel.querySelector('[data-hosted-personal-root]');personalRoot.innerHTML=personalForm();bindPersonal(personalRoot);renderCaptions();return true;
   }catch{if(drawer===panel){panel.querySelector('p').textContent='Commentary is unavailable. Close this panel and keep playing.';}return false;}
  }
- return {update,refresh,open,close,snapshot:()=>controller.snapshot(),dispose(){if(disposed)return;clearInterval(timer);reset();controller.dispose();disposed=true;current=null;}};
+ return {update,refresh,open,close,mountSurface,refreshSurface,allowGreeting:async metadata=>{await refresh();if(controller.allowGreeting(metadata)){await controller.refresh();return true;}return false;},snapshot:()=>controller.snapshot(),dispose(){if(disposed)return;clearInterval(timer);reset();controller.dispose();disposed=true;current=null;refreshSurface();inlineCleanup();surfaceRoot=null;}};
 }
+
+
+
+
 
 
 

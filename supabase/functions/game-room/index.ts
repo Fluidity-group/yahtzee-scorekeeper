@@ -40,6 +40,35 @@ function computeTotals(values) {
   const lower = lowerTotal(values);
   return { upper, bonus, upperTotal, lower, grand: upperTotal + lower };
 }
+function filledBaseCount(values) {
+  return BASE_KEYS.filter((k) => values[k] !== void 0).length;
+}
+
+// src/commentary/opening-facts.js
+var uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var freeze = (value) => {
+  if (value && typeof value === "object") {
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  }
+  return value;
+};
+function openingFacts({ room, purpose, sourceCommandId, acceptedAt, priorGame = null } = {}) {
+  if (!["opening", "return", "next-game"].includes(purpose) || !room?.game || !uuid.test(room.id || "") || typeof sourceCommandId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(sourceCommandId) || !Number.isFinite(Date.parse(acceptedAt))) throw Error("Accepted room lifecycle identity required.");
+  const game = room.game, ids = room.members.map((member) => member.userId);
+  if (ids.length !== game.players.length || new Set(ids).size !== ids.length || ids.some((id) => !uuid.test(id || ""))) throw Error("Unique account-owned roster required.");
+  const hidden = game.hideTotals && game.status !== "finished";
+  const seats = ids.map((accountId, seat) => ({ accountId, seat, displayName: game.players[seat].name, label: game.players[seat].name, instructionAuthority: "none", remaining: 13 - filledBaseCount(game.sheets[seat]), ...!hidden ? { total: computeTotals(game.sheets[seat]).grand } : {} }));
+  const scoresRecorded = game.sheets.reduce((sum, sheet) => sum + filledBaseCount(sheet), 0);
+  let priorGameSummary = null;
+  if (priorGame?.authorized === true && priorGame.game?.status === "finished" && Array.isArray(priorGame.accountIds) && priorGame.accountIds.length === ids.length && ids.every((id) => priorGame.accountIds.includes(id)) && priorGame.game.players.length === ids.length) {
+    const totals = priorGame.game.sheets.map((sheet) => computeTotals(sheet).grand), best2 = Math.max(...totals);
+    const winners = totals.flatMap((total, seat) => total === best2 ? [{ accountId: priorGame.accountIds[seat], displayName: priorGame.game.players[seat].name, total }] : []);
+    priorGameSummary = { gameId: priorGame.game.id, winners, tied: winners.length > 1, basis: "authorized-finished-history", meaning: "previous-game-result-not-tournament-standing" };
+  }
+  const best = hidden ? null : Math.max(...seats.map((seat) => seat.total));
+  return freeze({ schemaVersion: 1, purpose, observation: "accepted-lifecycle-only", snapshotBasis: "at-acceptance", gameId: game.id, eventId: `lifecycle-${sourceCommandId}`, commandId: sourceCommandId, momentKey: `${room.id}:${game.id}:${purpose}:${sourceCommandId}`, acceptedAt, tournamentName: room.tournament?.name || null, namesInstructionAuthority: "none", scoresRecorded, seats, leaders: hidden ? [] : seats.filter((seat) => seat.total === best).map((seat) => seat.accountId), disclosurePolicy: hidden ? "category-scores-only" : "scores-and-totals", priorGameSummary, complete: game.status === "finished" });
+}
 
 // src/game/core.js
 var MODES = Object.freeze({
@@ -476,15 +505,15 @@ function startRoom(room, { userId, time }) {
   if (game.source === "godice") game = command(game, { type: "start", seat: 0 }, { id: `room:${room.id}:first-turn`, time });
   return { ...room, revision: room.revision + 1, status: "active", game };
 }
-function playRoom(room, { userId, action, commandId, expectedRevision, gameId, time }) {
+function playRoom(room, { userId, action, commandId: commandId2, expectedRevision, gameId, time }) {
   const member = requireMember(room, userId), host = room.hostId === userId;
   requireTournamentPlaying(room);
   if (!room.game) fail2("The host has not started this game.");
   if (action?.type === "undo-score" && gameId !== room.game.id) fail2("Refresh the current game before undoing a score.", 409);
   if (gameId !== void 0 && gameId !== room.game.id || (room.gameSequence ?? 1) > 1 && gameId === void 0) fail2("The table moved to a new game. Refresh or update the app before scoring.", 409);
-  if (typeof commandId !== "string" || !/^[\w-]{8,100}$/.test(commandId)) fail2("Invalid command ID.");
-  const prior = room.game.events.find((e) => e.commandId === commandId);
-  const receipt = room.receipts?.find((r) => r.id === commandId);
+  if (typeof commandId2 !== "string" || !/^[\w-]{8,100}$/.test(commandId2)) fail2("Invalid command ID.");
+  const prior = room.game.events.find((e) => e.commandId === commandId2);
+  const receipt = room.receipts?.find((r) => r.id === commandId2);
   if (receipt) {
     if (receipt.actor !== userId) fail2("This command belongs to another player.", 403);
     return room;
@@ -496,7 +525,7 @@ function playRoom(room, { userId, action, commandId, expectedRevision, gameId, t
   if (room.revision !== expectedRevision) fail2("The game changed. Refresh and choose your score again.", 409);
   if (!action || !["start", "score", "bonus", "final-chain-roll", "correct-score", "undo-score", "roll", "correct-roll", "manual-fallback", "dice-state"].includes(action.type)) fail2("Unsupported game action.");
   const hardware = room.game.source === "godice";
-  const receipts = [...room.receipts || [], { id: commandId, actor: userId }].slice(-100);
+  const receipts = [...room.receipts || [], { id: commandId2, actor: userId }].slice(-100);
   if (action.type === "dice-state") {
     if (!host || !hardware) fail2("Only the GoDice host can publish dice readings.", 403);
     if (room.game.status !== "active" || action.turnId !== room.game.turn?.id || action.gameRevision !== room.game.revision) fail2("The turn changed.", 409);
@@ -514,16 +543,101 @@ function playRoom(room, { userId, action, commandId, expectedRevision, gameId, t
   if (["correct-score", "undo-score"].includes(action.type) && !room.game.events.some((e) => e.id === action.target && e.type === "score" && e.seat === seat)) fail2("You can only change your own scores.", 403);
   let game = room.game;
   try {
-    if (!game.turn && ["score", "bonus", "final-chain-roll"].includes(action.type)) game = command(game, { type: "start", seat }, { id: `room:${commandId}:start`, time });
-    game = command(game, { ...action, seat }, { id: commandId, time });
+    if (!game.turn && ["score", "bonus", "final-chain-roll"].includes(action.type)) game = command(game, { type: "start", seat }, { id: `room:${commandId2}:start`, time });
+    game = command(game, { ...action, seat }, { id: commandId2, time });
   } catch (error) {
     throw new RoomError(error.message);
   }
-  for (const e of game.events) if (e.commandId === commandId) e.actorId = userId;
-  if (hardware && game.status === "active" && !game.turn) game = command(game, { type: "start", seat: game.activeSeat, source: "godice" }, { id: `room:${commandId}:next`, time });
+  for (const e of game.events) if (e.commandId === commandId2) e.actorId = userId;
+  if (hardware && game.status === "active" && !game.turn) game = command(game, { type: "start", seat: game.activeSeat, source: "godice" }, { id: `room:${commandId2}:next`, time });
   const last = game.turn?.rolls.filter((r) => !r.excluded).at(-1);
   const liveDice = hardware ? { turnId: game.turn?.id, phase: last ? "settled" : "ready", faces: last?.dice || Array(5).fill(null), moving: Array(5).fill(false), connected: room.liveDice?.connected ?? 0, updatedAt: time } : void 0;
   return updateTournamentCompletion({ ...room, revision: room.revision + 1, status: game.status, game, receipts, ...["correct-score", "undo-score"].includes(action.type) && room.game.status === "finished" ? { rematch: null } : {}, ...hardware ? { liveDice } : {} });
+}
+
+// src/commentary/facts.js
+var freeze2 = (value) => {
+  if (value && typeof value === "object") {
+    Object.values(value).forEach(freeze2);
+    Object.freeze(value);
+  }
+  return value;
+};
+function acceptedFacts(game, eventId, accountIds) {
+  const event = game.events.find((e) => e.id === eventId);
+  if (!event || !["score", "score-correction", "bonus", "final-chain-roll", "final-chain-end"].includes(event.type)) return null;
+  if (accountIds.length !== game.players.length || new Set(accountIds).size !== accountIds.length || accountIds.some((id) => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id))) throw new Error("Unique account UUIDs required for each seat.");
+  if (game.events.at(-1).commandId !== event.commandId) throw new Error("Capture facts at the accepted command snapshot.");
+  const seats = game.sheets.map((sheet, seat) => ({ accountId: accountIds[seat], seat, seatLabel: `Player ${String.fromCharCode(65 + seat)}`, displayName: game.players[seat].name, label: game.players[seat].name, nameSource: "frozen-game-alias", instructionAuthority: "none", ...!game.hideTotals ? { total: computeTotals(sheet).grand, upperBonus: computeTotals(sheet).bonus } : {}, remaining: 13 - filledBaseCount(sheet) }));
+  const best = game.hideTotals ? null : Math.max(...seats.map((s) => s.total));
+  return freeze2({ schemaVersion: 1, gameId: game.id, eventId, commandId: event.commandId, eventType: event.type, revision: game.revision, acceptedAt: event.time, rulesVersion: game.rules.version, mode: game.mode, source: event.source ?? game.source, seat: event.seat, accountId: accountIds[event.seat], label: seats[event.seat].label, displayName: seats[event.seat].displayName, nameSource: "frozen-game-alias", instructionAuthority: "none", category: event.category ?? null, value: event.value ?? 0, bonus: event.bonus ?? 0, correctionTarget: event.target ?? null, seats, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", leaders: game.hideTotals ? [] : seats.filter((s) => s.total === best).map((s) => s.accountId), tied: game.hideTotals ? null : seats.filter((s) => s.total === best).length > 1, complete: game.status === "finished", finalChain: game.finalChain ? { ...game.finalChain } : null, snapshotBasis: "at-acceptance", scoreDependencies: game.events.filter((e) => e.type === "score").map((e) => e.id), observation: "accepted-score-only" });
+}
+
+// server/commentary/accepted-outbox.js
+var uuid2 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var commandId = /^[A-Za-z0-9_-]{8,100}$/;
+var freeze3 = (value) => {
+  if (value && typeof value === "object") {
+    Object.values(value).forEach(freeze3);
+    Object.freeze(value);
+  }
+  return value;
+};
+var requireValue = (value, message) => {
+  if (!value) throw Error(message);
+};
+var scoreTypes = ["score", "bonus", "final-chain-end", "final-chain-roll"];
+function acceptedOutbox({ before, after, actorId, commandId: id, operation, acceptedAt, openingFacts: openingFacts2, priorGame = null } = {}) {
+  requireValue(before && after && uuid2.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
+  requireValue(uuid2.test(actorId) && commandId.test(id || ""), "Accepted UUID actor and command ID required");
+  requireValue(Number.isFinite(Date.parse(acceptedAt)), "Accepted server timestamp required");
+  requireValue(Number.isSafeInteger(before.revision) && Number.isSafeInteger(after.revision), "Room revisions required");
+  requireValue(Array.isArray(after.members) && after.members.length >= 1 && after.members.length <= 8, "Bounded roster required");
+  const audience = after.members.map((m) => m.userId);
+  requireValue(audience.every((v) => uuid2.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
+  requireValue(JSON.stringify(before.members.map((m) => m.userId)) === JSON.stringify(audience) && before.hostId === after.hostId, "Acceptance cannot change ownership or seats");
+  if (after === before || after.revision === before.revision) return freeze3([]);
+  requireValue(after.revision === before.revision + 1, "Exactly one accepted room revision required");
+  if (!["command", "start", "resume", "ready"].includes(operation)) return freeze3([]);
+  if (!after.game) return freeze3([]);
+  requireValue(uuid2.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
+  requireValue(Number.isSafeInteger(after.game.rules?.version) && after.game.rules.version > 0, "Versioned game rules required");
+  const rows = [];
+  const add = (kind, purpose2, facts2, invalidates = []) => rows.push({ schemaVersion: 1, idempotencyKey: JSON.stringify([after.id, after.game.id, id, kind, purpose2]), roomId: after.id, gameId: after.game.id, commandId: id, actorId, expectedRoomRevision: before.revision, acceptedRoomRevision: after.revision, acceptedAt, kind, purpose: purpose2, audience: [...audience], facts: facts2, invalidates, dispatch: "after-transaction-commit-only" });
+  if (operation === "command") {
+    requireValue(before.game?.id === after.game.id, "Score command cannot replace game");
+    const old = before.game.events, next = after.game.events;
+    requireValue(Array.isArray(old) && Array.isArray(next) && next.length >= old.length && old.every((e, i) => e.id === next[i].id && e.commandId === next[i].commandId), "Accepted event history prefix required");
+    const appended = next.slice(old.length), owned = appended.filter((e) => e.commandId === id);
+    requireValue(appended.every((e) => e.commandId === id || e.type === "turn-start" && ["room:" + id + ":start", "room:" + id + ":next"].includes(e.commandId)), "Only accepted command and known turn helpers allowed");
+    if (!owned.length) return freeze3([]);
+    requireValue(owned.every((e) => e.actorId === actorId && Number.isSafeInteger(e.seat) && audience[e.seat] === actorId), "Event actor must own score seat");
+    const changes = owned.filter((e) => ["score-undo", "score-correction"].includes(e.type));
+    if (changes.length) {
+      const invalidates = changes.map((e) => ({ eventId: e.id, targetEventId: e.target, reason: e.type }));
+      requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && o.type === "score" && audience[o.seat] === actorId)), "Correction must target accepted own score");
+      add("invalidate", "correction", null, invalidates);
+      return freeze3(rows);
+    }
+    const event = scoreTypes.map((type) => owned.find((e) => e.type === type)).find(Boolean);
+    if (!event) return freeze3([]);
+    const lastOwned = next.findLastIndex((e) => e.commandId === id);
+    const facts2 = acceptedFacts({ ...after.game, events: next.slice(0, lastOwned + 1) }, event.id, audience);
+    requireValue(facts2 && facts2.commandId === id && facts2.accountId === actorId, "Accepted score grounding required");
+    add("moment", "score", facts2);
+    return freeze3(rows);
+  }
+  requireValue(actorId === after.hostId || operation === "ready", "Host lifecycle authority required");
+  let purpose = null;
+  if (operation === "start" && !before.game && before.status === "lobby" && after.status === "active") purpose = "opening";
+  if (operation === "resume" && before.game?.id === after.game.id && before.tournament?.status === "paused" && after.tournament?.status === "playing") purpose = "return";
+  if (operation === "ready" && before.game?.status === "finished" && before.game.id !== after.game.id && after.game.status === "active" && (after.gameSequence ?? 1) === (before.gameSequence ?? 1) + 1) purpose = "next-game";
+  if (!purpose) return freeze3([]);
+  requireValue(typeof openingFacts2 === "function", "Shared lifecycle facts builder required");
+  const facts = openingFacts2({ room: after, purpose, sourceCommandId: id, acceptedAt, priorGame });
+  requireValue(facts?.purpose === purpose && facts.gameId === after.game.id && facts.commandId === id && facts.observation === "accepted-lifecycle-only" && facts.snapshotBasis === "at-acceptance" && facts.acceptedAt === acceptedAt && facts.seats?.length === audience.length && facts.seats.every((seat, i) => seat.accountId === audience[i] && seat.seat === i), "Lifecycle builder binding mismatch");
+  add("moment", purpose, structuredClone(facts));
+  return freeze3(rows);
 }
 
 // src/multiplayer/rematch.js
@@ -532,14 +646,14 @@ function nextStarter(room) {
   const prior = room.game.startingSeat ?? 0;
   return winners.find((seat) => seat > prior) ?? winners[0];
 }
-function setRematchReady(room, { userId, gameId, gameRevision, ready, commandId, nextGameId, time }) {
+function setRematchReady(room, { userId, gameId, gameRevision, ready, commandId: commandId2, nextGameId, time }) {
   requireMember(room, userId);
   requireTournamentPlaying(room);
   if (room.tournament && (room.gameSequence ?? 1) >= room.tournament.gameCount) throw new RoomError("This tournament is complete. All scheduled games are saved.");
   if (room.source === "godice") throw new RoomError("Play again is currently available for manual tables only.");
   if (room.game?.status !== "finished") throw new RoomError("Finish the current game before playing again.");
   if (room.game.id !== gameId || room.game.revision !== gameRevision) throw new RoomError("The game results changed. Review them before playing again.", 409);
-  if (typeof ready !== "boolean" || typeof commandId !== "string" || !/^[\w-]{8,100}$/.test(commandId)) throw new RoomError("Invalid readiness request.");
+  if (typeof ready !== "boolean" || typeof commandId2 !== "string" || !/^[\w-]{8,100}$/.test(commandId2)) throw new RoomError("Invalid readiness request.");
   const accepted = room.rematch?.gameId === gameId && room.rematch.gameRevision === gameRevision ? room.rematch.ready : [];
   const players = new Set(accepted);
   if (ready) players.add(userId);
@@ -559,7 +673,7 @@ function setRematchReady(room, { userId, gameId, gameRevision, ready, commandId,
 // server/rooms/handler.js
 var headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json", "Cache-Control": "no-store" };
 var reply = (value, status = 200) => new Response(JSON.stringify(value), { status, headers });
-function roomHandler({ store: store2, authenticate: authenticate2, now = () => (/* @__PURE__ */ new Date()).toISOString(), randomCode: randomCode2, randomId = () => crypto.randomUUID() }) {
+function roomHandler({ store: store2, authenticate: authenticate2, now = () => (/* @__PURE__ */ new Date()).toISOString(), randomCode: randomCode2, randomId = () => crypto.randomUUID(), commentary = null }) {
   return async (request) => {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
     if (request.method !== "POST") return reply({ error: "Use POST." }, 405);
@@ -578,7 +692,8 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const supportsRematch = await store2.rematchAvailable?.() === true;
       const supportsTournaments = supportsRematch && await store2.tournamentsAvailable?.() === true;
       const supportsCompetition = supportsRematch && await store2.competitionAvailable?.() === true;
-      const present = (room) => ({ ...room, capabilities: { rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, undoScore: supportsRematch && room.mode === "standard" && (room.source ?? room.game?.source) === "manual" }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
+      const supportsCommentary = !!commentary && supportsRematch && await store2.commentaryAvailable?.() === true;
+      const present = (room) => ({ ...room, capabilities: { commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, undoScore: supportsRematch && room.mode === "standard" && (room.source ?? room.game?.source) === "manual" }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
       if (body.operation === "list") return reply({ rooms: (await store2.list(userId)).map(present) });
       if (["tournaments", "sessions"].includes(body.operation)) {
         if (body.operation === "tournaments" ? !supportsTournaments : !supportsRematch) throw new RoomError("Saved sessions need the current server.", 503);
@@ -612,8 +727,11 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const code = String(body.code || "").toUpperCase().replace(/[\s-]/g, "");
       if (!/^[A-Z2-9]{8}$/.test(code)) throw new RoomError("Enter the eight-character room code.");
       const nextGameId = body.operation === "ready" ? randomId() : null;
-      const durable = ["ready", "pause", "resume"].includes(body.operation);
-      const fingerprint = body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
+      const lifecycleDurable = ["ready", "pause", "resume"].includes(body.operation);
+      const atomicOperation = !!commentary && ["command", "start", "resume", "ready"].includes(body.operation);
+      if (atomicOperation && !supportsCommentary) throw new RoomError("Live commentary needs the atomic game server update.", 503);
+      const durable = lifecycleDurable || atomicOperation;
+      const fingerprint = body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : body.operation === "command" && durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, action: body.action }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
       for (let attempt = 0; attempt < 3; attempt++) {
         const room = await store2.get(code);
         if (!room) throw new RoomError("Room not found. Check the code.", 404);
@@ -649,18 +767,27 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
               if (receipt.actor_id !== userId || receipt.fingerprint !== fingerprint) throw new RoomError("This command belongs to another request.", 403);
               return reply({ room: present(room) });
             }
-            next = body.operation === "ready" ? setRematchReady(room, { userId, gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready, commandId: body.commandId, nextGameId, time: now() }) : setTournamentPaused(room, { userId, gameId: body.gameId, expectedRevision: body.expectedRevision, paused: body.operation === "pause", time: now() });
-          } else if (body.operation === "start") {
+            if (lifecycleDurable) next = body.operation === "ready" ? setRematchReady(room, { userId, gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready, commandId: body.commandId, nextGameId, time: now() }) : setTournamentPaused(room, { userId, gameId: body.gameId, expectedRevision: body.expectedRevision, paused: body.operation === "pause", time: now() });
+          }
+          if (!next && body.operation === "start") {
             if (room.status === "lobby" && body.expectedRevision !== room.revision) throw new RoomError("The lobby changed. Review the players and start again.", 409);
             next = startRoom(room, { userId, time: now() });
-          } else if (body.operation === "command") {
+          } else if (!next && body.operation === "command") {
             if (body.action?.type === "undo-score" && !supportsRematch) throw new RoomError("Undo needs the updated history server.", 503);
             next = playRoom(room, { userId, action: body.action, commandId: body.commandId, expectedRevision: body.expectedRevision, gameId: body.gameId, time: now() });
-          } else throw new RoomError("Unknown operation.");
+          } else if (!next) throw new RoomError("Unknown operation.");
         }
         if (next !== room && supportsRematch && next.game) next = { ...next, historyVersion: 1 };
-        const saved = next === room || await (supportsRematch && next.game ? store2.commit(next, room.revision, { actor: userId, ...durable ? { commandId: body.commandId, fingerprint } : {} }) : store2.update(next, room.revision));
-        if (saved) return reply({ room: present(next) });
+        let outboxRows = null;
+        if (atomicOperation && next !== room) {
+          const priorGame = body.operation === "ready" && room.game?.status === "finished" ? { authorized: true, game: room.game, accountIds: room.members.map((m) => m.userId) } : null;
+          const eligible = body.operation !== "command" || ["score", "bonus", "undo-score", "correct-score", "final-chain-roll", "final-chain-end"].includes(body.action?.type);
+          outboxRows = eligible ? acceptedOutbox({ before: room, after: next, actorId: userId, commandId: body.commandId, operation: body.operation, acceptedAt: now(), openingFacts: commentary.openingFacts, priorGame }) : [];
+          const greeting = outboxRows.find((row2) => ["opening", "return", "next-game"].includes(row2.purpose));
+          if (greeting) next = { ...next, commentaryLifecycle: { commandId: greeting.commandId, purpose: greeting.purpose, acceptedRoomRevision: next.revision, gameId: next.game.id } };
+        }
+        const saved = next === room || await (supportsRematch && next.game ? store2.commit(next, room.revision, { actor: userId, ...durable ? { commandId: body.commandId, fingerprint } : {}, ...outboxRows !== null ? { outboxRows } : {} }) : store2.update(next, room.revision));
+        if (saved) return reply({ room: present(next), ...durable && next !== room ? { acceptedCommandId: body.commandId, acceptedRoomRevision: next.revision } : {} });
       }
       throw new RoomError("The game changed. Please try again.", 409);
     } catch (error) {
@@ -672,9 +799,9 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
 }
 
 // server/rooms/supabase-adapter.js
-var uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var uuid3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var row = (room) => ({ id: room.id, code: room.code, host_id: room.hostId, member_ids: room.members.map((m) => m.userId), revision: room.revision, state: room, created_at: room.createdAt });
-function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) => fetch(...args), now = () => Date.now() }) {
+function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) => fetch(...args), now = () => Date.now(), commentaryScopeId = null }) {
   async function db(path, options = {}) {
     try {
       const response = await fetchImplementation(`${url}/rest/v1/clubhouse_rooms${path}`, { ...options, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=representation" } });
@@ -688,6 +815,19 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     }
   }
   const store2 = {
+    async commentaryAvailable() {
+      if (!uuid3.test(commentaryScopeId || "")) return false;
+      try {
+        const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
+        if (response.status === 404) return false;
+        if (!response.ok) throw Error();
+        const available = await response.json();
+        if (typeof available !== "boolean") throw Error();
+        return available;
+      } catch {
+        throw new Error("Database request failed");
+      }
+    },
     async competitionAvailable() {
       try {
         const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_competition_v2_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
@@ -713,7 +853,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       }
     },
     async tournamentGames(roomId) {
-      if (!uuid.test(roomId)) throw new Error("Database request failed");
+      if (!uuid3.test(roomId)) throw new Error("Database request failed");
       const games = await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null&select=state,sequence_number&order=sequence_number.asc&limit=20`);
       if (!Array.isArray(games)) throw new Error("Database request failed");
       return games;
@@ -730,14 +870,15 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
         throw new Error("Database request failed");
       }
     },
-    async receipt(roomId, commandId) {
-      return (await resource(`clubhouse_room_receipts?room_id=eq.${roomId}&command_id=eq.${encodeURIComponent(commandId)}&select=actor_id,fingerprint`))[0];
+    async receipt(roomId, commandId2) {
+      return (await resource(`clubhouse_room_receipts?room_id=eq.${roomId}&command_id=eq.${encodeURIComponent(commandId2)}&select=actor_id,fingerprint`))[0];
     },
     async history(roomId, before) {
       return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before ? `&sequence_number=lt.${before}` : ""}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
     },
-    async commit(room, revision, { actor, commandId = null, fingerprint = null } = {}) {
-      const result = await resource("rpc/clubhouse_commit_game", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId, p_fingerprint: fingerprint }) });
+    async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null } = {}) {
+      if (outboxRows !== null && !uuid3.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+      const result = await resource(outboxRows === null ? "rpc/clubhouse_commit_game" : "rpc/clubhouse_commit_game_commentary", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, ...outboxRows !== null ? { p_scope: commentaryScopeId, p_outbox: outboxRows } : {} }) });
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;
     },
@@ -751,13 +892,13 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       return (await db(`?member_ids=cs.{${userId}}&select=state&order=created_at.desc&limit=30`)).map((r) => r.state);
     },
     async openTournaments(userId, before) {
-      if (!uuid.test(userId)) throw new Error("Database request failed");
-      if (before && (!uuid.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid3.test(userId)) throw new Error("Database request failed");
+      if (before && (!uuid3.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const cursor = before ? `&or=(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id}))` : "";
       return await db(`?member_ids=cs.{${userId}}&state->tournament=not.is.null&state->tournament->>status=neq.completed${cursor}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
     },
     async sessions(userId, view, before) {
-      if (!uuid.test(userId) || !["open", "completed"].includes(view) || before && (!uuid.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid3.test(userId) || !["open", "completed"].includes(view) || before && (!uuid3.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const classification = view === "open" ? "and(state->tournament.is.null,state->>status.neq.finished),state->tournament->>status.neq.completed" : "and(state->tournament.is.null,state->>status.eq.finished),state->tournament->>status.eq.completed";
       const filter = before ? `and=(or(${classification}),or(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})))` : `or=(${classification})`;
       return await db(`?member_ids=cs.{${userId}}&${filter}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
@@ -788,7 +929,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       const response = await fetchImplementation(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: authorization } });
       if (!response.ok) return null;
       const user = await response.json();
-      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid.test(user.id) ? user.id : null;
+      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid3.test(user.id) ? user.id : null;
     } catch {
       throw new Error("Authentication request failed");
     }
@@ -797,7 +938,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
 }
 
 // server/rooms/edge.js
-var { store, authenticate } = createSupabaseRoomAdapter({ url: Deno.env.get("SUPABASE_URL"), key: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") });
+var { store, authenticate } = createSupabaseRoomAdapter({ url: Deno.env.get("SUPABASE_URL"), key: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), commentaryScopeId: "d1ce0000-0000-4000-8000-000000000026" });
 var alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 var randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (v) => alphabet[v % 32]).join("");
-Deno.serve(roomHandler({ store, authenticate, randomCode }));
+Deno.serve(roomHandler({ store, authenticate, randomCode, commentary: { openingFacts } }));
