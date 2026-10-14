@@ -1,4 +1,4 @@
-/* empty css                  */import{D as h}from"./capture-Cnkd4T2-.js";const t=new h;let $=0;const p=e=>String(e).replace(/[&<>"']/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[a]);document.body.innerHTML=`<main class="dice-lab"><a class="core-legacy" href="/">← Back to game</a>
+/* empty css                  */import{D as h}from"./capture-DuxO5xoK.js";const t=new h;let $=0;const p=e=>String(e).replace(/[&<>"']/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[a]);document.body.innerHTML=`<main class="dice-lab"><a class="core-legacy" href="/">← Back to game</a>
  <div class="intro-kicker">HARDWARE PREPARATION</div><h1>Dice capture lab</h1>
  <p class="simulation-note">Simulation only · No Bluetooth connection or game scores are changed here.</p>
  <p class="core-muted">Test five-dice capture, held dice and disconnects before connecting real hardware. The GoDice API adapter is pending commercial licence clarification.</p>
