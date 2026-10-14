@@ -1,0 +1,13 @@
+{
+  "appId": "com.fluiditygroup.diceclubhouse.dev",
+  "appName": "Dice Clubhouse Dev",
+  "webDir": "dist-native",
+  "android": {
+    "backgroundColor": "#0b141c"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Dice table game authority
+After=network.target
+
+[Service]
+User=dice
+Group=dice
+WorkingDirectory=/opt/dice-table/current
+EnvironmentFile=/etc/dice-table/game.env
+ExecStart=/usr/bin/node device/pi/game-host.mjs
+Restart=on-failure
+RestartSec=3
+StateDirectory=dice-table
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dice-table
+
+[Install]
+WantedBy=multi-user.target

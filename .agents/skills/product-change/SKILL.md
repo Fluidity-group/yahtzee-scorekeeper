@@ -1,0 +1,15 @@
+---
+name: product-change
+description: Implement a substantial product feature or behavior change with acceptance criteria, relevant contracts and durable completion evidence.
+---
+
+# product change
+
+For live game commentary, ElevenLabs playback, profanity controls or adaptive humor memory, also use `.agents/skills/live-commentary/SKILL.md` and `docs/handovers/2026-10-14-live-ai-commentary.md`. Commentary remains a separate workstream from outstanding manual-game acceptance.
+
+Resolve the active workstream from `docs/status.md` and `docs/project-memory.md`; a historical milestone is not the current priority. For hosted manual multiplayer, tournament, return, history or invitation changes, read `.agents/skills/manual-multiplayer/SKILL.md`. For network-camera or dice-vision changes, read `docs/decisions/2026-10-01-camera-platform-sequence.md` and `docs/c121-software-handover.md`. Preserve camera observations as proposals and distinguish native decoding, simulated frames and physical evidence.
+
+Read AGENTS.md and docs/status.md, then the relevant product contract. For substantial work, maintain a scoped plan under docs/plans/ with acceptance criteria and decisions. Keep implementation within component ownership; simulated state must stay distinguishable from authoritative state. Verify observable acceptance criteria using focused checks, then the configured engineering gate when preparing a release. Update current status, relevant contracts and evidence references. Report remaining physical/deployment gates without inventing success.
+
+See docs/engineering-workflow.md in the active repository for commands and evidence conventions. Apply this workflow only to the user's requested scope.
+

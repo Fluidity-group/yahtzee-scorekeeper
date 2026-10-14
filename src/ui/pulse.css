@@ -1,0 +1,12 @@
+/* One-shot feedback after persistence. No ambient blinking and no input delay. */
+.accepted-score>.recorded-score{position:relative;animation:accepted-score-land .62s cubic-bezier(.18,.8,.25,1);}
+.accepted-score>.recorded-score::after{content:'';position:absolute;inset:-3px;pointer-events:none;border:2px solid var(--player-color,var(--club-accent));border-radius:inherit;animation:accepted-score-ring .72s ease-out both;}
+.player-heading.accepted-turn{animation:accepted-turn-arrive .8s ease-out;}
+.turn-indicator.accepted-turn{animation:accepted-turn-label .7s ease-out;}
+.player-heading.accepted-bonus{animation:accepted-bonus-glow .95s ease-out;}
+@keyframes accepted-score-land{0%{transform:scale(.86)}45%{transform:scale(1.08);box-shadow:0 0 22px color-mix(in srgb,var(--player-color,var(--club-accent)) 55%,transparent)}100%{transform:scale(1)}}
+@keyframes accepted-score-ring{0%{opacity:.7;transform:scale(.95)}100%{opacity:0;transform:scale(1.2)}}
+@keyframes accepted-turn-arrive{0%{box-shadow:inset 0 0 0 2px var(--player-color,var(--club-accent)),0 0 20px #6ce5c433}100%{box-shadow:inset 0 3px var(--player-color,var(--club-accent))}}
+@keyframes accepted-turn-label{0%{opacity:.7;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes accepted-bonus-glow{0%{box-shadow:inset 0 0 0 2px var(--club-warm),0 0 24px #edcd9355}100%{box-shadow:inset 0 3px var(--player-color,var(--club-accent))}}
+@media(prefers-reduced-motion:reduce){.accepted-score>.recorded-score,.accepted-score>.recorded-score::after,.player-heading.accepted-turn,.turn-indicator.accepted-turn,.player-heading.accepted-bonus{animation:none!important;transition:none!important;}.accepted-score>.recorded-score::after{display:none;}}

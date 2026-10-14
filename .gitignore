@@ -1,8 +1,20 @@
 node_modules/
+.venv-cad/
+hardware/**/__pycache__/
 dist/
+dist-native/
+.gradle-local/
+artifacts/
+*.jks
+*.keystore
 dev-dist/
 *.log
 .DS_Store
 .env
 .env.local
 .env.*.local
+supabase/.temp/
+# Local GoDice evaluation sources and generated native assets are not public source.
+local-evaluation/
+public/camera-assets/
+android/app/src/main/assets/public/

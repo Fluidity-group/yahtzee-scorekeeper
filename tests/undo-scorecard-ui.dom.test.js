@@ -1,0 +1,43 @@
+// @vitest-environment jsdom
+import {beforeAll,beforeEach,it,expect,vi} from 'vitest';
+import {createRoom,joinRoom,startRoom,playRoom} from '../src/multiplayer/room.js';
+const mock=vi.hoisted(()=>({room:null,userId:'host',callbacks:null}));
+vi.mock('../src/core-store.js',()=>({saveCore:vi.fn(async()=>{}),loadCore:vi.fn(async()=>null),listCore:vi.fn(async()=>[])}));
+vi.mock('../src/multiplayer/ui.js',()=>({
+ openOnline:vi.fn(async(root,callbacks)=>{mock.callbacks=callbacks;callbacks.game(mock.room,mock.userId,true,true);}),
+ sendOnline:vi.fn(async(action,expectedRevision)=>{mock.room=playRoom(mock.room,{userId:mock.userId,action,expectedRevision,gameId:mock.room.game.id,commandId:crypto.randomUUID(),time:'2026-10-14T12:00:00Z'});mock.callbacks.game(mock.room,mock.userId,true,true);return mock.room;}),
+}));
+import {openOnline,sendOnline} from '../src/multiplayer/ui.js';
+import {saveCore} from '../src/core-store.js';
+const click=selector=>{const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
+const action=name=>click(`[data-action="${name}"]`);
+async function score(key,value){click(`[data-action="choose"][data-key="${key}"]`);click(`[data-action="confirm-score"][data-value="${value}"]`);await vi.waitFor(()=>{expect(document.querySelector('#coreDialog').open).toBe(false);expect(document.querySelector('#coreApp').hasAttribute('inert')).toBe(false);});}
+async function undo(){action('undo-last-score');expect(document.querySelector('#coreDialog').textContent).toContain('reopens the category and returns the turn');action('confirm-undo-score');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));}
+beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});
+beforeEach(async()=>{
+ vi.clearAllMocks();mock.userId='host';const time='2026-10-14T12:00:00Z';mock.room={...startRoom(joinRoom(createRoom({id:'r',code:'ABCDEFGH',userId:'host',name:'Dan',time}),{userId:'guest',name:'Amber',time}),{userId:'host',time}),capabilities:{undoScore:true}};
+ action('online');await vi.waitFor(()=>expect(openOnline).toHaveBeenCalledOnce());
+});
+it('lets the score owner undo a scratch after turn handoff, reopen the category, and choose another score',async()=>{
+ await score('smallStraight',0);expect(mock.room.game.activeSeat).toBe(1);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();
+ await undo();expect(mock.room.game.activeSeat).toBe(0);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.events.some(event=>event.type==='score-undo')).toBe(true);expect(document.querySelector('[data-action="choose"][data-key="smallStraight"]')).not.toBeNull();
+ await score('fullHouse',25);expect(mock.room.game.sheets[0].fullHouse).toBe(25);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.activeSeat).toBe(1);
+});
+it('clears an incorrect Yahtzee celebration only after accepted Undo',async()=>{
+ await score('yahtzee',50);expect(document.querySelector('#gameCelebration').textContent).toContain('YAHTZEE');action('undo-last-score');expect(document.querySelector('#gameCelebration').textContent).toContain('YAHTZEE');action('confirm-undo-score');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));expect(document.querySelector('#gameCelebration').textContent).toBe('');expect(document.querySelectorAll('.score-pop')).toHaveLength(0);expect(mock.room.game.sheets[0].yahtzee).toBeUndefined();
+});
+it('targets the replacement score when correcting an undone and rescored category',async()=>{
+ await score('twos',8);const old=mock.room.game.events.find(event=>event.type==='score').id;await undo();await score('twos',10);const newest=mock.room.game.events.filter(event=>event.type==='score').at(-1).id;
+ click('[data-action="edit"][data-key="twos"]');expect(document.querySelector('#coreDialog [data-action="undo-last-score"]')).not.toBeNull();click('[data-action="confirm-score"][data-value="6"]');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));
+ expect(sendOnline.mock.calls.at(-1)[0]).toMatchObject({type:'correct-score',target:newest,value:6});expect(newest).not.toBe(old);expect(mock.room.game.sheets[0].twos).toBe(6);
+});
+it('hides another player’s Undo, expires it after their next score, and locks Undo while paused or unsupported',async()=>{
+ await score('twos',8);mock.userId='guest';mock.callbacks.game(mock.room,'guest',true,true);expect(document.querySelector('[data-action="undo-last-score"]')).toBeNull();await score('fullHouse',25);
+ mock.userId='host';mock.callbacks.game(mock.room,'host',true,true);expect(document.querySelector('[data-action="undo-last-score"]')).toBeNull();
+ mock.userId='guest';mock.room={...mock.room,tournament:{name:'Weekend',gameCount:3,playerCount:2,status:'paused'}};mock.callbacks.game(mock.room,'guest',true,true);expect(document.querySelector('[data-action="undo-last-score"]').disabled).toBe(true);expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();
+ mock.room={...mock.room,capabilities:{undoScore:false}};mock.callbacks.game(mock.room,'guest',true,true);expect(document.querySelector('[data-action="undo-last-score"]')).toBeNull();
+});
+it('also reopens the latest score and returns the original turn in local manual Standard play',async()=>{
+ mock.callbacks.exit();document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(document.querySelector('#createCore')).toBeNull());await score('fullHouse',25);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();await undo();
+ const saved=saveCore.mock.calls.at(-1)[0];expect(saved.mode).toBe('standard');expect(saved.activeSeat).toBe(0);expect(saved.sheets[0].fullHouse).toBeUndefined();expect(document.querySelector('[data-action="choose"][data-key="fullHouse"]')).not.toBeNull();expect(sendOnline).not.toHaveBeenCalled();
+});

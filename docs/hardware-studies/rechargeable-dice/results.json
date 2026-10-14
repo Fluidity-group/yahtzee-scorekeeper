@@ -1,0 +1,83 @@
+{
+  "assumptions": {
+    "capacityMah": 29,
+    "nominalV": 3.7,
+    "usableFraction": 0.7,
+    "playHours": 4,
+    "playMa": 0.2,
+    "sleepHours": 20,
+    "sleepMa": 0.005
+  },
+  "continuousPlayHours": [
+    {
+      "currentMa": 0.05,
+      "hours": 405.99999999999994
+    },
+    {
+      "currentMa": 0.2,
+      "hours": 101.49999999999999
+    },
+    {
+      "currentMa": 0.5,
+      "hours": 40.599999999999994
+    }
+  ],
+  "dailyMah": 0.9,
+  "dailyMwh": 3.33,
+  "daysWithReserve": 22.555555555555554,
+  "chargeHoursIdealAt10Ma": 2.9,
+  "energyMwh": 107.30000000000001,
+  "harvestingRequiredMw": {
+    "continuous": 0.13875,
+    "duringFourHoursOnly": 0.8325
+  },
+  "emptyToFullHoursAtNetStoredPower": [
+    {
+      "mw": 0.01,
+      "hours": 10730.000000000002
+    },
+    {
+      "mw": 0.1,
+      "hours": 1073
+    },
+    {
+      "mw": 1,
+      "hours": 107.30000000000001
+    },
+    {
+      "mw": 10,
+      "hours": 10.73
+    }
+  ],
+  "solarScenario": {
+    "faceMm": 18,
+    "powerDensityUwCm2": 22,
+    "litHours": 8,
+    "netEfficiency": 0.7,
+    "singleFaceGrossUw": 71.28,
+    "dailyStoredMwh": 0.399168
+  },
+  "internalCubeMmAtWall1_2": [
+    {
+      "edgeMm": 16,
+      "insideMm": 13.6,
+      "volumeRelativeTo16": 1
+    },
+    {
+      "edgeMm": 18,
+      "insideMm": 15.6,
+      "volumeRelativeTo16": 1.423828125
+    },
+    {
+      "edgeMm": 20,
+      "insideMm": 17.6,
+      "volumeRelativeTo16": 1.953125
+    }
+  ],
+  "dropScenario": {
+    "massKg": 0.01,
+    "heightM": 0.2,
+    "availableMj": 19.62,
+    "atAssumedTenPercentMj": 1.9620000000000002
+  }
+}

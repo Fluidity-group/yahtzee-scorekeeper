@@ -16,6 +16,7 @@ import { openStats, closeStats } from './ui/stats.js';
 import { Mascots } from './ui/mascots.js';
 import { Celebration } from './ui/celebration.js';
 import { momentFor } from './game/moments.js';
+import './clubhouse.css';
 
 const persist = typeof indexedDB !== 'undefined';   // skip DB where unavailable (e.g. jsdom tests)
 
@@ -36,6 +37,23 @@ const game = {
 let soundOn = true;
 let pepOn = true;
 
+// Appearance is local to this device and never changes the current game.
+const themeButton = document.getElementById('themeBtn');
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  themeButton.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+  themeButton.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b141c' : '#f3f6f5');
+}
+let savedTheme = 'dark';
+try { if (localStorage.getItem('yz_theme') === 'light') savedTheme = 'light'; } catch { /* private browsing */ }
+applyTheme(savedTheme);
+themeButton.addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(theme);
+  try { localStorage.setItem('yz_theme', theme); } catch { /* appearance still works */ }
+});
+
 const now = () => new Date().toISOString();
 const valuesP = (p) => valuesFor(game.entries, p);
 const turnState = () => deriveTurnState(game.entries, game.startingSeat);
@@ -50,8 +68,8 @@ function catCell(c) {
 }
 function buildGrid(list, el) {
   el.innerHTML = list.map(c => `<div class="row" data-key="${c.key}">${catCell(c)}
-    <div class="cell empty p0" data-key="${c.key}" data-p="0"></div>
-    <div class="cell empty p1" data-key="${c.key}" data-p="1"></div></div>`).join('');
+    <button type="button" class="cell empty p0" data-key="${c.key}" data-p="0"></button>
+    <button type="button" class="cell empty p1" data-key="${c.key}" data-p="1"></button></div>`).join('');
 }
 buildGrid(UPPER, document.getElementById('upperGrid'));
 buildGrid(LOWER, document.getElementById('lowerGrid'));
@@ -109,6 +127,7 @@ function refresh() {
   // cells
   document.querySelectorAll('.cell[data-key]').forEach(cell => {
     const p = +cell.dataset.p, k = cell.dataset.key, d = displayCell(p, k);
+    cell.setAttribute('aria-label', `${nameOf(p)}, ${META[k].name}: ${d ? d.value + ' points, edit score' : 'add score'}`);
     cell.classList.remove('empty', 'zero', 'filled', 'lastbox', 'open-active', 'open-idle');
     if (d) { cell.innerHTML = d.value + `<span class="ord">${d.order}</span>`; cell.classList.add('filled'); if (d.value === 0) cell.classList.add('zero'); }
     // open cells: only the player-to-move's empties glow; the idle player's recede.
@@ -166,6 +185,12 @@ function refresh() {
   device.classList.toggle('turn-1', active === 1 && lit);
   document.body.classList.toggle('turn-0', active === 0 && lit);
   document.body.classList.toggle('turn-1', active === 1 && lit);
+  document.querySelectorAll('[data-score-player]').forEach(label => {
+    const p = +label.dataset.scorePlayer;
+    label.textContent = nameOf(p);
+    label.title = nameOf(p);
+    label.classList.toggle('is-active', p === active && lit);
+  });
   updateStatus(st);
 }
 
@@ -326,9 +351,37 @@ function openEntry(p, k) {
   }
   const clr = displayCell(p, k) ? '<div class="clearcell"><button id="clearBtn">Clear this entry</button></div>' : '';
   entry.innerHTML = `<div class="grab"></div><div class="ehead">${die}<div><div class="etitle">${c.name}</div><div class="ewho p${p}">${pname}</div></div></div>${body}${clr}`;
-  wireEntry(c); scrim.classList.add('open');
+  wireEntry(c); showEntry();
 }
-function closeEntry() { scrim.classList.remove('open'); }
+let sheetTrigger = null;
+function showEntry() {
+  if (!scrim.classList.contains('open')) sheetTrigger = document.activeElement;
+  entry.querySelector('.sheet-close')?.remove();
+  const close = document.createElement('button');
+  close.className = 'sheet-close'; close.type = 'button'; close.textContent = '×';
+  close.setAttribute('aria-label', 'Close panel'); close.onclick = closeEntry;
+  entry.prepend(close);
+  entry.setAttribute('role', 'dialog');
+  entry.setAttribute('aria-modal', 'true');
+  entry.setAttribute('aria-label', entry.querySelector('.etitle')?.textContent || 'Game panel');
+  scrim.classList.add('open');
+  document.querySelector('.stage').inert = true;
+  close.focus({ preventScroll: true });
+}
+function closeEntry() {
+  scrim.classList.remove('open');
+  document.querySelector('.stage').inert = false;
+  sheetTrigger?.focus({ preventScroll: true });
+}
+scrim.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); closeEntry(); }
+  if (e.key !== 'Tab') return;
+  const controls = [...entry.querySelectorAll('button,input,select,textarea,a[href],[tabindex="0"]')]
+    .filter(el => !el.disabled && el.getClientRects().length > 0);
+  const first = controls[0], last = controls.at(-1);
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+});
 scrim.addEventListener('click', e => { if (e.target === scrim) closeEntry(); });
 function wireEntry(c) {
   const cb = document.getElementById('clearBtn'); if (cb) cb.onclick = () => { clearScore(cur.p, cur.k); closeEntry(); };
@@ -406,17 +459,19 @@ function setName(p, v) {
 }
 
 // ---- header controls ----
-document.querySelectorAll('.pname').forEach(inp => inp.addEventListener('input', () => { game.players[+inp.dataset.p].name = inp.value; updateStatus(); }));
+document.querySelectorAll('.pname').forEach(inp => inp.addEventListener('input', () => { game.players[+inp.dataset.p].name = inp.value; refresh(); }));
 
 document.getElementById('soundBtn').addEventListener('click', function () {
-  soundOn = !soundOn; SoundEngine.setEnabled(soundOn); this.textContent = soundOn ? '🔊' : '🔇';
+  soundOn = !soundOn; SoundEngine.setEnabled(soundOn); this.textContent = soundOn ? 'Sound' : 'Muted';
+  this.setAttribute('aria-pressed', String(soundOn));
   if (soundOn) { SoundEngine.warm(); SoundEngine.play('nice'); }
   else Commentary.cancel();
 });
 function togglePep(on = !pepOn) {
   pepOn = on; Speech.setEnabled(pepOn);
   const b = document.getElementById('pepBtn');
-  b.textContent = pepOn ? '💬' : '🔕'; b.classList.toggle('off', !pepOn);
+  b.textContent = pepOn ? 'Voice' : 'Quiet'; b.classList.toggle('off', !pepOn);
+  b.setAttribute('aria-pressed', String(pepOn));
   b.title = pepOn ? 'Commentary voice: on' : 'Commentary voice: off';
   if (!pepOn) Commentary.cancel();
 }
@@ -441,7 +496,7 @@ document.getElementById('dataBtn').addEventListener('click', () => {
   entry.innerHTML = `<div class="grab"></div><div class="ehead"><div><div class="etitle">Captured game data</div><div class="ewho" style="color:var(--ink-soft)">Flat one-row-per-entry log</div></div></div>
     <p class="data-note">Each entry stores its <b>value</b>, the <b>order</b> it was recorded, and a timestamp — the canonical shape that drives stats and later mining.</p>
     <div class="data-json">${JSON.stringify(rec, null, 2).replace(/</g, '&lt;')}</div>`;
-  scrim.classList.add('open');
+  showEntry();
 });
 
 // ---- live commentary (reacts to every score, roasts both players) ----
@@ -718,7 +773,7 @@ function openSettings() {
   };
 
   wireCustomSection();
-  scrim.classList.add('open');
+  showEntry();
 }
 
 // Unlock audio + speech on the first user gesture.

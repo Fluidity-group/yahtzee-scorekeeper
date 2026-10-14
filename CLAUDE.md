@@ -1,5 +1,10 @@
 ﻿# CLAUDE.md — Yahtzee Scorekeeper
 
+Current shared engineering instructions: read `AGENTS.md` and `docs/status.md`.
+The original instructions below are preserved as historical context for the
+legacy product. Their old folder, scope, no-backend assumptions and phased
+workflow do not override current product contracts or the user's task.
+
 ## What this is
 A two-player Yahtzee **scorekeeper** PWA. Players roll **physical dice**; this app only
 records scores — it is NOT a dice roller. Full requirements live in **yahtzee-build-spec.md**

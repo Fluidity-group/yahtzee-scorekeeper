@@ -1,19 +1,60 @@
 # Yahtzee Scorekeeper
 
-A two-player Yahtzee **scorekeeper** PWA. Players roll physical dice; the app records scores only.
-See `yahtzee-build-spec.md` for the full spec and `CLAUDE.md` for how we work.
+Engineering entry point: [AGENTS.md](AGENTS.md), [current status](docs/status.md),
+and [repeatable verification](docs/engineering-workflow.md). Older milestone
+statements below are historical; current acceptance and deployment gates live in
+the status record and linked domain evidence.
 
-## Run (from WSL — Node lives in WSL only)
+A Yahtzee scorekeeper PWA evolving into an Android-first, connected-dice game.
+See [the current prototype specification](docs/prototype-development-spec.md). The original
+two-player implementation and its specification remain available for legacy saves.
+
+## Current development milestone
+
+The default Clubhouse prototype supports 1–8 local test players, Standard/Competition/
+Accumulative rules, explicit turns, manual scoring, simulated dice, corrections, per-game
+roll insights, history and JSON export. Phone and tablet layouts use the midnight/teal theme
+with a light option. QR multiplayer and account screens now have a Supabase backend
+implementation deployed for testing; two-phone acceptance testing is pending. See
+[multiplayer setup](docs/multiplayer-development.md). Bluetooth and new commentary
+are not connected yet.
+
+New games use a separate database and a synchronous recovery journal before IndexedDB commits.
+Use one tab per game during this local prototype. The original game, commentary and statistics
+are preserved at `?legacy=1`, with their original saving behaviour. No old records are migrated.
+See [the testing guide](docs/local-prototype-testing.md) for the next device check.
+
+An Android development shell is now available. Build a debug APK with
+`scripts/build-android.ps1` from PowerShell. See [Android development](docs/android-development.md)
+for project-local Java/SDK setup and Pixel testing. Bluetooth integration is not included.
+
+## Run (WSL, Node 22)
 
 ```bash
-cd "/mnt/c/Yahtzee game"
-npm install
-npm run dev      # http://localhost:5173
+cd "/mnt/c/Codex/Yahtzee Game"
+export PATH="/home/fluidity/.nvm/versions/node/v22.22.1/bin:$PATH"
+npm ci
+CHOKIDAR_USEPOLLING=true npm run dev -- --host 127.0.0.1 # http://localhost:8473
 npm run build    # production build into dist/ (PWA service worker + manifest)
 npm run preview  # serve the built app
 npm test         # Vitest (from phase 2 on)
 npm run icons    # regenerate PWA icons in public/icons/
 ```
+
+The Node path above is this workstation's existing installation; use your own Node 22 path
+elsewhere. Polling lets Vite detect Windows edits in this WSL checkout. These settings apply
+only to the current shell/process; do not change global Node defaults or stop unrelated
+Claude Code sessions. Preview uses port 8474. Check port ownership before stopping a server.
+
+### Responsive UI checks
+
+- Test widths 360, 390, 430, 768, 1024 and 1280px, including short landscape windows.
+- Start a game, record upper/fixed/sum scores, and confirm totals and turn highlighting.
+- Resize with an unfinished numeric entry; its value should remain intact.
+- Close a scoring panel using × or Escape; the score must not change and keyboard focus
+  should return to the control that opened it.
+- Check Settings, Stats, and both scorecard sections remain reachable on a phone.
+- Physical phone/tablet feedback is still required before the next implementation slice.
 
 ## Testing on your phone (WSL2 networking)
 
@@ -22,13 +63,15 @@ your phone directly. Easiest paths:
 
 - **Windows port proxy (one-time, in an elevated Windows PowerShell):**
   ```powershell
-  netsh interface portproxy add v4tov4 listenport=5173 listenaddress=0.0.0.0 connectport=5173 connectaddress=(wsl hostname -I).Trim()
+  netsh interface portproxy add v4tov4 listenport=8473 listenaddress=0.0.0.0 connectport=8473 connectaddress=(wsl hostname -I).Trim()
   ```
-  Then open `http://<your-windows-LAN-ip>:5173/` on your phone (same Wi-Fi). Allow the port
+  First restart this project's dev server with `--host 0.0.0.0` instead of `--host 127.0.0.1`.
+  Then open `http://<your-windows-LAN-ip>:8473/` on your phone (same Wi-Fi). Allow the port
   through Windows Firewall if prompted.
 - Or build and `npm run preview -- --host`, or push to any static host for a quick install test.
 
-To **install** (Add to Home Screen): Android Chrome shows an install prompt / menu item;
+For installation/service-worker testing, use an HTTPS deployment (ordinary LAN HTTP is
+only a UI preview). To **install** (Add to Home Screen): Android Chrome shows an install prompt / menu item;
 iOS Safari → Share → *Add to Home Screen* (works, with iOS's usual PWA quirks).
 
 ## Status — phased build (see spec §11)

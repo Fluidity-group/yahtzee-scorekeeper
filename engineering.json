@@ -1,0 +1,12 @@
+{
+  "product": "Yahtzee",
+  "evidenceDirectory": "artifacts/engineering",
+  "requiredFiles": ["AGENTS.md", "docs/status.md", "docs/architecture.md", "docs/engineering-workflow.md", "docs/prototype-development-spec.md", "docs/engineering-governance.md", "docs/projects/software.md", "docs/projects/hardware.md", "docs/projects/integration.md", "docs/templates/engineering-task.md"],
+  "scope": "Existing Vitest suite plus web/native/room builds; optional camera/local-evaluation inputs may be absent. No physical phones, Pi, electrical or deployed-service acceptance.",
+  "checks": [
+    {"id": "tests", "name": "Vitest regression suite", "command": "{node}", "args": ["node_modules/vitest/vitest.mjs", "run", "--maxWorkers=2", "--minWorkers=1"], "timeoutMs": 600000},
+    {"id": "web-build", "name": "Web production build", "command": "{node}", "args": ["node_modules/vite/bin/vite.js", "build"]},
+    {"id": "native-build", "name": "Native web bundle", "command": "{node}", "args": ["node_modules/vite/bin/vite.js", "build", "--mode", "native", "--outDir", "dist-native"]},
+    {"id": "room-build", "name": "Room function build", "command": "{node}", "args": ["scripts/build-room-function.mjs"]}
+  ]
+}

@@ -1,0 +1,27 @@
+---
+name: manual-multiplayer
+description: Develop or investigate Dice Clubhouse hosted manual games, tournament return, score history, analytics and invitation flows while preserving account ownership and existing tables.
+---
+
+# Hosted manual multiplayer
+
+Read `docs/project-memory.md`, current entries in `docs/status.md`, and the relevant SW task. Use `docs/handovers/2026-10-14-manual-multiplayer-tournaments.md` for SW-019 contracts and evidence; inspect current source/runtime separately. Scope camera, BLE and physical dice work only when requested.
+
+## Contracts that change implementation decisions
+
+- Supabase Auth UUID owns membership and analytics. Email is an account label; game-time aliases are frozen snapshots. Do not reuse legacy name-keyed statistics for hosted identity.
+- Returning opens the same table/game/seat with original aliases. It neither creates a replacement roster nor silently resumes a paused tournament. Existing members can return through their original invitation even when new-member admission has expired.
+- Commands require authenticated seat, exact current game and room revision. Keep immutable game logic separate from server authority and UI; commit room, archive and receipt atomically. Edit server sources, then generate the edge function; never make the generated function the source of truth.
+- Standard manual Undo is latest eligible own score, including empty automatic handoff. Keep appended audit history, exclude undone targets/turns from derived awards, and clear stale readiness when reopening completion. Another meaningful accepted score/roll/bonus closes eligibility. Preserve current capability and mode guards.
+- Tournaments keep fixed mode/roster/game ceiling, shared wins on ties, and separate cumulative-points/most-wins standings. Competition rules are versioned: preserve v1 tables; new manual Competition uses v2 final-category Yahtzee chains.
+- Score chronology is accepted scoring order, not physical roll timing. Manual combination reports are optional self-reported observations, separate from scores and sensor-confirmed results. Define denominator, tie treatment, corrections/Undo and provenance before displaying a metric.
+
+## Investigation and qualification
+
+For a failed return, collect mode, phase, affected account/device, visible build and exact symptom. Inspect existing room/history read-only first; reproduce with synthetic fixtures before changing contracts. Preserve user games and app/browser data.
+
+For web-update work, inspect the actual service-worker lifecycle and test an already-cached client through update, close/reopen and reconnect. Byte-matched publication alone does not establish cache activation. Native assets update through an APK, not the web worker. Show update state without interrupting unconfirmed input or applying a mixed build.
+
+Use focused regression coverage for ownership, revision races, idempotent retries, paused return, pagination and reopened completion as relevant. Release preparation uses Node24 and the configured gate. Phone acceptance and installed/deployed identity are separate records; do not repeat an install solely because the chat changed.
+
+When expert agents are authorized, assign explicit domain and file ownership. Read-only review can share the checkout; concurrent implementation needs isolated worktrees. Lead integrates sequentially and verifies shared contracts. Agent/self-review is development evidence, not independent release approval.

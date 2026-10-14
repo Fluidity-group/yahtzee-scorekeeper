@@ -1,0 +1,23 @@
+services:
+  game:
+    build:
+      context: .
+      dockerfile: device/pi/deploy/Dockerfile
+    environment:
+      PI_SETUP_KEY: ${PI_SETUP_KEY:?Set a random setup secret}
+      PI_PUBLIC_ORIGIN: https://${DICE_DOMAIN:?Set the public domain}
+    volumes:
+      - games:/data
+    restart: unless-stopped
+  proxy:
+    image: caddy:2
+    ports: ["80:80", "443:443"]
+    environment:
+      DICE_DOMAIN: ${DICE_DOMAIN}
+    volumes:
+      - ./device/pi/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+    restart: unless-stopped
+volumes:
+  games:
+  certificates:
