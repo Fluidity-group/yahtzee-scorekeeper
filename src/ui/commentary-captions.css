@@ -1,0 +1,15 @@
+.commentary-captions{color:var(--club-text);font-size:14px;line-height:1.5;}
+.commentary-captions header{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.commentary-captions h2{margin:0;font-size:22px;}
+.commentary-captions button{min-width:44px;min-height:44px;border:1px solid var(--club-line);border-radius:12px;background:var(--club-soft);color:var(--club-accent);font-size:24px;}
+.commentary-captions ol{list-style:none;padding:0;display:grid;gap:12px;}
+.commentary-captions li,.commentary-current{padding:12px;border:1px solid var(--club-line);border-radius:14px;background:var(--club-soft);overflow-wrap:anywhere;}
+.commentary-captions li p{margin:0 0 6px;}
+.commentary-captions small,.commentary-caption-note{color:var(--club-muted);font-size:12px;}
+.commentary-captions button:focus-visible{outline:2px solid var(--club-accent);outline-offset:2px;}
+.caption-feedback{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.commentary-captions .caption-feedback button{min-width:64px;min-height:44px;padding:4px 10px;font-size:12px;background:transparent;color:var(--club-muted);}
+.commentary-captions .caption-feedback button[aria-pressed=true]{color:var(--club-accent);border-color:var(--club-accent);background:var(--club-soft);}
+.caption-feedback [role=status]{font-size:11px;color:var(--club-muted);}
+.commentary-captions .caption-history-controls button{min-height:44px;padding:8px 12px;font-size:12px;}
+.caption-history-controls [role=status]{display:block;margin-top:6px;font-size:12px;color:var(--club-muted);}

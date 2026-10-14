@@ -26,7 +26,7 @@ describe('commentary profile/setup and drawer contracts',()=>{
   const form=root.querySelector('form');form.elements.enabled.checked=true;change(form.elements.enabled);expect(form.elements.frequency.required).toBe(true);
   submit(root);await settle();expect(callback).not.toHaveBeenCalled();expect(root.querySelector('[role="alert"]').textContent).toContain('Explicit');
   form.elements.frequency.value='highlights';submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights'}});
+  expect(callback).toHaveBeenCalledWith({enabled:true,profile:{schemaVersion:1,version:1,humorIntensity:'dark',profanityAllowed:true,frequency:'highlights',voiceOption:'victor'}});
  });
  it('separates host table settings from local listener mute and versions shared profile edits',async()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'balanced'});
@@ -59,11 +59,20 @@ describe('settings save lifecycle',()=>{
   const profile=createProfile({humorIntensity:'dark',profanityAllowed:true,frequency:'lively'});
   const root=mount({profile,enabled:false});const callback=vi.fn();bindCommentarySettings(root,{onTableSettings:callback});
   root.querySelector('form').elements.profanityAllowed.checked=false;submit(root);await settle();
-  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,humorIntensity:'dark',profanityAllowed:false,frequency:'lively'}});
+  expect(callback).toHaveBeenCalledWith({enabled:false,profile:{schemaVersion:1,version:2,humorIntensity:'dark',profanityAllowed:false,frequency:'lively',voiceOption:'victor'}});
  });
  it('coalesces repeated submit while the save callback is in flight',async()=>{
   const root=mount();let finish;const callback=vi.fn(()=>new Promise(resolve=>{finish=resolve;}));bindCommentarySettings(root,{onTableSettings:callback});
   submit(root);submit(root);expect(callback).toHaveBeenCalledTimes(1);expect(root.querySelector('[type="submit"]').disabled).toBe(true);
   finish();await settle();expect(root.querySelector('[type="submit"]').disabled).toBe(false);
  });
+});
+
+it('defaults to the audition-selected Dark voice and keeps switching voice independent of humor',async()=>{
+ const root=mount();const form=root.querySelector('form');const callback=vi.fn();bindCommentarySettings(root,{onTableSettings:callback});
+ expect(form.elements.voiceOption.value).toBe('victor');expect(form.elements.humorIntensity.value).toBe('dark');expect(form.elements.frequency.value).toBe('');
+ form.elements.enabled.checked=true;form.elements.frequency.value='balanced';form.elements.voiceOption.value='ditzy';submit(root);await settle();
+ expect(callback.mock.calls[0][0].profile).toMatchObject({voiceOption:'ditzy',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',version:1});
+ form.elements.voiceOption.value='victor';submit(root);await settle();
+ expect(callback.mock.calls[1][0].profile).toMatchObject({voiceOption:'victor',humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',version:2});
 });
