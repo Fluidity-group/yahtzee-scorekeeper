@@ -1,3 +1,5 @@
+import {acceptedOutbox} from './accepted-outbox.js';
+import {filledBaseCount} from '../../src/game/scoring.js';
 import {DurableCommentaryStore} from './durable-store.js';
 import {validateLifecycleMoment} from '../../src/commentary/lifecycle-validity.js';
 import {openingFacts} from '../../src/commentary/opening-facts.js';
@@ -14,11 +16,12 @@ export class CommentaryError extends Error {constructor(message,status=400){supe
 const fail=(message,status)=>{throw new CommentaryError(message,status);};
 const positive=(v,name)=>{if(!Number.isSafeInteger(v)||v<1)throw Error('Positive bounded '+name+' required');return v;};
 const name=value=>String(value).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,24);
-export function createCommentaryService({store,getRoom,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null}={}) {
+export function createCommentaryService({store,getRoom,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null,monotonicNow=()=>performance.now(),streamValidationMs=500}={}) {
  if(!store||typeof getRoom!=='function')throw Error('Injected store and authoritative room reader required');
  for(const [label,value]of Object.entries({leaseMs,maxAgeMs,maxLineCharacters,maxAudioBytes,streamTimeoutMs,firstByteTimeoutMs,writerTimeoutMs}))positive(value,label);
  if(!Number.isSafeInteger(budget.maxRequests)||budget.maxRequests<0||!Number.isSafeInteger(budget.maxCharacters)||budget.maxCharacters<0)throw Error('Explicit bounded budget required');
  if(firstByteTimeoutMs>streamTimeoutMs)throw Error('First-byte deadline exceeds stream deadline');
+ if(!Number.isSafeInteger(streamValidationMs)||streamValidationMs<1||streamValidationMs>1000)throw Error('Bounded stream validity interval required');
  const initial=createProfile(profile),providers=liveProviders||syntheticProviders;
  const live=!!liveProviders?.liveConfigured;
  if(liveProviders&&(!live||!(store instanceof DurableCommentaryStore)))throw Error('Live commentary requires verified providers and durable persistence.');
@@ -91,7 +94,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   return store.transaction(state=>{const prior=settings(state,roomId);if(prior.version!==expectedVersion)fail('Commentary settings changed.',409);let next;try{next=updateProfile(prior,changes);}catch{fail('Invalid commentary settings.');}state.settings.set(roomId,next);for(const job of state.jobs.values())if(job.roomId===room.id)cancel(state,job,'profile-changed');
    let greetingJobId=null;
    if(live&&next.enabled&&!prior.enabled&&room.game){
-    const commandId='commentary-enable-'+randomId(),purpose=room.game.sheets.some(sheet=>Object.keys(sheet).some(key=>sheet[key]!=null))?'return':'opening';
+    const commandId='commentary-enable-'+randomId(),purpose=room.game.sheets.some(sheet=>filledBaseCount(sheet)>0)?'return':'opening';
     const facts=structuredClone(openingFacts({room,purpose,sourceCommandId:commandId,acceptedAt:new Date(now()).toISOString()}));facts.accountId=room.hostId;facts.scoreDependencies=room.game.events.filter(e=>e.type==='score').map(e=>e.id);
     greetingJobId=randomId();state.jobs.set(greetingJobId,{id:greetingJobId,roomId:room.id,momentKey:room.id+':'+commandId,facts,profile:next,audience:room.members.map(m=>m.userId),status:'pending',line:null,claim:null,sourceType:'accepted-settings',evidence:{settingsVersion:next.version,hostId:room.hostId,accountIds:room.members.map(m=>m.userId),players:structuredClone(room.game.players),rules:structuredClone(room.game.rules),hideTotals:room.game.hideTotals,events:structuredClone(room.game.events),sheets:structuredClone(room.game.sheets)}});state.moments.set(room.id+':'+commandId,greetingJobId);
    }
@@ -105,7 +108,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   const momentKey=room.id+':'+facts.gameId+':'+facts.commandId;
   return store.transaction(state=>{
    if(state.moments.has(momentKey))return state.moments.get(momentKey);
-   const id=randomId(),p=settings(state,room.id),quiet=['score-correction'].includes(facts.eventType)||(p.frequency==='highlights'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30);
+   const id=randomId(),p=settings(state,room.id),quiet=live&&!p.enabled||['score-correction'].includes(facts.eventType)||(p.frequency==='highlights'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30);
    state.jobs.set(id,{id,roomId:room.id,momentKey,facts:named,profile:p,audience:room.members.map(m=>m.userId),status:quiet?'silent':'pending',line:null,claim:null});state.moments.set(momentKey,id);return id;
   });
  }
@@ -127,11 +130,11 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   try{
    line=await Promise.race([Promise.resolve().then(()=>providers.writeLine({...structuredClone(claim.input),requestId:claim.attempt.id,signal:writerController.signal})),new Promise((_resolve,reject)=>{writerTimer=setTimeout(()=>{writerController.abort();reject(Error('Writer timeout'));},writerTimeoutMs);})]);
   }catch{
-   await store.transaction(state=>{state.attempts.get(claim.attempt.id).status='failed';const job=state.jobs.get(jobId);if(job?.workerToken===claim.attempt.id&&job.status==='generating')job.status='failed';});return null;
+   await store.transaction(state=>{const attempt=state.attempts.get(claim.attempt.id);if(attempt&&attempt.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'failed';const job=state.jobs.get(jobId);if(job?.workerToken===claim.attempt.id&&job.status==='generating')job.status='failed';});return null;
   }finally{clearTimeout(writerTimer);}
   const fresh=await getRoom(prior.roomId);
   return store.transaction(state=>{
-   const attempt=state.attempts.get(claim.attempt.id);attempt.status='succeeded';const job=state.jobs.get(jobId);
+   const attempt=state.attempts.get(claim.attempt.id);if(attempt?.status==='submitted')attempt.status='succeeded';const job=state.jobs.get(jobId);
    if(job.status!=='generating'||job.workerToken!==claim.attempt.id)return null;
    if((state.playerProfiles.get(job.facts.accountId)?.profile.version||0)!==job.personalProfileVersion){cancel(state,job,'personal-profile-changed');return null;}
    const reason=fresh?eligible(state,job,fresh):'room-missing';if(reason){cancel(state,job,reason);return null;}
@@ -160,7 +163,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   if(result.rejected)fail('Playback renewal rejected: '+result.reason,409);
   return result.value;
  }
- async function list(userId,roomId){const room=await authorized(userId,roomId);return store.transaction(state=>{purge(state);for(const job of state.jobs.values())if(job.roomId===roomId){const reason=eligible(state,job,room,{started:job.status==='started'});if(reason)cancel(state,job,reason);}return [...state.jobs.values()].filter(j=>j.roomId===roomId&&j.facts.gameId===room.game?.id).slice(-20).map(j=>({id:j.id,gameId:j.facts.gameId,eventId:j.facts.eventId,acceptedAt:j.facts.acceptedAt,purpose:j.facts.purpose||'score',lifecycleVerified:j.facts.observation==='accepted-lifecycle-only',dependencyEventIds:[...(j.facts.scoreDependencies||[])],status:j.status,caption:j.line?.text||null,reason:j.reason||null,profileVersion:j.profile.version,...feedbackProjection(state,j,userId)}));});}
+ async function list(userId,roomId){const room=await authorized(userId,roomId);return store.transaction(state=>{purge(state);for(const job of state.jobs.values())if(job.roomId===roomId){const reason=eligible(state,job,room,{started:job.status==='started'});if(reason)cancel(state,job,reason);}return [...state.jobs.values()].filter(j=>j.roomId===roomId&&j.facts.gameId===room.game?.id).slice(-20).map(j=>({id:j.id,gameId:j.facts.gameId,eventId:j.facts.eventId,sourceCommandId:j.facts.commandId,acceptedAt:j.facts.acceptedAt,purpose:j.facts.purpose||'score',lifecycleVerified:j.facts.observation==='accepted-lifecycle-only',dependencyEventIds:[...(j.facts.scoreDependencies||[])],status:j.status,caption:j.line?.text||null,reason:j.reason||null,profileVersion:j.profile.version,...feedbackProjection(state,j,userId)}));});}
  async function claimPlayback(userId,roomId,{jobId,device,epoch}={}){
   const room=await authorized(userId,roomId,true);return store.transaction(state=>{
    const current=lease(state,room,userId,device,epoch),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId)fail('Commentary job not found.',404);
@@ -185,35 +188,55 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   });
  }
  async function audio(userId,roomId,{jobId,device,epoch,claimToken}={}){
-  const room=await authorized(userId,roomId,true);
+  const requestStarted=monotonicNow(),room=await authorized(userId,roomId,true);
   const start=await store.transaction(state=>{
-   lease(state,room,userId,device,epoch);const job=state.jobs.get(jobId);if(!job||job.roomId!==roomId||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)fail('Playback claim is stale.',409);
+   const serverNowMs=now(),current=lease(state,room,userId,device,epoch,serverNowMs),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)fail('Playback claim is stale.',409);
    const reason=eligible(state,job,room);if(reason){cancel(state,job,reason);fail('Commentary was cancelled.',409);}
    if(job.status!=='claimed')fail('Audio already requested.',409);if(!providers?.streamAudio)fail('Voice provider is disabled.',503);
-   const attempt=reserve(state,job,'tts',[...job.line.text].length);job.status='streaming';return {attempt,text:job.line.text,profile:job.profile};
+   const attempt=reserve(state,job,'tts',[...job.line.text].length);job.status='streaming';return {attempt,text:job.line.text,profile:job.profile,remainingMs:current.expiresAt-serverNowMs};
   });
-  const controller=new AbortController();let bytes=0,firstByteAt=null;const started=now();
-  const timer=setTimeout(()=>controller.abort(),streamTimeoutMs),firstTimer=setTimeout(()=>controller.abort(),firstByteTimeoutMs);
+  const controller=new AbortController();let bytes=0,firstByteAt=null,firstByteElapsed=null,leaseDeadline=requestStarted+start.remainingMs,leaseTimer,validationTimer,validationPending=null,iterator,lastValidatedAt=monotonicNow();
+  const started=monotonicNow(),timer=setTimeout(()=>controller.abort(),streamTimeoutMs),firstTimer=setTimeout(()=>controller.abort(),firstByteTimeoutMs);
+  function armLease(){clearTimeout(leaseTimer);const remaining=leaseDeadline-monotonicNow();if(remaining<=0)controller.abort();else leaseTimer=setTimeout(()=>controller.abort(),remaining);}
+  async function validate({first=false}={}){
+   const sentAt=monotonicNow(),fresh=await getRoom(roomId);
+   const result=await store.transaction(state=>{
+    const job=state.jobs.get(jobId);if(!job)return {valid:false};
+    const serverNowMs=now();let reason=fresh?eligible(state,job,fresh,{started:job.status==='started'}):'room-missing',current;
+    try{current=lease(state,fresh||room,userId,device,epoch,serverNowMs);}catch{reason='playback-owner';}
+    if(reason){cancel(state,job,reason);return {valid:false};}
+    if(!['streaming','started'].includes(job.status)||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)return {valid:false};
+    if(first){job.audioFirstByteAt=serverNowMs;const attempt=state.attempts.get(start.attempt.id);if(!attempt)return {valid:false};attempt.firstByteAt=serverNowMs;}
+    return {valid:true,remainingMs:current.expiresAt-serverNowMs,firstByteAt:serverNowMs};
+   });
+   if(!result.valid||controller.signal.aborted)return false;
+   lastValidatedAt=monotonicNow();leaseDeadline=sentAt+result.remainingMs;armLease();if(first)firstByteAt=result.firstByteAt;return !controller.signal.aborted;
+  }
+  function periodic(){if(!live||controller.signal.aborted)return;validationTimer=setTimeout(()=>{
+   validationPending=validate().then(valid=>{if(!valid)controller.abort();},()=>controller.abort()).finally(()=>{validationPending=null;periodic();});
+  },streamValidationMs);}
+  armLease();
   const stream=new ReadableStream({
    async start(out){
-    try {
-     const iterator=providers.streamAudio({text:start.text,profile:start.profile,voice:resolveCommentaryVoice(start.profile.voiceOption),roomId,jobId,requestId:start.attempt.id,signal:controller.signal,source:live?'accepted-durable-service':'synthetic'})[Symbol.asyncIterator]();
+    try{
+     iterator=providers.streamAudio({text:start.text,profile:start.profile,voice:resolveCommentaryVoice(start.profile.voiceOption),roomId,jobId,requestId:start.attempt.id,signal:controller.signal,source:live?'accepted-durable-service':'synthetic'})[Symbol.asyncIterator]();
      while(true){
-      const next=await new Promise((resolve,reject)=>{
-       const abort=()=>reject(Error('Interrupted'));if(controller.signal.aborted){abort();return;}controller.signal.addEventListener('abort',abort,{once:true});
-       Promise.resolve(iterator.next()).then(resolve,reject).finally(()=>controller.signal.removeEventListener('abort',abort));
-      });if(next.done)break;const chunk=next.value;
-      const fresh=await getRoom(roomId);const valid=await store.transaction(state=>{const job=state.jobs.get(jobId);let reason=fresh?eligible(state,job,fresh,{started:job.status==='started'}):'room-missing';try{lease(state,fresh||room,userId,device,epoch);}catch{reason='playback-owner';}if(reason){cancel(state,job,reason);return false;}return !['cancelled','failed','completed','interrupted'].includes(job.status);});
-      if(controller.signal.aborted||!valid)throw Error('Interrupted');if(!(chunk instanceof Uint8Array))throw Error('Invalid audio');if(!chunk.byteLength)continue;
-      bytes+=chunk.byteLength;if(bytes>maxAudioBytes)throw Error('Audio byte cap');if(firstByteAt===null){firstByteAt=now();clearTimeout(firstTimer);const accepted=await store.transaction(state=>{const job=state.jobs.get(jobId);if(!job||['cancelled','failed','completed','interrupted'].includes(job.status))return false;job.audioFirstByteAt=firstByteAt;state.attempts.get(start.attempt.id).firstByteAt=firstByteAt;return true;});if(!accepted)throw Error('Interrupted');}out.enqueue(chunk);
+      const next=await new Promise((resolve,reject)=>{const abort=()=>reject(Error('Interrupted'));if(controller.signal.aborted){abort();return;}controller.signal.addEventListener('abort',abort,{once:true});Promise.resolve(iterator.next()).then(resolve,reject).finally(()=>controller.signal.removeEventListener('abort',abort));});
+      if(next.done)break;const chunk=next.value;if(controller.signal.aborted||monotonicNow()>=leaseDeadline)throw Error('Interrupted');if(!(chunk instanceof Uint8Array))throw Error('Invalid audio');if(!chunk.byteLength)continue;
+      bytes+=chunk.byteLength;if(bytes>maxAudioBytes)throw Error('Audio byte cap');
+      if(firstByteAt===null){if(!await validate({first:true}))throw Error('Interrupted');firstByteElapsed=monotonicNow()-started;clearTimeout(firstTimer);periodic();}
+      else if(!live&&!await validate())throw Error('Interrupted');
+      else if(live&&monotonicNow()-lastValidatedAt>=streamValidationMs){if(validationPending)await validationPending;else if(!await validate())throw Error('Interrupted');}
+      if(controller.signal.aborted)throw Error('Interrupted');out.enqueue(chunk);
      }
-     if(!bytes||controller.signal.aborted)throw Error('No complete audio');
-     await store.transaction(state=>{Object.assign(state.attempts.get(start.attempt.id),{status:'succeeded',bytes,firstByteMs:firstByteAt-started,completeMs:now()-started,firstAudibleMs:null});});out.close();
+     clearTimeout(validationTimer);if(validationPending)await validationPending;
+     if(!bytes||controller.signal.aborted||!await validate())throw Error('No complete audio');
+     await store.transaction(state=>{const attempt=state.attempts.get(start.attempt.id);if(!attempt)throw Error('Missing attempt');if(attempt.status==='submitted')attempt.status='succeeded';Object.assign(attempt,{bytes,firstByteMs:firstByteElapsed,completeMs:monotonicNow()-started,firstAudibleMs:null});});out.close();
     }catch{
-     controller.abort();await store.transaction(state=>{const job=state.jobs.get(jobId);state.attempts.get(start.attempt.id).status='failed';if(job&&['streaming','claimed'].includes(job.status))job.status='failed';});out.error(new CommentaryError('Commentary audio interrupted.',502));
-    }finally{clearTimeout(timer);clearTimeout(firstTimer);}
+     controller.abort();try{await store.transaction(state=>{const job=state.jobs.get(jobId),attempt=state.attempts.get(start.attempt.id);if(attempt?.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'failed';if(job&&['streaming','claimed'].includes(job.status))job.status='failed';});}catch{/* persisted reservation stays consumed; reconciliation required */}try{out.error(new CommentaryError('Commentary audio interrupted.',502));}catch{}
+    }finally{clearTimeout(timer);clearTimeout(firstTimer);clearTimeout(leaseTimer);clearTimeout(validationTimer);controller.abort();}
    },
-   async cancel(){controller.abort();clearTimeout(timer);clearTimeout(firstTimer);await store.transaction(state=>{state.attempts.get(start.attempt.id).status='interrupted';const job=state.jobs.get(jobId);cancel(state,job,'client-disconnected');});},
+   async cancel(){controller.abort();clearTimeout(timer);clearTimeout(firstTimer);clearTimeout(leaseTimer);clearTimeout(validationTimer);await store.transaction(state=>{const attempt=state.attempts.get(start.attempt.id);if(attempt?.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'interrupted';const job=state.jobs.get(jobId);if(job)cancel(state,job,'client-disconnected');});},
   });
   return stream;
  }
@@ -240,12 +263,17 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   });
  }
  async function deletePlayerProfile(userId,roomId,{expectedVersion}={}){await authorized(userId,roomId);if(!Number.isSafeInteger(expectedVersion)||expectedVersion<0)fail('Expected personal profile version required.');return store.transaction(state=>{const prior=state.playerProfiles.get(userId);if((state.playerProfileVersions.get(userId)||0)!==expectedVersion)fail('Personal profile changed.',409);state.playerProfiles.delete(userId);state.playerProfileVersions.set(userId,expectedVersion+1);state.preferenceSharing.delete(userId);memory(state).invalidateDerived();for(const job of state.jobs.values())if(job.facts.accountId===userId)cancel(state,job,'personal-profile-changed');return {deleted:true,version:expectedVersion+1};});}
- async function forgetHistory(userId,roomId){await authorized(userId,roomId);return store.transaction(state=>{const removed=memory(state).forgetHistory(userId);let affected=0;for(const job of state.jobs.values())if(job.audience.includes(userId)){cancel(state,job,'history-forgotten');job.line=null;job.reason='history-forgotten';if(job.claim)state.exposure.delete(job.claim.token);affected++;}for(const [key,rating]of state.feedback)if(rating.accountId===userId||state.jobs.get(rating.recordId)?.audience.includes(userId))state.feedback.delete(key);return {...removed,affectedJobs:affected,durability:'process-memory-rehearsal'};});}
+ async function forgetHistory(userId,roomId){await authorized(userId,roomId);return store.transaction(state=>{const removed=memory(state).forgetHistory(userId);let affected=0;for(const job of state.jobs.values())if(job.audience.includes(userId)){cancel(state,job,'history-forgotten');job.line=null;job.reason='history-forgotten';if(job.claim)state.exposure.delete(job.claim.token);affected++;}for(const [key,rating]of state.feedback)if(rating.accountId===userId||state.jobs.get(rating.recordId)?.audience.includes(userId))state.feedback.delete(key);return {...removed,affectedJobs:affected,durability:live?'database':'process-memory-rehearsal'};});}
 
 
  async function enqueueCommitted({moment,beforeRoom,acceptedRoom,receipt,priorGame=null}){
   await refresh();
   if(!moment||!uuid.test(moment.roomId||'')||acceptedRoom?.id!==moment.roomId||receipt?.room_id!==moment.roomId||receipt.command_id!==moment.commandId||receipt.actor_id!==moment.actorId)throw Error('Committed acceptance evidence required.');
+  if(typeof receipt.fingerprint!=='string'||!receipt.fingerprint)throw Error('Committed acceptance fingerprint required.');
+  const operation=moment.kind==='invalidate'||moment.purpose==='score'?'command':moment.purpose==='opening'?'start':moment.purpose==='return'?'resume':'ready';
+  const expected=acceptedOutbox({before:beforeRoom,after:acceptedRoom,actorId:moment.actorId,commandId:moment.commandId,operation,acceptedAt:moment.acceptedAt,openingFacts,priorGame});
+  const canonical=value=>JSON.stringify(value,(_,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
+  if(!expected.some(row=>canonical(row)===canonical(moment)))throw Error('Committed moment does not match accepted rules.');
   return store.transaction(state=>{
    if(state.moments.has(moment.idempotencyKey))return state.moments.get(moment.idempotencyKey);
    if(moment.kind==='invalidate'){for(const job of state.jobs.values())if(job.roomId===moment.roomId&&moment.invalidates.some(target=>job.facts.eventId===target.targetEventId||job.facts.scoreDependencies?.includes(target.targetEventId)))cancel(state,job,'invalid-event');state.moments.set(moment.idempotencyKey,null);return null;}
