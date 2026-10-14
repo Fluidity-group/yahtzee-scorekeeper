@@ -29,6 +29,7 @@ export async function listAnthropicModels({key,workspaceId,fetchImpl=fetch,deadl
 export function buildAnthropicWriterRequest(input,{model,maxOutputTokens}={}){
  if(typeof model!=='string'||!/^claude-[a-z0-9-]{1,80}$/.test(model)||!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<1||maxOutputTokens>1024)fail('request-config-invalid');
  const prompt=buildCommentaryPrompt(input),body={model,max_tokens:maxOutputTokens,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}};
+ if(model==='claude-sonnet-5-5'){body.thinking={type:'between_tools'};body.output_config.effort='high';}
  const payload=JSON.stringify(body);return {body,payload,packet:prompt.packet,submittedCharacters:[...payload].length,promptVersion:3};
 }
 // This adapter is separate from the in-memory rehearsal service. A durable budget gate
@@ -53,8 +54,17 @@ export function createAnthropicWriter({model,workspaceId,getKey,fetchImpl=fetch,
    const requestHeader=response.headers.get('request-id');if(/^req_[A-Za-z0-9]{8,100}$/.test(requestHeader||''))providerRequestId=requestHeader;
    const data=await boundedJson(response,limits.maxResponseBytes,controller.signal);
    usage={inputTokens:Number.isSafeInteger(data.usage?.input_tokens)?data.usage.input_tokens:null,outputTokens:Number.isSafeInteger(data.usage?.output_tokens)?data.usage.output_tokens:null};
-   if(data.stop_reason!=='end_turn')fail('incomplete-output');if(!Array.isArray(data.content)||data.content.length!==1||data.content[0].type!=='text')fail('output-shape');
-   let parsed;try{parsed=JSON.parse(data.content[0].text);}catch{fail('output-json');}
+   if(data.stop_reason!=='end_turn')fail('incomplete-output');
+   if(!Array.isArray(data.content)||!data.content.length||data.content.length>16)fail('output-shape');
+   const texts=[];for(const block of data.content){
+    if(!block||typeof block!=='object')fail('output-shape');
+    if(block.type==='text'){if(typeof block.text!=='string')fail('output-shape');texts.push(block.text);}
+    else if(block.type==='thinking'){if(typeof block.thinking!=='string'||typeof block.signature!=='string')fail('output-shape');}
+    else if(block.type==='redacted_thinking'){if(typeof block.data!=='string')fail('output-shape');}
+    else fail('output-shape');
+   }
+   if(texts.length!==1)fail('output-shape');
+   let parsed;try{parsed=JSON.parse(texts[0]);}catch{fail('output-json');}
    candidateDiagnostics=writerCandidateDiagnostics(parsed,packet);
    let result;try{result=validateWriterResult(parsed,packet);}catch(error){
     const reasons={'Invalid writer schema':'schema','Writer grounding mismatch':'grounding','Writer settings/tags mismatch':'settings-or-tags','Unknown event grounding':'event-reference','Unknown personal profile source':'profile-reference','Missing target blurb source':'missing-blurb','Invalid spoken line':'line-length','Incomplete or tagged writer utterance':'line-completeness','Clean profile incompatible':'clean-incompatible','Target profile required':'target-profile-required','Wrong named target':'wrong-named-target','Ambiguous target name':'ambiguous-target-name'};validationReason=reasons[error.message]||'validation';fail('output-invalid');

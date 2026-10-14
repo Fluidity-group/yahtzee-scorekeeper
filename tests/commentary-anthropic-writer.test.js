@@ -94,3 +94,24 @@ it('standalone generator has no permission from the old hash or missing paid fla
  const provider=vi.spyOn(globalThis,'fetch');try{await expect(auditionMain(['--mode','generate'])).rejects.toThrow('Explicit paid');expect(provider).not.toHaveBeenCalled();}finally{provider.mockRestore();}
 });
 
+
+it('Sonnet5.5 uses between-tools without tools and explicit high effort while Haiku payload stays identical',()=>{
+ const sonnet=buildAnthropicWriterRequest(input(),{model:'claude-sonnet-5-5',maxOutputTokens:512});expect(sonnet.body).toMatchObject({thinking:{type:'between_tools'},output_config:{effort:'high'},max_tokens:512});expect(sonnet.body).not.toHaveProperty('tools');expect(sonnet.body).not.toHaveProperty('temperature');
+ const haiku=buildAnthropicWriterRequest(input(),{model:'claude-haiku-4-5-20251001',maxOutputTokens:256}),prompt=buildCommentaryPrompt(input());expect(haiku.payload).toBe(JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:256,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}}));expect(writerAuditionManifest().hash).toBe('10f6c5edf9d7c0557f10e44df1f49397778aebf349c22bf5178cfb70778ecd3b');expect(haiku.body).not.toHaveProperty('thinking');expect(haiku.body.output_config).not.toHaveProperty('effort');
+});
+it('accepts exactly one JSON text block with bounded thinking blocks and never exposes their contents',async()=>{
+ const hidden='PRIVATE_THINKING_NOT_USER_OUTPUT',options=writerOptions({model:'claude-sonnet-5-5',fetchImpl:async()=>new Response(JSON.stringify({stop_reason:'end_turn',content:[{type:'thinking',thinking:hidden,signature:'opaque-signature'},{type:'redacted_thinking',data:'opaque-redacted-data'},{type:'text',text:JSON.stringify(candidate())}],usage:{input_tokens:400,output_tokens:200}}))});
+ options.fetchImpl=vi.fn(options.fetchImpl);const result=await createAnthropicWriter(options).write(input(),{requestId:'sonnet_request001'});expect(result.spokenText).toBe(candidate().spokenText);expect(result.usage.outputTokens).toBe(200);expect(JSON.stringify(result)).not.toContain(hidden);expect(JSON.stringify(options.budgetGate.finish.mock.calls)).not.toContain(hidden);expect(options.fetchImpl).toHaveBeenCalledOnce();
+});
+it('rejects unknown, malformed, duplicate/missing text or excessive content blocks without leaking hidden text',async()=>{
+ for(const content of [[{type:'tool_use',id:'unknown'}],[{type:'thinking',thinking:'hidden',signature:'sig'}],[{type:'thinking',thinking:42,signature:'sig'},{type:'text',text:JSON.stringify(candidate())}],[{type:'text',text:JSON.stringify(candidate())},{type:'text',text:JSON.stringify(candidate())}],Array.from({length:17},()=>({type:'thinking',thinking:'',signature:'sig'}))]){
+  const options=writerOptions({model:'claude-sonnet-5-5',fetchImpl:async()=>new Response(JSON.stringify({stop_reason:'end_turn',content,usage:{output_tokens:100}}))});options.fetchImpl=vi.fn(options.fetchImpl);await expect(createAnthropicWriter(options).write(input(),{requestId:'sonnet_request001'})).rejects.toMatchObject({code:'output-shape'});expect(options.fetchImpl).toHaveBeenCalledOnce();expect(JSON.stringify(options.budgetGate.finish.mock.calls)).not.toContain('hidden');
+ }
+});
+it('mixed thinking remains under response/output-token caps and complete-end-turn requirement',async()=>{
+ const content=[{type:'thinking',thinking:'x'.repeat(1000),signature:'sig'},{type:'text',text:JSON.stringify(candidate())}];
+ for(const patch of [{stop_reason:'max_tokens'},{stop_reason:'end_turn',usage:{output_tokens:257}}]){
+  const options=writerOptions({model:'claude-sonnet-5-5',fetchImpl:async()=>new Response(JSON.stringify({content,...patch}))});options.fetchImpl=vi.fn(options.fetchImpl);await expect(createAnthropicWriter(options).write(input(),{requestId:'sonnet_request001'})).rejects.toMatchObject({code:patch.stop_reason==='max_tokens'?'incomplete-output':'usage-invalid'});expect(options.fetchImpl).toHaveBeenCalledOnce();
+ }
+ const capped=writerOptions({model:'claude-sonnet-5-5',limits:{...limits,maxResponseBytes:100},fetchImpl:async()=>new Response(JSON.stringify({stop_reason:'end_turn',content}))});await expect(createAnthropicWriter(capped).write(input(),{requestId:'sonnet_request001'})).rejects.toMatchObject({code:'response-cap'});
+});
