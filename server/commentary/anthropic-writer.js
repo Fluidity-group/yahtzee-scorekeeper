@@ -30,7 +30,7 @@ export function buildAnthropicWriterRequest(input,{model,maxOutputTokens}={}){
  if(typeof model!=='string'||!/^claude-[a-z0-9-]{1,80}$/.test(model)||!Number.isSafeInteger(maxOutputTokens)||maxOutputTokens<1||maxOutputTokens>1024)fail('request-config-invalid');
  const prompt=buildCommentaryPrompt(input),body={model,max_tokens:maxOutputTokens,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}};
  if(model==='claude-sonnet-5-5'){body.thinking={type:'between_tools'};body.output_config.effort='high';}
- const payload=JSON.stringify(body);return {body,payload,packet:prompt.packet,submittedCharacters:[...payload].length,promptVersion:3};
+ const payload=JSON.stringify(body);return {body,payload,packet:prompt.packet,submittedCharacters:[...payload].length,promptVersion:4};
 }
 // This adapter is separate from the in-memory rehearsal service. A durable budget gate
 // and explicit paid allowance are mandatory for live invocation, never implied by a key.
