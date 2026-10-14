@@ -50,6 +50,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(event?.jobId!==current.job.id||event.epoch!==current.claim.epoch||!lifecycle.has(event.status)||!Number.isInteger(event.sequence)||event.sequence<=current.sequence)return;
   if(current.cancelled&&event.status!=='interrupted')return;
   if(current.ended||event.status==='started'&&current.started)return;
+  if(event.status==='failed'||event.status==='interrupted')console.warn('[Commentary]',event.status,/^[a-zA-Z0-9_-]{1,80}$/.test(event.reason||'')?event.reason:'playback-stopped');
   current.sequence=event.sequence;
   if(event.status==='started')current.started=true;
   if(terminal.has(event.status))current.ended=true;
@@ -59,13 +60,13 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
   if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});}
  }
- async function refresh(){
+ async function refresh({profile:suppliedProfile}={}){
   if(disposed||!context?.userId||!context?.game||!context?.roomId)return;
   if(pending)return pending;
   const fence=generation,signal=abort.signal;
   const current=async()=>{
    try{
-    const profile=await invoke('profile-read',{},signal);if(fence!==generation)return;
+    const profile=suppliedProfile||await invoke('profile-read',{},signal);if(fence!==generation)return;
     if(profile.version!==context.profileVersion){invalidate('profile-changed');publish({captions:[],status:'settings-changed'});return;}
     const jobs=await invoke('jobs-read',{},signal);if(fence!==generation)return;
     const projection=Array.isArray(jobs)?jobs:jobs.jobs;
@@ -97,7 +98,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     const active={job,claim:playbackClaim,roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve()};
     run=active;publish({playing:{jobId:job.id,caption:job.caption},status:'playing'});
     // Detached from scoring and caption polling. Native callbacks establish playback evidence.
-    Promise.resolve().then(()=>{if(run===active&&!active.abort.signal.aborted)return player.play({claim:playbackClaim,signal:active.abort.signal,onEvent:event=>receive(active,event)});}).catch(()=>{if(run===active){stop('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}});
+    Promise.resolve().then(()=>{if(run===active&&!active.abort.signal.aborted)return player.play({claim:playbackClaim,signal:active.abort.signal,onEvent:event=>receive(active,event)});}).catch(()=>{console.warn('[Commentary] native-playback-failed');if(run===active){stop('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}});
    }catch(error){if(fence===generation&&!signal.aborted)publish({status:'caption-only',error:'Commentary unavailable. Scores are saved normally.'});}
   };
   const task=current();pending=task;

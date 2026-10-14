@@ -38,7 +38,7 @@ function createRuntime(){
   finishAttempt:(id,metadata)=>persistence.transaction(state=>{const attempt=state.attempts.get(id);if(!attempt)throw Error('Missing durable attempt.');Object.assign(attempt,{providerResult:metadata,providerFinishedAt:Date.now()});return true;}),
  });
  const providers=enabled?createCommentaryProviders({fetchImpl,allowPaid:true,allowance,durableGate:gate,getAnthropicKey:()=>get('ANTHROPIC_API_KEY'),getElevenLabsKey:()=>get('ELEVENLABS_API_KEY'),model:get('COMMENTARY_WRITER_MODEL')||'claude-haiku-4-5-20251001',writerLimits:{maxRequests:1,maxInputCharacters:50000,maxOutputTokens:512,deadlineMs:12000,maxResponseBytes:20000},audioLimits:{firstByteMs:10000,completeMs:25000,maxBytes:524288,maxLineCharacters:180}}):null;
- const service=createCommentaryService({store:persistence,getRoom:id=>roomStore.byId(id),now:()=>persistence.databaseNowMs??Date.now(),profile:{enabled:false,profanityAllowed:true,humorIntensity:'dark',frequency:'balanced',voiceOption:'rachel'},liveProviders:providers,writerTimeoutMs:15000,streamTimeoutMs:30000,budget:{maxRequests:400,maxCharacters:4000000}});
+ const service=createCommentaryService({store:persistence,getRoom:id=>roomStore.byId(id),now:()=>persistence.databaseNowMs??Date.now(),profile:{enabled:false,profanityAllowed:true,humorIntensity:'dark',frequency:'balanced',voiceOption:'rachel'},liveProviders:providers,maxAgeMs:30000,writerTimeoutMs:15000,streamTimeoutMs:30000,budget:{maxRequests:400,maxCharacters:4000000}});
  async function processRoom(roomId){
   await persistence.initialize();
   const rows=await resource('clubhouse_commentary_outbox?scope_id=eq.'+scopeId+'&room_id=eq.'+roomId+'&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10');

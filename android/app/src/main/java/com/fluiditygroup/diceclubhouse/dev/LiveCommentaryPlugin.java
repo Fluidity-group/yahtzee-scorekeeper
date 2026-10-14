@@ -33,6 +33,7 @@ public final class LiveCommentaryPlugin extends Plugin {
     private void ui(Runnable task){main.post(task);}
     private void emit(String state,String reason){
         if(jobId==null)return;
+        android.util.Log.i("LiveCommentary", "state="+state+" reason="+reason);
         JSObject value=new JSObject();value.put("jobId",jobId);value.put("epoch",epoch);value.put("sequence",++sequence);
         value.put("state",state);value.put("reason",reason);value.put("nativeElapsedMs",SystemClock.elapsedRealtime()-beganAt);
         value.put("measurementBasis",state.equals("playout-started")?"native-audio-position-proxy":"native-monotonic");
@@ -71,7 +72,7 @@ public final class LiveCommentaryPlugin extends Plugin {
                 player.addListener(new Player.Listener(){
                     @Override public void onPlaybackStateChanged(int state){if(generation==ownGeneration&&state==Player.STATE_ENDED)end("completed","stream-ended");}
                     @Override public void onPlaybackSuppressionReasonChanged(int reason){if(generation==ownGeneration&&reason!=Player.PLAYBACK_SUPPRESSION_REASON_NONE)end("interrupted","audio-focus-suppressed");}
-                    @Override public void onPlayerError(PlaybackException error){if(generation==ownGeneration)end("failed","stream-failed");}
+                    @Override public void onPlayerError(PlaybackException error){if(generation==ownGeneration)end("failed",error.getErrorCodeName());}
                     @Override public void onPlayWhenReadyChanged(boolean ready,int reason){
                         if(generation==ownGeneration&&!ready&&(reason==Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS||reason==Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY))end("interrupted","audio-focus-or-route");
                     }

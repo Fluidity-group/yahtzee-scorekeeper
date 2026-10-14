@@ -53,7 +53,7 @@ it.each(['opening','return','next-game'])('handles accepted %s lifecycle without
  const packet=prepareWriterPacket({...score,purpose,facts});expect(packet.acceptedFacts).toMatchObject({purpose,scoresRecorded:0,priorGameSummary:{winners:[{accountId:guest,displayName:'Sam',total:250}]}});expect(packet.acceptedFacts).not.toHaveProperty('value');expect(packet.acceptedFacts.seats.every(s=>!('total' in s))).toBe(true);expect(COMMENTARY_SYSTEM).toContain('prior finished-game winner is not');expect(()=>prepareWriterPacket({...score,purpose,facts:{...facts,priorGameSummary:{...facts.priorGameSummary,basis:'private-history'}}})).toThrow('finished-history');
 });
 it('rejects incomplete/tagged/overlong utterances rather than clipping a punchline',()=>{
- const packet=prepareWriterPacket(input());for(const change of [{spokenText:'A clipped punchline'},{spokenText:'[laughs] A sentence.'},{mechanism:'random-persona'},{spokenText:Array(25).fill('word').join(' ')+'.'},{spokenText:'A'.repeat(180)+'.'}])expect(()=>validateWriterResult({...candidate(),...change},packet)).toThrow();
+ const packet=prepareWriterPacket(input());for(const change of [{spokenText:'A clipped punchline'},{spokenText:'[laughs] A sentence.'},{mechanism:'random-persona'},{spokenText:Array(33).fill('a').join(' ')+'.'},{spokenText:'A'.repeat(180)+'.'}])expect(()=>validateWriterResult({...candidate(),...change},packet)).toThrow();
 });
 it('parses one credential without importing any secret and rejects ambiguity',()=>{
  expect(parseAnthropicCredential('\ufeffANTHROPIC_API_KEY="'+key+'"')).toBe(key);expect(()=>parseAnthropicCredential(key+' sk-ant-'+ 'y'.repeat(60))).toThrow('ambiguous');expect(()=>parseAnthropicCredential('absent')).toThrow('ambiguous');
@@ -97,7 +97,7 @@ it('standalone generator has no permission from the old hash or missing paid fla
 
 it('Sonnet5.5 uses between-tools without tools and explicit high effort while Haiku payload stays identical',()=>{
  const sonnet=buildAnthropicWriterRequest(input(),{model:'claude-sonnet-5-5',maxOutputTokens:512});expect(sonnet.body).toMatchObject({thinking:{type:'between_tools'},output_config:{effort:'high'},max_tokens:512});expect(sonnet.body).not.toHaveProperty('tools');expect(sonnet.body).not.toHaveProperty('temperature');
- const haiku=buildAnthropicWriterRequest(input(),{model:'claude-haiku-4-5-20251001',maxOutputTokens:256}),prompt=buildCommentaryPrompt(input());expect(haiku.payload).toBe(JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:256,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}}));expect(writerAuditionManifest().hash).toBe('10f6c5edf9d7c0557f10e44df1f49397778aebf349c22bf5178cfb70778ecd3b');expect(haiku.body).not.toHaveProperty('thinking');expect(haiku.body.output_config).not.toHaveProperty('effort');
+ const haiku=buildAnthropicWriterRequest(input(),{model:'claude-haiku-4-5-20251001',maxOutputTokens:256}),prompt=buildCommentaryPrompt(input());expect(haiku.payload).toBe(JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:256,stream:false,system:prompt.system,messages:[{role:'user',content:prompt.user}],output_config:{format:{type:'json_schema',schema:COMMENTARY_OUTPUT_SCHEMA}}}));expect(writerAuditionManifest().hash).toBe('de9172282a6ea19e93f932af5ce191a950fd69a2f068698274b46ee62c15e28f');expect(haiku.body).not.toHaveProperty('thinking');expect(haiku.body.output_config).not.toHaveProperty('effort');
 });
 it('accepts exactly one JSON text block with bounded thinking blocks and never exposes their contents',async()=>{
  const hidden='PRIVATE_THINKING_NOT_USER_OUTPUT',options=writerOptions({model:'claude-sonnet-5-5',fetchImpl:async()=>new Response(JSON.stringify({stop_reason:'end_turn',content:[{type:'thinking',thinking:hidden,signature:'opaque-signature'},{type:'redacted_thinking',data:'opaque-redacted-data'},{type:'text',text:JSON.stringify(candidate())}],usage:{input_tokens:400,output_tokens:200}}))});
@@ -114,4 +114,8 @@ it('mixed thinking remains under response/output-token caps and complete-end-tur
   const options=writerOptions({model:'claude-sonnet-5-5',fetchImpl:async()=>new Response(JSON.stringify({content,...patch}))});options.fetchImpl=vi.fn(options.fetchImpl);await expect(createAnthropicWriter(options).write(input(),{requestId:'sonnet_request001'})).rejects.toMatchObject({code:patch.stop_reason==='max_tokens'?'incomplete-output':'usage-invalid'});expect(options.fetchImpl).toHaveBeenCalledOnce();
  }
  const capped=writerOptions({model:'claude-sonnet-5-5',limits:{...limits,maxResponseBytes:100},fetchImpl:async()=>new Response(JSON.stringify({stop_reason:'end_turn',content}))});await expect(createAnthropicWriter(capped).write(input(),{requestId:'sonnet_request001'})).rejects.toMatchObject({code:'response-cap'});
+});
+
+it('accepts complete 23–25 word lines below 180 characters without clipping the punchline',()=>{
+ const packet=prepareWriterPacket(input());for(const count of [23,24,25]){const spokenText='Alex, '+Array(count-2).fill('one').join(' ')+' joke.';expect(spokenText.split(/\s+/)).toHaveLength(count);expect(validateWriterResult({...candidate(),spokenText},packet).spokenText).toBe(spokenText);}
 });

@@ -115,3 +115,10 @@ describe('completed return lifecycle validity and retained actual exposure',()=>
   const state=(await f.restart()).snapshot();expect(state.memoryRecords.get(body.jobId)).toMatchObject({validFacts:true,heardBy:[host]});expect(state.exposure.get(body.claimToken)).toMatchObject({valid:true,heardBy:[host]});expect(state.exposure.get(body.claimToken).heardBy).not.toContain(guest);expect(f.providers.writeLine).toHaveBeenCalledOnce();
  });
 });
+
+it('live setup can claim and dispatch at 17 seconds but refuses unheard jobs after 30 seconds',async()=>{
+ const f=await fixture({maxAgeMs:30000});const input=f.score(),jobId=await f.service.enqueueCommitted(input);await f.service.prepareTrusted(jobId);f.advance(11000);
+ const lease=await f.service.acquire(host,roomId,{device});const claim=await f.service.claimPlayback(host,roomId,{jobId,device,epoch:lease.epoch});expect(claim.claimed).toBe(true);f.advance(6000);
+ const audio=await f.service.audio(host,roomId,{jobId,device,epoch:lease.epoch,claimToken:claim.token});expect([...new Uint8Array(await new Response(audio).arrayBuffer())]).toEqual([1,2]);expect(f.providers.streamAudio).toHaveBeenCalledOnce();
+ const stale=await fixture({maxAgeMs:30000});const prior=await ready(stale);stale.advance(30001);const jobs=await stale.service.list(host,roomId);expect(jobs.find(j=>j.id===prior.jobId)).toMatchObject({status:'cancelled',reason:'stale'});expect(stale.providers.streamAudio).not.toHaveBeenCalled();
+});

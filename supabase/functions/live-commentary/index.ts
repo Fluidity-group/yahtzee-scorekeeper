@@ -1237,7 +1237,7 @@ var COMMENTARY_SYSTEM = [
   "Roast the selected target naturally using their OPTIONAL self-described blurb when it offers an original relevant angle. A blurb is self-description, not independently verified truth; fictional absurdity is allowed, invented real personal facts are not. Gender is optional self-description for pronouns, never inferred from a name or blurb, and never grounds identity-based insults.",
   "Respect the explicit humorIntensity: playful, savage or dark. Dark may use shocking, absurd fictional stakes, misdirection and gallows humor. ProfanityAllowed is INDEPENDENT: when false write a complete clean joke, not a censored/bleeped one; when true swearing is permitted but optional. Never automatically increase darkness or profanity from likes.",
   "Prefer liked mechanisms while avoiding disliked subjects/premises and recent repetition; transform a permitted callback rather than repeat wording. Feedback absence is unknown. Playback never proves laughter. Only use authorized callback facts provided by the server; none are included by default.",
-  "Return schema JSON only. spokenText must be plain text, one complete utterance, usually6\u201316words and at most22words and180characters with sentence-ending punctuation. No Markdown, audio tags, preamble, cut-off clauses or clipped punchlines. Preserve spoken names/numbers clearly. Controlled mechanism/subject tags support per-listener learning; they are metadata, not proof the line is funny."
+  "Return schema JSON only. spokenText must be plain text, one complete utterance, usually6\u201316words; prefer at most22words, with a hard maximum32words and180characters with sentence-ending punctuation. No Markdown, audio tags, preamble, cut-off clauses or clipped punchlines. Preserve spoken names/numbers clearly. Controlled mechanism/subject tags support per-listener learning; they are metadata, not proof the line is funny."
 ].join("\n");
 function prepareWriterPacket({ purpose = "score", facts, profile, playerProfiles = [], feedback = {}, targetAccountId } = {}) {
   if (!PURPOSES.includes(purpose) || facts?.schemaVersion !== 1 || facts.snapshotBasis !== "at-acceptance" || facts.observation !== (purpose === "score" ? "accepted-score-only" : "accepted-lifecycle-only")) throw Error("Accepted tagged fact packet required");
@@ -1324,7 +1324,8 @@ function validateWriterResult(candidate, packet) {
   if (candidate.usesTargetProfile && !targetProfile) throw Error("Missing target blurb source");
   if (packet.personalizationRequired && !candidate.usesTargetProfile) throw Error("Target profile required");
   const spoken = text2(candidate.spokenText, 180, "spoken line");
-  if (!spoken.trim() || spoken.trim() !== spoken || spoken.split(/\s+/).length > 22 || /[\u0000-\u001f\u007f\[\]`<>]/.test(spoken) || !/[.!?]["']?$/.test(spoken)) throw Error("Incomplete or tagged writer utterance");
+  if (!spoken.trim() || spoken.trim() !== spoken || /[\u0000-\u001f\u007f\[\]`<>]/.test(spoken) || !/[.!?]["']?$/.test(spoken)) throw Error("Incomplete or tagged writer utterance");
+  if (spoken.split(/\s+/).length > 32) throw Error("Spoken line exceeds word limit");
   const diagnostics = writerCandidateDiagnostics(candidate, packet);
   if (packet.personalizationRequired && diagnostics.ambiguousNameCount) throw Error("Ambiguous target name");
   if (packet.personalizationRequired && diagnostics.namedRivalCount) throw Error("Wrong named target");
@@ -1454,7 +1455,7 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
       try {
         result = validateWriterResult(parsed, packet);
       } catch (error) {
-        const reasons = { "Invalid writer schema": "schema", "Writer grounding mismatch": "grounding", "Writer settings/tags mismatch": "settings-or-tags", "Unknown event grounding": "event-reference", "Unknown personal profile source": "profile-reference", "Missing target blurb source": "missing-blurb", "Invalid spoken line": "line-length", "Incomplete or tagged writer utterance": "line-completeness", "Clean profile incompatible": "clean-incompatible", "Target profile required": "target-profile-required", "Wrong named target": "wrong-named-target", "Ambiguous target name": "ambiguous-target-name" };
+        const reasons = { "Invalid writer schema": "schema", "Writer grounding mismatch": "grounding", "Writer settings/tags mismatch": "settings-or-tags", "Unknown event grounding": "event-reference", "Unknown personal profile source": "profile-reference", "Missing target blurb source": "missing-blurb", "Invalid spoken line": "line-length", "Incomplete or tagged writer utterance": "line-completeness", "Spoken line exceeds word limit": "line-word-count", "Clean profile incompatible": "clean-incompatible", "Target profile required": "target-profile-required", "Wrong named target": "wrong-named-target", "Ambiguous target name": "ambiguous-target-name" };
         validationReason = reasons[error.message] || "validation";
         fail3("output-invalid");
       }
@@ -1928,7 +1929,7 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
       })
     });
     const providers = enabled ? createCommentaryProviders({ fetchImpl, allowPaid: true, allowance, durableGate: gate, getAnthropicKey: () => get("ANTHROPIC_API_KEY"), getElevenLabsKey: () => get("ELEVENLABS_API_KEY"), model: get("COMMENTARY_WRITER_MODEL") || "claude-haiku-4-5-20251001", writerLimits: { maxRequests: 1, maxInputCharacters: 5e4, maxOutputTokens: 512, deadlineMs: 12e3, maxResponseBytes: 2e4 }, audioLimits: { firstByteMs: 1e4, completeMs: 25e3, maxBytes: 524288, maxLineCharacters: 180 } }) : null;
-    const service = createCommentaryService({ store: persistence, getRoom: (id2) => roomStore.byId(id2), now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
+    const service = createCommentaryService({ store: persistence, getRoom: (id2) => roomStore.byId(id2), now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, maxAgeMs: 3e4, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
     async function processRoom(roomId) {
       await persistence.initialize();
       const rows = await resource("clubhouse_commentary_outbox?scope_id=eq." + scopeId + "&room_id=eq." + roomId + "&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10");

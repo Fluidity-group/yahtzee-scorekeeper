@@ -206,3 +206,9 @@ it('source-command allowance can arrive after pending hydration and matches only
 it('does not mistake a source-command marker for a score replay allowance or an unbound lifecycle job',async()=>{
  const f=setup();f.client.allowGreeting({sourceCommandId:'wanted_source_01',gameId:'game'});f.setJobs([{...f.job('ordinary-old-score'),sourceCommandId:'wanted_source_01'}, {...f.job('wrong-lifecycle'),eventId:'lifecycle-wrong_source_01',sourceCommandId:'wanted_source_01',purpose:'return',lifecycleVerified:true,acceptedAt:'2026-10-14T20:00:00.000Z'}]);await f.client.refresh();await tick();expect(f.player.play).not.toHaveBeenCalled();expect(f.client.snapshot().captions.map(c=>c.id)).toEqual(['ordinary-old-score']);f.client.dispose();
 });
+
+it('reuses the session authenticated profile without a duplicate settings round trip and still fences profile changes',async()=>{
+ const f=setup(),profile={version:1,capabilities:{liveProviders:true}};await f.client.refresh({profile});expect(f.request.mock.calls.map(([p])=>p.operation)).toEqual(['jobs-read']);
+ f.setJobs([f.job('new')]);await f.client.refresh({profile});await tick();expect(f.player.play).toHaveBeenCalledOnce();expect(f.request.mock.calls.some(([p])=>p.operation==='profile-read')).toBe(false);
+ await f.client.refresh({profile:{...profile,version:2}});expect(f.client.snapshot().status).toBe('settings-changed');expect(f.player.stop).toHaveBeenCalled();f.client.dispose();
+});

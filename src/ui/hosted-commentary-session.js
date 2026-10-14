@@ -51,7 +51,7 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
   if(!authorized()||current.connected===false)return;
   if(refreshing)return refreshing;
   const fence=epoch;
-  const task=(async()=>{try{const next=await invoke('profile-read');if(fence!==epoch)return;profile=next;sync();await controller.refresh();if(fence===epoch)await controller.heartbeat();}catch{if(fence===epoch)onNotice('Commentary is unavailable. Keep playing.');}})();
+  const task=(async()=>{try{const next=await invoke('profile-read');if(fence!==epoch)return;profile=next;sync();await controller.refresh({profile:next});if(fence===epoch)await controller.heartbeat();}catch{if(fence===epoch)onNotice('Commentary is unavailable. Keep playing.');}})();
   refreshing=task;try{await task;}finally{if(refreshing===task)refreshing=null;}
  }
  function update(next){
@@ -66,7 +66,7 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
  }
  function personalForm(){
   const p=personal||{version:0,gender:'',blurb:'',displayName:'',shareWithRoom:false};
-  return `<form data-hosted-personal><h3>Your commentator profile</h3><label>Display name<input name="profileDisplayName" maxlength="24" value="${esc(p.displayName)}"></label>${renderPlayerProfileFields('account',p)}<label class="hosted-commentary-share"><input type="checkbox" name="shareWithRoom"${p.shareWithRoom?' checked':''}><span>Share my details with the commentator at this table<small>Let the jokes include my interests and blurb. You can change this anytime.</small></span></label><p data-personal-status role="status" aria-live="polite"></p><button type="submit">Save my details</button><button type="button" data-personal-delete>Remove my details</button></form>`;
+  return `<form data-hosted-personal><h3>Your player details for jokes</h3><label>Display name<input name="profileDisplayName" maxlength="24" value="${esc(p.displayName)}"></label>${renderPlayerProfileFields('account',p)}<label class="hosted-commentary-share"><input type="checkbox" name="shareWithRoom"${p.shareWithRoom?' checked':''}><span>Share my details with the commentator at this table<small>Let the jokes include my interests and blurb. You can change this anytime.</small></span></label><p data-personal-status role="status" aria-live="polite"></p><button type="submit">Save my details</button><button type="button" data-personal-delete>Remove my details</button></form>`;
  }
  function bindPersonal(root){
   const form=root.querySelector('[data-hosted-personal]'),ownerEpoch=epoch;let saving=false;

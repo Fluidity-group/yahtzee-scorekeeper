@@ -33,7 +33,9 @@ final class CommentaryStreamDataSource extends BaseDataSource {
         request.setRequestMethod("GET");
         request.setRequestProperty("Authorization","Bearer "+token);
         request.setRequestProperty("X-Commentary-Claim",claim);request.setRequestProperty("X-Commentary-Epoch",String.valueOf(epoch));request.setRequestProperty("X-Commentary-Device",device);request.setRequestProperty("Accept","audio/mpeg");
-        if(request.getResponseCode()!=200)throw new IOException("Stream authorization or availability rejected");
+        int status=request.getResponseCode();
+        android.util.Log.i("LiveCommentary", "stream-http-status="+status);
+        if(status!=200)throw new IOException("Stream authorization or availability rejected");
         String content=request.getContentType();
         if(content==null||!content.toLowerCase(java.util.Locale.ROOT).startsWith("audio/mpeg"))throw new IOException("Expected streaming MP3");
         input=request.getInputStream();started=true;transferStarted(spec);return C.LENGTH_UNSET;
