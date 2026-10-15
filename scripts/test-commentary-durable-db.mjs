@@ -17,8 +17,9 @@ const migration=readFileSync('supabase/migrations/202610140005_commentary_durabl
 const localMigration=readFileSync('supabase/migrations/202610140008_local_commentary_sessions.sql','utf8');
 const incrementalMigration=readFileSync('supabase/migrations/202610140009_commentary_incremental_transport.sql','utf8');
 const batchMigration=readFileSync('supabase/migrations/202610140010_commentary_atomic_batches.sql','utf8'),providerMigration=readFileSync('supabase/migrations/202610140011_commentary_provider_operations.sql','utf8');
+const receiptMigration=readFileSync('supabase/migrations/202610150001_commentary_historical_invalidation.sql','utf8');
 const roomMigration=readFileSync('supabase/migrations/202610140006_commentary_room_outbox.sql','utf8');
-const report={batchMigrationSha256:createHash('sha256').update(batchMigration).digest('hex'),providerMigrationSha256:createHash('sha256').update(providerMigration).digest('hex'),incrementalMigrationSha256:createHash('sha256').update(incrementalMigration).digest('hex'),localMigrationSha256:createHash('sha256').update(localMigration).digest('hex'),roomMigrationSha256:createHash('sha256').update(roomMigration).digest('hex'),startedAt:new Date().toISOString(),image,migrationSha256:createHash('sha256').update(migration).digest('hex'),checks:[],passed:false};let created=false;
+const report={historicalInvalidationMigrationSha256:createHash('sha256').update(receiptMigration).digest('hex'),receiptBaseline:process.env.COMMENTARY_RECEIPT_BASELINE==='1',batchMigrationSha256:createHash('sha256').update(batchMigration).digest('hex'),providerMigrationSha256:createHash('sha256').update(providerMigration).digest('hex'),incrementalMigrationSha256:createHash('sha256').update(incrementalMigration).digest('hex'),localMigrationSha256:createHash('sha256').update(localMigration).digest('hex'),roomMigrationSha256:createHash('sha256').update(roomMigration).digest('hex'),startedAt:new Date().toISOString(),image,migrationSha256:createHash('sha256').update(migration).digest('hex'),checks:[],passed:false};let created=false;
 const quote=value=>`'${String(value).replaceAll("'","''")}'`,json=value=>`${quote(JSON.stringify(value))}::jsonb`;
 function run(sql){return spawnSync('docker',['exec','-i',container,'psql','-U','postgres','-d','postgres','-qAt','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8',timeout:30000});}
 function query(sql){const result=run(sql);if(result.status!==0)throw Error(result.stderr);return result.stdout.trim();}
@@ -33,7 +34,7 @@ try{
  execFileSync('docker',['run','--pull','never','--rm','-d','--network','none','--tmpfs','/var/lib/postgresql/data','--name',container,'-e','POSTGRES_HOST_AUTH_METHOD=trust',image],{encoding:'utf8',timeout:30000});created=true;
  let ready=false;for(let n=0;n<60;n++){if(spawnSync('docker',['exec',container,'pg_isready','-h','127.0.0.1','-U','postgres'],{encoding:'utf8',timeout:2000}).status===0){ready=true;break;}await new Promise(resolve=>setTimeout(resolve,250));}assert(ready,'Disposable database did not start');
  query('create role anon;create role authenticated;create role service_role bypassrls;');
- await check('migration reruns without changing existing room or score schema',()=>{query('create table public.test_scores(id text primary key,score integer);insert into public.test_scores values(\'existing-score\',50);');query(migration);query(migration);query(localMigration);query(incrementalMigration);query(batchMigration);query(providerMigration);assert.equal(query('select score from public.test_scores;'),'50');});
+ await check('migration reruns without changing existing room or score schema',()=>{query('create table public.test_scores(id text primary key,score integer);insert into public.test_scores values(\'existing-score\',50);');query(migration);query(migration);query(localMigration);query(incrementalMigration);query(batchMigration);query(providerMigration);if(process.env.COMMENTARY_RECEIPT_BASELINE!=='1'){query(receiptMigration);query(receiptMigration);}assert.equal(query('select score from public.test_scores;'),'50');});
  await check('anonymous/authenticated roles cannot read/write state or invoke privileged RPCs/allowances',()=>{for(const role of ['anon','authenticated'])for(const sql of [`select * from public.clubhouse_commentary_items;`,`select public.clubhouse_commentary_load('${scope}');`,`select public.clubhouse_commentary_batch('${scope}',0,'{}','{}','[]');`,`select public.clubhouse_commentary_dispatch('${scope}','{}');`,`select public.clubhouse_commentary_finish('${scope}','invalid','{}');`,`select public.clubhouse_commentary_load_changed('${scope}',null);`,`select public.clubhouse_commentary_patch('${scope}',0,'{}','{}');`,`select public.clubhouse_commentary_set_limit('${scope}','${roomId}',100,100000,clock_timestamp()+interval '1 hour');`])assert.notEqual(run(`set role ${role};${sql}`).status,0);assert.notEqual(run(`set role service_role;insert into public.clubhouse_commentary_items(scope_id,collection,item_key,value)values('${scope}','jobs','forged','{}');`).status,0);});
  await check('incremental conditional loads are current and no-op reads do not advance the global version',async()=>{
   const current=await store().initialize(),before=current.version;await current.refresh();assert.equal(current.version,before);const raw=await rpc('clubhouse_commentary_load_changed',{p_scope:scope,p_known_version:before});assert.equal(raw.notModified,true);assert.equal(raw.state,undefined);await current.transaction(()=>true,{skipUnchanged:true});assert.equal(current.version,before);
@@ -93,7 +94,7 @@ try{
 
  await check('atomic room wrapper migration and grants qualify on actual PostgreSQL',()=>{
   query("create schema auth;create function auth.uid()returns uuid language sql as 'select null::uuid';create table public.clubhouse_rooms(id uuid primary key,code text unique,host_id uuid,member_ids uuid[],revision bigint,state jsonb,created_at timestamptz default now());grant all on public.clubhouse_rooms to service_role;");
-  query(readFileSync('supabase/migrations/202610130001_hosted_game_history.sql','utf8'));query(roomMigration);query(localMigration);query(incrementalMigration);query(batchMigration);query(providerMigration);
+  query(readFileSync('supabase/migrations/202610130001_hosted_game_history.sql','utf8'));query(roomMigration);query(localMigration);query(incrementalMigration);query(batchMigration);query(providerMigration);if(process.env.COMMENTARY_RECEIPT_BASELINE!=='1')query(receiptMigration);
   assert.equal(query('set role service_role;select public.clubhouse_commentary_atomic_available();'),'t');
   for(const role of ['anon','authenticated'])assert.notEqual(run('set role '+role+';select public.clubhouse_commentary_atomic_available();').status,0);
  });
@@ -177,6 +178,47 @@ try{
   await current.batch(()=>service.playbackEvent(host,localId,{...receipt,status:'completed',sequence:2}));
   const bound=await service.prepareTrusted(next.id,{beforeClaim:async()=>{const selected=await service.selectReaction(host,localId,selector);return selected.id;},afterReady:()=>service.bindReaction(host,localId,selector)});
   assert.equal(writes,2);assert.equal(voices,1);assert.equal(bound.binding.job.id,next.id);assert.equal(current.snapshot().jobs.get(next.id).status,'streaming');
+ });
+
+ await check('local Undo and correction invalidate completed history after lease expiry without forging listening',async()=>{
+  const {localRoom}=await import('../server/commentary/local-sessions.js');
+  for(const [index,type]of ['undo-score','correct-score'].entries()){
+   const current=await store().initialize(),localId=`00000000-0000-4000-8000-00000000009${index}`,gameId=`00000000-0000-4000-8000-00000000008${index}`;
+   const service=createCommentaryService({store:current,deferAudio:true,profile:{enabled:true,frequency:'lively',humorIntensity:'dark',profanityAllowed:true,voiceOption:'rachel'},now:()=>current.databaseNowMs,getRoom:async id=>{const session=current.snapshot().localSessions.get(id);return session?localRoom(session):null;},liveProviders:{liveConfigured:true,writeLine:async()=>({text:'The dice have hired an accountant.',containsProfanity:false}),streamAudio:async function*(){yield new Uint8Array([1,2,3]);}},budget:{maxRequests:100,maxCharacters:100000}});
+   const start=await current.batch(()=>service.startLocal(host,localId,{commandId:`sql_invalidate_start_${index}`,config:{gameId,names:['Alex'],mode:'standard'},settings:{enabled:true,frequency:'lively',humorIntensity:'dark',profanityAllowed:true,voiceOption:'rachel'}}));
+   query(`set role service_role;select public.clubhouse_commentary_set_limit('${scope}','${localId}',100,100000,clock_timestamp()+interval '1 hour');`);
+   const scored=await current.batch(()=>service.commitLocal(host,localId,{commands:[{commandId:`sql_invalidate_play_${index}`,action:{type:'start',seat:0}},{commandId:`sql_invalidate_score_${index}`,action:{type:'score',seat:0,category:'chance',value:25}}]}));
+   const eventId=scored.room.game.events.find(e=>e.type==='score').id,selector={gameId,eventId,device:'invalidation-sql-phone',profileVersion:start.profile.version};
+   const prepared=await service.prepareTrusted(null,{beforeClaim:async()=>{const selected=await service.selectReaction(host,localId,selector);return selected.id;},afterReady:()=>service.bindReaction(host,localId,selector)});
+   await new Response(prepared.body.openStream()).arrayBuffer();
+   const receipt={jobId:prepared.binding.job.id,device:selector.device,epoch:prepared.binding.claim.epoch,claimToken:prepared.binding.claim.token};
+   await current.batch(()=>service.playbackEvent(host,localId,{...receipt,status:'started',sequence:1}));
+   await current.batch(()=>service.playbackEvent(host,localId,{...receipt,status:'completed',sequence:2}));
+   const heard=structuredClone(current.snapshot().exposure.get(receipt.claimToken));assert.equal(heard.valid,true);
+   query(`update public.clubhouse_commentary_items set value=jsonb_set(value,'{expiresAt}',to_jsonb(floor(extract(epoch from clock_timestamp())*1000)-1))where scope_id='${scope}'and collection='leases'and item_key='${localId}';update public.clubhouse_commentary_scopes set version=version+1 where id='${scope}';`);
+   const expired=await store().initialize(),priorState=encodeCommentaryState(expired.snapshot());
+   // Combining invalidation with any new listening/identity evidence still needs a live lease.
+   for(const [label,change]of Object.entries({sequence:{sequence:3},status:{status:'started'},account:{reportingAccount:guest},audience:{expectedAudience:[host,guest]},hearing:{heardBy:[host,guest]},epoch:{epoch:heard.epoch+1},timestamp:{at:heard.at+1},firstExposure:{firstExposureAt:heard.firstExposureAt+1},expiry:{expiresAt:heard.expiresAt+1},timing:{clientTiming:{elapsedMs:1}},newFact:{inferredLaughter:true}})){
+    const forged=structuredClone(priorState);Object.assign(forged.exposure[receipt.claimToken],{valid:false},change);
+    const result=run(`set role service_role;select public.clubhouse_commentary_commit('${scope}',${expired.version},${json(forged)});`);
+    assert.notEqual(result.status,0,`invalidation plus ${label} must require a live fenced lease`);assert.match(result.stderr,/Speech receipt requires current fenced lease/);
+   }
+   // Test the real service command and durable batch, not a hand-crafted receipt success.
+   const action={type,seat:0,target:eventId,...(type==='correct-score'?{value:20}:{})};
+   await current.batch(()=>service.commitLocal(host,localId,{commands:[{commandId:`sql_invalidate_change_${index}`,action}]}));
+   const saved=await store().initialize(),snapshot=saved.snapshot(),invalidated=snapshot.exposure.get(receipt.claimToken);
+   assert.deepEqual(invalidated,{...heard,valid:false});assert.equal(snapshot.jobs.get(receipt.jobId).line,null);assert.equal(snapshot.jobs.get(receipt.jobId).status,'completed');
+   assert.equal(snapshot.localSessions.get(localId).game.sheets[0].chance,type==='correct-score'?20:undefined);
+   const before=encodeCommentaryState(snapshot),version=saved.version;
+   for(const [label,change]of Object.entries({resurrection:{valid:true},sequence:{sequence:3},status:{status:'started'},account:{reportingAccount:guest},audience:{expectedAudience:[host,guest]},hearing:{heardBy:[host,guest]},epoch:{epoch:heard.epoch+1},timestamp:{at:heard.at+1},timing:{clientTiming:{elapsedMs:1}},newFact:{inferredLaughter:true}})){
+    const forged=structuredClone(before);Object.assign(forged.exposure[receipt.claimToken],change);
+    const result=run(`set role service_role;select public.clubhouse_commentary_commit('${scope}',${version},${json(forged)});`);
+    assert.notEqual(result.status,0,`${label} must require a live fenced lease`);assert.match(result.stderr,/Speech receipt requires current fenced lease/);
+   }
+   // No new receipt or first hearing may use the historical invalidation exception.
+   const forged=structuredClone(before);forged.exposure['forged-new-receipt']={...heard,valid:false};assert.match(run(`set role service_role;select public.clubhouse_commentary_commit('${scope}',${version},${json(forged)});`).stderr,/Speech receipt requires current fenced lease/);
+   assert.deepEqual((await store().initialize()).snapshot().exposure.get(receipt.claimToken),invalidated);
+  }
  });
 
  await check('inactive local mirror blurbs expire after 90 days without changing saved score fixture',()=>{
