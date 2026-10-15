@@ -127,7 +127,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     publish({captions:state.captions.map(c=>c.id===current.job.id?{...c,status:receipt.status,feedbackBasis:basis}:c)});
    }return receipt;
   }).catch(()=>{if(terminal.has(event.status))current.terminalReceiptFailed=true;});
-  if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
+  if(!current.cancelled&&run===current)publish({...(event.status==='started'?{error:null}:{}),measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
   if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;if(receiptGeneration!==generation)return;if(current.terminalReceiptFailed){publish({status:'caption-only',error:'Commentary could not confirm playback. Keep playing; scores are saved.'});return;}if(direct()){void react();if(!current.feedbackReady)return refresh({readCaptions:true});return;}return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
  }
  async function refresh({profile:suppliedProfile,readCaptions=false}={}){

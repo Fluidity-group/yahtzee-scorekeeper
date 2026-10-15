@@ -442,3 +442,13 @@ it('waits for bound request stop acknowledgement even if stop emits its terminal
  f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('bound native rejected'));for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();
  releaseStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');f.player.stop.mockResolvedValue();f.client.dispose();
 });
+
+
+it('clears a prior voice error only when recovered native speech actually starts',async()=>{
+ const f=setup();let rejectFirst;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('bound native rejected'));for(let i=0;i<4;i++)await tick();
+ expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.client.snapshot().error).toBe('Voice unavailable. Scores are saved normally.');const second=f.reaction,next={...f.job('recovered-job','score-two'),status:'streaming'};
+ expect(second.onBind({job:next,claim:{roomId:'room',jobId:next.id,deviceId:'phone',epoch:4,token:'next-claim'},lease:{...f.lease,epoch:4}})).toBe(true);expect(f.client.snapshot().error).not.toBeNull();
+ second.onEvent({jobId:next.id,epoch:4,state:'started',sequence:1,measurementBasis:'native-audio-position-proxy'});await tick();expect(f.client.snapshot().error).toBeNull();f.client.dispose();
+});
