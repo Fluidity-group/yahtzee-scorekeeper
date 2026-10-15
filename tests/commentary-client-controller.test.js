@@ -389,3 +389,37 @@ it('does not rearm a new score already undone within the same combined snapshot'
  first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
  f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'},{id:'undo-two',type:'score-undo',target:'score-two'}]}});await f.client.refresh();await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();f.client.dispose();
 });
+
+
+it('waits for the old native stop before opening a replacement from a combined Undo-and-score update',async()=>{
+ const f=setup();let releaseStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'}]}});await f.client.refresh();await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();releaseStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+it.each(['reject','abandon'])('never starts replacement speech when the old native stop is %s',async outcome=>{
+ const f=setup();let resolveStop,rejectStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();f.player.stop.mockImplementation(()=>new Promise((resolve,reject)=>{resolveStop=resolve;rejectStop=reject;}));
+ const changed={...f.ctx,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'}]}};f.client.update(changed);await tick();
+ if(outcome==='reject')rejectStop(Error('native stop unavailable'));else{f.client.update({...changed,profileVersion:2});resolveStop();}
+ for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();if(outcome==='reject')expect(f.client.snapshot().status).toBe('caption-only');f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+
+it('coalesces newer scores while native stop is pending and drains only the current target',async()=>{
+ const f=setup();let releaseStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ let game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));
+ game={...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});game={...game,events:[...game.events,{id:'score-three',type:'score'}]};f.client.update({...f.ctx,game});await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();
+ releaseStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-three');f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+it('allows only a freshly armed new-scope welcome after an old native stop settles',async()=>{
+ const f=setup();let releaseStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));
+ f.client.update({...f.ctx,game:{id:'new-game',events:[]}});expect(f.client.allowGreeting({jobId:'new-welcome',gameId:'new-game',profileVersion:1})).toBe(true);await f.client.refresh();expect(f.player.playReaction).toHaveBeenCalledOnce();
+ releaseStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.jobId).toBe('new-welcome');f.player.stop.mockResolvedValue();f.client.dispose();
+});

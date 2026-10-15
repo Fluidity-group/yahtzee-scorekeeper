@@ -14,7 +14,19 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
  const speakable=()=>context?.userId&&context.userId===context.hostId&&context.enabled&&!context.listenerMuted&&!context.paused&&context.visible!==false;
  const invoke=(operation,payload={},signal=abort.signal,roomId=context.roomId)=>request({operation,roomId,...payload},{signal}).then(response=>response.result);
  function stop(reason){
-  if(run){run.cancelled=true;run.abort.abort();Promise.resolve(player.stop(reason)).catch(()=>{});run=null;}
+  if(run){
+   run.cancelled=true;run.abort.abort();
+   let stopped;try{stopped=Promise.resolve(player.stop(reason));}catch{stopped=Promise.reject(Error('Native stop unavailable'));}
+   const barrier=Promise.all([nativeStopBarrier,stopped]);nativeStopBarrier=barrier;run=null;
+   void barrier.then(()=>{
+    if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;
+    // Invalidation clears old desired work; drain only the currently authorized target after actual output stops.
+    void react();
+   },()=>{
+    if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;desired=null;
+    if(!disposed&&speakable())publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});
+   });
+  }
   lease=null;publish({playing:null});
  }
  function invalidate(reason){generation++;abort.abort();abort=new AbortController();pending=null;desired=null;completionBarrier=null;stop(reason);}
@@ -59,7 +71,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
    if(index<0||context.game.events.slice(index+1).some(event=>['score-undo','score-correction'].includes(event.type)&&(event.target===job.eventId||job.dependencyEventIds.includes(event.target))))return false;
   }
   return typeof job?.id==='string'&&job.gameId===context.game.id&&job.profileVersion===context.profileVersion&&['ready','claimed','streaming','started','completed','interrupted','failed'].includes(job.status)&&typeof job.caption==='string'&&job.caption.length>0&&job.caption.length<=1000&&Array.isArray(job.dependencyEventIds);}
- let desired=null,preparationTail=Promise.resolve();
+ let desired=null,preparationTail=Promise.resolve(),nativeStopBarrier=null;
  function prepareAhead(target){
   const fence=generation,signal=abort.signal,roomId=context.roomId,gameId=context.game.id,profileVersion=context.profileVersion;
   target.preparation=preparationTail=preparationTail.catch(()=>{}).then(async()=>{
@@ -72,7 +84,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
 
  const direct=()=>typeof player.playReaction==='function'&&context?.directReaction===true;
  async function react(){
-  if(disposed||!direct()||!speakable()||run||completionBarrier||!desired)return;
+  if(disposed||!direct()||!speakable()||run||completionBarrier||nativeStopBarrier||!desired)return;
   const {queuedAt=monotonicNow(),preparation,superseded,...target}=desired;desired=null;const fence=generation,dequeuedAt=monotonicNow(),queueMs=Math.max(0,Math.round(dequeuedAt-queuedAt));
   console.info('[Commentary direct]',JSON.stringify({stage:'dequeued',queueMs}));
   const active={job:{id:'connecting',eventId:target.eventId,dependencyEventIds:target.eventId?[target.eventId]:[]},claim:{epoch:0},roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve(),awaitingPreparation:!!preparation};
