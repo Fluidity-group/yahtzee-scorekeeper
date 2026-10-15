@@ -34,7 +34,7 @@ function createRuntime(){
    try{const jobId=await persistence.batch(()=>service.enqueueCommitted(row.payload));await rpc('clubhouse_commentary_ack_outbox',{p_scope:scopeId,p_idempotency_key:row.idempotency_key,p_status:jobId?'enqueued':'invalidated',p_job_id:jobId});}catch{await rpc('clubhouse_commentary_ack_outbox',{p_scope:scopeId,p_idempotency_key:row.idempotency_key,p_status:'retry',p_job_id:null}).catch(()=>{});}
   }
   await persistence.refresh();
-  const pending=[...persistence.snapshot().jobs.values()].filter(job=>job.roomId===roomId&&job.status==='pending').slice(-3);
+  const pending=[...persistence.snapshot().jobs.values()].filter(job=>job.roomId===roomId&&job.status==='pending').sort((a,b)=>Date.parse(a.facts.acceptedAt)-Date.parse(b.facts.acceptedAt)||(a.facts.revision||0)-(b.facts.revision||0)).slice(-3);
   for(const job of pending)await service.prepareTrusted(job.id);
  }
  return {persistence,service,processRoom};

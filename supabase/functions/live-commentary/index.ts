@@ -1404,7 +1404,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         const reason = eligible(state, job, room, { started: job.status === "started" });
         if (reason) cancel(state, job, reason);
       }
-      return [...state.jobs.values()].filter((j) => j.roomId === roomId && j.facts.gameId === room.game?.id).slice(-20).map((j) => ({ id: j.id, gameId: j.facts.gameId, eventId: j.facts.eventId, sourceCommandId: j.facts.commandId, acceptedAt: j.facts.acceptedAt, purpose: j.facts.purpose || "score", lifecycleVerified: j.facts.observation === "accepted-lifecycle-only" && !eligible(state, j, room, { started: ["started", "completed", "interrupted"].includes(j.status) }), dependencyEventIds: [...j.facts.scoreDependencies || []], status: j.status, caption: j.line?.text || null, reason: j.reason || null, profileVersion: j.profile.version, ...feedbackProjection(state, j, userId) }));
+      return [...state.jobs.values()].filter((j) => j.roomId === roomId && j.facts.gameId === room.game?.id).sort((a, b) => Date.parse(a.facts.acceptedAt) - Date.parse(b.facts.acceptedAt) || (a.facts.revision || 0) - (b.facts.revision || 0)).slice(-20).map((j) => ({ id: j.id, gameId: j.facts.gameId, eventId: j.facts.eventId, sourceCommandId: j.facts.commandId, acceptedAt: j.facts.acceptedAt, purpose: j.facts.purpose || "score", lifecycleVerified: j.facts.observation === "accepted-lifecycle-only" && !eligible(state, j, room, { started: ["started", "completed", "interrupted"].includes(j.status) }), dependencyEventIds: [...j.facts.scoreDependencies || []], status: j.status, caption: j.line?.text || null, reason: j.reason || null, profileVersion: j.profile.version, ...feedbackProjection(state, j, userId) }));
     }, { skipUnchanged: true });
   }
   async function claimPlayback(userId, roomId, { jobId, device, epoch } = {}) {
@@ -2561,7 +2561,7 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
         }
       }
       await persistence.refresh();
-      const pending = [...persistence.snapshot().jobs.values()].filter((job) => job.roomId === roomId && job.status === "pending").slice(-3);
+      const pending = [...persistence.snapshot().jobs.values()].filter((job) => job.roomId === roomId && job.status === "pending").sort((a, b) => Date.parse(a.facts.acceptedAt) - Date.parse(b.facts.acceptedAt) || (a.facts.revision || 0) - (b.facts.revision || 0)).slice(-3);
       for (const job of pending) await service.prepareTrusted(job.id);
     }
     return { persistence, service, processRoom };

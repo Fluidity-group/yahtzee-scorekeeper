@@ -47,6 +47,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
    if(index<0||context.game.events.slice(index+1).some(event=>['score-undo','score-correction'].includes(event.type)&&(event.target===job.eventId||job.dependencyEventIds.includes(event.target))))return false;
   }
   return typeof job?.id==='string'&&job.gameId===context.game.id&&job.profileVersion===context.profileVersion&&['ready','claimed','streaming','started','completed','interrupted','failed'].includes(job.status)&&typeof job.caption==='string'&&job.caption.length>0&&job.caption.length<=1000&&Array.isArray(job.dependencyEventIds);}
+ let completionBarrier=null;
  function receive(current,event){
   event={...event,status:event?.state||event?.status};
   if(event?.jobId!==current.job.id||event.epoch!==current.claim.epoch||!lifecycle.has(event.status)||!Number.isInteger(event.sequence)||event.sequence<=current.sequence)return;
@@ -61,7 +62,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   // Preserve real native evidence only. A host receipt never marks other people as having heard.
   current.receipts=current.receipts.then(()=>invoke('playback-event',payload,undefined,current.roomId)).catch(()=>{});
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
-  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});void Promise.resolve(pending).then(()=>refresh()).catch(()=>{});}
+  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
  }
  async function refresh({profile:suppliedProfile}={}){
   if(disposed||!context?.userId||!context?.game||!context?.roomId)return;
@@ -87,8 +88,8 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     if(initial){projection.forEach(job=>{if(!greetingAllowed(job)||!['opening','return','next-game'].includes(job.purpose)||job.lifecycleVerified!==true)hydrated.add(job.id);});initial=false;if(!greetings.size&&!greetingCommands.size)return;}
     const capability=profile.capabilities||{},voiceAllowed=capability.liveProviders===true||allowSyntheticPlayback&&capability.providerMode==='synthetic';
     if(!voiceAllowed){if(run)invalidate('provider-unavailable');publish({status:'caption-only'});return;}
-    if(!speakable()||run)return;
-    const job=[...captionJobs].reverse().find(job=>job.status==='ready'&&(!greetingAllowed(job)||['opening','return','next-game'].includes(job.purpose)&&job.lifecycleVerified===true)&&(!hydrated.has(job.id)||greetingAllowed(job))&&!attempted.has(job.id));if(!job)return;
+    if(!speakable()||run||completionBarrier)return;
+    const job=[...captionJobs].reverse().sort((a,b)=>Date.parse(b.acceptedAt)-Date.parse(a.acceptedAt)).find(job=>job.status==='ready'&&(!greetingAllowed(job)||['opening','return','next-game'].includes(job.purpose)&&job.lifecycleVerified===true)&&(!hydrated.has(job.id)||greetingAllowed(job))&&!attempted.has(job.id));if(!job)return;
     if((job.purpose||'score')==='score')for(const older of captionJobs)if(older!==job&&(older.purpose||'score')==='score'&&older.status==='ready')attempted.add(older.id);
     attempted.add(job.id);greetings.delete(job.id);greetingCommands.delete(job.sourceCommandId);if(['opening','return','next-game'].includes(job.purpose))playedGreetingCommands.add(job.sourceCommandId);
     const acquisitionSentAt=monotonicNow();

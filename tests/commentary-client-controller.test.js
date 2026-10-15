@@ -219,3 +219,9 @@ it('plays the newest waiting score and refreshes immediately after completion wi
  const f=setup();await f.client.refresh();f.setJobs([f.job('older'),f.job('latest')]);await f.client.refresh();await tick();expect(f.player.play.mock.calls[0][0].claim.jobId).toBe('latest');
  f.setJobs([f.job('older'),f.job('latest'),f.job('next')]);f.emit({jobId:'latest',epoch:3,state:'started',sequence:1});f.emit({jobId:'latest',epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.player.play.mock.calls.at(-1)[0].claim.jobId).toBe('next');expect(f.player.play.mock.calls.some(([p])=>p.claim.jobId==='older')).toBe(false);f.client.dispose();
 });
+
+it('waits for the terminal receipt before acquiring the next line',async()=>{
+ const f=setup(),original=f.request.getMockImplementation();let release;
+ f.request.mockImplementation((payload,...rest)=>payload.operation==='playback-event'&&payload.status==='completed'?new Promise(resolve=>{release=()=>resolve({result:{accepted:true}});}):original(payload,...rest));
+ await f.client.refresh();f.setJobs([f.job('first')]);await f.client.refresh();await tick();f.setJobs([f.job('first'),f.job('next')]);f.emit({jobId:'first',epoch:3,state:'started',sequence:1});f.emit({jobId:'first',epoch:3,state:'completed',sequence:2});for(let i=0;i<3;i++)await tick();expect(f.player.play).toHaveBeenCalledTimes(1);expect(release).toBeTypeOf('function');await f.client.refresh();expect(f.player.play).toHaveBeenCalledTimes(1);release();for(let i=0;i<4;i++)await tick();expect(f.player.play.mock.calls.at(-1)[0].claim.jobId).toBe('next');f.client.dispose();
+});
