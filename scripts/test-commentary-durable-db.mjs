@@ -160,6 +160,25 @@ try{
   assert.equal(await current.batch(()=>service.selectReaction(host,localId,selector)),null);
  });
 
+ await check('write-ahead preserves the active speaker and reserves no next voice until a terminal receipt',async()=>{
+  const current=await store().initialize(),localId='00000000-0000-4000-8000-000000000082',gameId='00000000-0000-4000-8000-000000000083';
+  const {localRoom}=await import('../server/commentary/local-sessions.js');let writes=0,voices=0;
+  const service=createCommentaryService({store:current,deferAudio:true,profile:{enabled:true,frequency:'lively',humorIntensity:'dark',profanityAllowed:true,voiceOption:'rachel'},now:()=>current.databaseNowMs,getRoom:async id=>{const session=current.snapshot().localSessions.get(id);return session?localRoom(session):null;},liveProviders:{liveConfigured:true,writeLine:async()=>{writes++;return {text:'The dice have hired an accountant.',containsProfanity:false};},streamAudio:async function*(){voices++;yield new Uint8Array([1,2,3]);}},budget:{maxRequests:100,maxCharacters:100000}});
+  const start=await current.batch(()=>service.startLocal(host,localId,{commandId:'sql_ahead_start_001',config:{gameId,names:['Alex'],mode:'standard'},settings:{enabled:true,frequency:'lively',humorIntensity:'dark',profanityAllowed:true,voiceOption:'rachel'}}));
+  query("set role service_role;select public.clubhouse_commentary_set_limit('"+scope+"','"+localId+"',100,100000,clock_timestamp()+interval '1 hour');");
+  const opening={gameId,jobId:start.greetingJobId,device:'ahead-sql-phone',profileVersion:1};
+  const active=await service.prepareTrusted(opening.jobId,{afterReady:()=>service.bindReaction(host,localId,opening)});await new Response(active.body.openStream()).arrayBuffer();
+  const receipt={jobId:opening.jobId,device:opening.device,epoch:active.binding.claim.epoch,claimToken:active.binding.claim.token};await current.batch(()=>service.playbackEvent(host,localId,{...receipt,status:'started',sequence:1}));
+  const scored=await current.batch(()=>service.commitLocal(host,localId,{commands:[{commandId:'sql_ahead_turn_001',action:{type:'start',seat:0}},{commandId:'sql_ahead_score_001',action:{type:'score',seat:0,category:'chance',value:25}}]}));
+  const selector={gameId,eventId:scored.room.game.events.find(e=>e.type==='score').id,device:opening.device,profileVersion:1};
+  const next=await service.prepareTrusted(null,{beforeClaim:async()=>{const selected=await service.selectReaction(host,localId,{...selector,preparing:true});return selected.id;}});
+  assert.equal(writes,2);assert.equal(voices,1);assert.equal(current.snapshot().jobs.get(next.id).status,'ready');assert.equal(current.snapshot().jobs.get(next.id).claim,null);assert.equal(current.snapshot().leases.get(localId).activeJobId,opening.jobId);
+  await assert.rejects(current.batch(()=>service.bindReaction(host,localId,selector)),/owned|playing/);
+  await current.batch(()=>service.playbackEvent(host,localId,{...receipt,status:'completed',sequence:2}));
+  const bound=await service.prepareTrusted(next.id,{beforeClaim:async()=>{const selected=await service.selectReaction(host,localId,selector);return selected.id;},afterReady:()=>service.bindReaction(host,localId,selector)});
+  assert.equal(writes,2);assert.equal(voices,1);assert.equal(bound.binding.job.id,next.id);assert.equal(current.snapshot().jobs.get(next.id).status,'streaming');
+ });
+
  await check('inactive local mirror blurbs expire after 90 days without changing saved score fixture',()=>{
   query("update public.clubhouse_commentary_items set updated_at=clock_timestamp()-interval '91 days'where scope_id='"+scope+"'and collection='localSessions';set role service_role;select public.clubhouse_commentary_expire('"+scope+"');reset role;");assert.equal(query("select count(*)from public.clubhouse_commentary_items where scope_id='"+scope+"'and collection='localSessions';"),'0');assert.equal(query("select score from public.test_scores where id='existing-score';"),'50');
  });

@@ -14,7 +14,7 @@ export function createAuthenticatedCommentaryTransport({auth,serviceBase,anonymo
  async function request(payload,{signal}={}){
   if(!payload||typeof payload!=='object'||Array.isArray(payload)||!uuid.test(payload.roomId||'')||typeof payload.operation!=='string'||JSON.stringify(payload).length>4096)throw Error('Invalid commentary request.');
   const abort=new AbortController(),forward=()=>abort.abort();signal?.addEventListener('abort',forward,{once:true});if(signal?.aborted)forward();
-  const timer=setTimeout(()=>abort.abort(),timeoutMs);
+  const timer=setTimeout(()=>abort.abort(),payload.operation==='reaction-prepare'?Math.max(timeoutMs,25000):timeoutMs);
   try{
    const token=await getAccessToken();if(abort.signal.aborted)throw Error('Commentary request cancelled.');
    const response=await fetchImpl(endpoint,{method:'POST',headers:{'Content-Type':'application/json',...(directReaction?{'X-Commentary-Direct':'1'}:{}),Authorization:`Bearer ${token}`,...(anonymousKey?{apikey:anonymousKey}:{})},body:JSON.stringify(payload),signal:abort.signal,redirect:'error'});

@@ -17,7 +17,7 @@ export class CommentaryError extends Error {constructor(message,status=400){supe
 const fail=(message,status)=>{throw new CommentaryError(message,status);};
 const positive=(v,name)=>{if(!Number.isSafeInteger(v)||v<1)throw Error('Positive bounded '+name+' required');return v;};
 const name=value=>String(value).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,24);
-export function createCommentaryService({store,getRoom,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null,monotonicNow=()=>performance.now(),streamValidationMs=500,deferAudio=false}={}) {
+export function createCommentaryService({store,getRoom,getRooms,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null,monotonicNow=()=>performance.now(),streamValidationMs=500,deferAudio=false}={}) {
  if(!store||typeof getRoom!=='function')throw Error('Injected store and authoritative room reader required');
  for(const [label,value]of Object.entries({leaseMs,maxAgeMs,maxLineCharacters,maxAudioBytes,streamTimeoutMs,firstByteTimeoutMs,writerTimeoutMs}))positive(value,label);
  if(!Number.isSafeInteger(budget.maxRequests)||budget.maxRequests<0||!Number.isSafeInteger(budget.maxCharacters)||budget.maxCharacters<0)throw Error('Explicit bounded budget required');
@@ -41,9 +41,12 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   return {feedbackBasis:basis,feedbackValue:rating?.rating||null};
  }
  async function sourcePermissions(actor,room){
-  const snapshot=store.snapshot(),ids=new Set(),rooms=new Map([[room.id,room]]);for(const job of snapshot.jobs.values()){
-   if(!job.audience.includes(actor))continue;
-   if(!rooms.has(job.roomId))rooms.set(job.roomId,await getRoom(job.roomId));const source=rooms.get(job.roomId);
+  const snapshot=store.snapshot(),ids=new Set(),rooms=new Map([[room.id,room]]);
+  const relevant=[...snapshot.jobs.values()].filter(job=>job.audience.includes(actor));
+  const sourceIds=[...new Set(relevant.map(job=>job.roomId))].filter(id=>id!==room.id);
+  if(getRooms){for(const source of await getRooms(sourceIds))if(source)rooms.set(source.id,source);}
+  else for(const id of sourceIds)rooms.set(id,await getRoom(id));
+  for(const job of relevant){const source=rooms.get(job.roomId);
    if(source?.members.some(member=>member.userId===actor)&&room.members.every(listener=>source.members.some(member=>member.userId===listener.userId)))ids.add(job.facts.gameId);
   }return [...ids].slice(-200);
  }
@@ -116,10 +119,13 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    coalesce(state,room.id,facts.gameId,facts.revision);state.jobs.set(id,{id,roomId:room.id,momentKey,facts:named,profile:p,audience:room.members.map(m=>m.userId),status:quiet?'silent':'pending',line:null,claim:null});state.moments.set(momentKey,id);return id;
   });
  }
- async function prepareTrusted(jobId,{afterReady}={}){
+ async function prepareTrusted(jobId,{beforeClaim,afterReady}={}){
   const claim=await batch(async()=>{
   await refresh();
-  const prior=store.snapshot().jobs.get(jobId);if(!prior)return null;const room=await getRoom(prior.roomId);const authorizedSourceIds=room?await sourcePermissions(prior.facts.accountId,room):[];
+  if(beforeClaim)jobId=await beforeClaim();
+  const prior=store.snapshot().jobs.get(jobId);if(!prior)return null;
+  if(prior.status==='ready')return {prepared:afterReady?await afterReady():{id:prior.id,text:prior.line.text}};
+  const room=await getRoom(prior.roomId);const authorizedSourceIds=room?await sourcePermissions(prior.facts.accountId,room):[];
   return store.transaction(state=>{
    const job=state.jobs.get(jobId);if(!job||job.status!=='pending')return null;if((job.facts.purpose||'score')==='score'&&[...state.jobs.values()].some(other=>other.roomId===job.roomId&&other.facts.gameId===job.facts.gameId&&(other.facts.purpose||'score')==='score'&&other.facts.revision>job.facts.revision)){job.status='silent';job.reason='superseded-by-newer-score';return null;}
    const reason=room?eligible(state,job,room):'room-missing';if(reason){cancel(state,job,reason);return null;}
@@ -131,7 +137,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    const local=state.localSessions?.get(job.roomId),localDraft=local?.players.find(p=>p.participantId===job.facts.accountId);
    const input={facts:job.facts,profile:job.profile,purpose:job.facts.purpose||'score',roomId:job.roomId,jobId:job.id,source:live?'accepted-durable-service':'synthetic-service-rehearsal',personalContext:localDraft?{accountId:job.facts.accountId,gender:localDraft.gender,blurb:localDraft.blurb}:state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id)?adaptive?.personalContext||null:null,preferences:local?localPreferences(state,room.hostId):adaptive?.writerPreferences||null};const attempt=reserve(state,job,'writer',[...JSON.stringify(input)].length);
    job.status='generating';job.workerToken=attempt.id;return {input,attempt,jobId};
-  });});if(!claim)return null;
+  });});if(!claim)return null;if(Object.hasOwn(claim,'prepared'))return claim.prepared;
   let line,writerTimer;const writerController=new AbortController();
   try{
    line=await Promise.race([Promise.resolve().then(()=>providers.writeLine({...structuredClone(claim.input),requestId:claim.attempt.id,signal:writerController.signal})),new Promise((_resolve,reject)=>{writerTimer=setTimeout(()=>{writerController.abort();reject(Error('Writer timeout'));},writerTimeoutMs);})]);
@@ -316,7 +322,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   const room=await authorized(userId,roomId,true);if(!token.test(device||''))fail('Invalid playback device.');return store.transaction(state=>{const serverNowMs=now(),prior=state.leases.get(roomId),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId)fail('Commentary job not found.',404);const reason=eligible(state,job,room);if(reason){cancel(state,job,reason);return {claim:{claimed:false,reason}};}if(job.status!=='ready')fail('Commentary is not ready.',409);if(prior&&prior.expiresAt>serverNowMs&&(prior.owner!==userId||prior.device!==device))fail('Another host device owns playback.',409);if(prior?.activeJobId){const active=state.jobs.get(prior.activeJobId);if(active&&['claimed','streaming','started'].includes(active.status))fail('Commentary is already playing.',409);}const current={owner:userId,device,epoch:prior&&prior.expiresAt>serverNowMs?prior.epoch:(prior?.epoch||0)+1,expiresAt:serverNowMs+leaseMs,activeJobId:jobId};state.leases.set(roomId,current);job.claim={token:randomId(),owner:userId,device,epoch:current.epoch};job.status='claimed';return {lease:projectLeaseClock(current,serverNowMs),claim:{claimed:true,token:job.claim.token}};});
  }
 
- async function selectReaction(userId,roomId,{gameId,eventId,jobId,sourceCommandId,profileVersion,device}={}){
+ async function selectReaction(userId,roomId,{gameId,eventId,jobId,sourceCommandId,profileVersion,device,preparing=false}={}){
   const room=await authorized(userId,roomId,true);
   if(!token.test(device||'')||!uuid.test(gameId||'')||room.game?.id!==gameId||!Number.isSafeInteger(profileVersion)||settings(store.snapshot(),roomId).version!==profileVersion)fail('Reaction context changed.',409);
   if([eventId,jobId,sourceCommandId].filter(Boolean).length!==1||eventId&&!/^[A-Za-z0-9_:-]{8,200}$/.test(eventId)||jobId&&!uuid.test(jobId)||sourceCommandId&&!token.test(sourceCommandId))fail('Accepted reaction selector required.');
@@ -324,7 +330,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   if(!job)fail('Accepted reaction not found.',404);
   const reason=eligible(state,job,room);if(reason)fail('Reaction is no longer current.',409);
   if(!['pending','generating','ready'].includes(job.status))return null;
-  const prior=state.leases.get(roomId);if(prior&&prior.expiresAt>now()&&((prior.owner!==userId||prior.device!==device)||prior.activeJobId&&['claimed','streaming','started'].includes(state.jobs.get(prior.activeJobId)?.status)))fail('Playback already owned.',409);
+  const prior=state.leases.get(roomId);if(prior&&prior.expiresAt>now()&&((prior.owner!==userId||prior.device!==device)||!preparing&&prior.activeJobId&&['claimed','streaming','started'].includes(state.jobs.get(prior.activeJobId)?.status)))fail('Playback already owned.',409);
   return {id:job.id,status:job.status};
  }
  async function bindReaction(userId,roomId,selector){

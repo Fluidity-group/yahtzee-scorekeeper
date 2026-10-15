@@ -1075,7 +1075,7 @@ var positive = (v, name2) => {
   return v;
 };
 var name = (value) => String(value).replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 24);
-function createCommentaryService({ store, getRoom, now = () => Date.now(), randomId = () => crypto.randomUUID(), profile, leaseMs = 15e3, maxAgeMs = 15e3, maxLineCharacters = 500, maxAudioBytes = 524288, streamTimeoutMs = 2e4, firstByteTimeoutMs = Math.min(1e4, streamTimeoutMs), writerTimeoutMs = 1e4, budget = { maxRequests: 0, maxCharacters: 0 }, syntheticProviders = null, liveProviders = null, monotonicNow = () => performance.now(), streamValidationMs = 500, deferAudio = false } = {}) {
+function createCommentaryService({ store, getRoom, getRooms, now = () => Date.now(), randomId = () => crypto.randomUUID(), profile, leaseMs = 15e3, maxAgeMs = 15e3, maxLineCharacters = 500, maxAudioBytes = 524288, streamTimeoutMs = 2e4, firstByteTimeoutMs = Math.min(1e4, streamTimeoutMs), writerTimeoutMs = 1e4, budget = { maxRequests: 0, maxCharacters: 0 }, syntheticProviders = null, liveProviders = null, monotonicNow = () => performance.now(), streamValidationMs = 500, deferAudio = false } = {}) {
   if (!store || typeof getRoom !== "function") throw Error("Injected store and authoritative room reader required");
   for (const [label, value] of Object.entries({ leaseMs, maxAgeMs, maxLineCharacters, maxAudioBytes, streamTimeoutMs, firstByteTimeoutMs, writerTimeoutMs })) positive(value, label);
   if (!Number.isSafeInteger(budget.maxRequests) || budget.maxRequests < 0 || !Number.isSafeInteger(budget.maxCharacters) || budget.maxCharacters < 0) throw Error("Explicit bounded budget required");
@@ -1117,9 +1117,12 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function sourcePermissions(actor, room) {
     const snapshot = store.snapshot(), ids = /* @__PURE__ */ new Set(), rooms = /* @__PURE__ */ new Map([[room.id, room]]);
-    for (const job of snapshot.jobs.values()) {
-      if (!job.audience.includes(actor)) continue;
-      if (!rooms.has(job.roomId)) rooms.set(job.roomId, await getRoom(job.roomId));
+    const relevant = [...snapshot.jobs.values()].filter((job) => job.audience.includes(actor));
+    const sourceIds = [...new Set(relevant.map((job) => job.roomId))].filter((id2) => id2 !== room.id);
+    if (getRooms) {
+      for (const source of await getRooms(sourceIds)) if (source) rooms.set(source.id, source);
+    } else for (const id2 of sourceIds) rooms.set(id2, await getRoom(id2));
+    for (const job of relevant) {
       const source = rooms.get(job.roomId);
       if (source?.members.some((member) => member.userId === actor) && room.members.every((listener) => source.members.some((member) => member.userId === listener.userId))) ids.add(job.facts.gameId);
     }
@@ -1263,11 +1266,13 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return id2;
     });
   }
-  async function prepareTrusted(jobId, { afterReady } = {}) {
+  async function prepareTrusted(jobId, { beforeClaim, afterReady } = {}) {
     const claim = await batch(async () => {
       await refresh();
+      if (beforeClaim) jobId = await beforeClaim();
       const prior = store.snapshot().jobs.get(jobId);
       if (!prior) return null;
+      if (prior.status === "ready") return { prepared: afterReady ? await afterReady() : { id: prior.id, text: prior.line.text } };
       const room = await getRoom(prior.roomId);
       const authorizedSourceIds = room ? await sourcePermissions(prior.facts.accountId, room) : [];
       return store.transaction((state) => {
@@ -1313,6 +1318,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       });
     });
     if (!claim) return null;
+    if (Object.hasOwn(claim, "prepared")) return claim.prepared;
     let line, writerTimer;
     const writerController = new AbortController();
     try {
@@ -1817,7 +1823,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return { lease: projectLeaseClock(current, serverNowMs), claim: { claimed: true, token: job.claim.token } };
     });
   }
-  async function selectReaction(userId, roomId, { gameId, eventId, jobId, sourceCommandId, profileVersion, device } = {}) {
+  async function selectReaction(userId, roomId, { gameId, eventId, jobId, sourceCommandId, profileVersion, device, preparing = false } = {}) {
     const room = await authorized(userId, roomId, true);
     if (!token2.test(device || "") || !uuid5.test(gameId || "") || room.game?.id !== gameId || !Number.isSafeInteger(profileVersion) || settings(store.snapshot(), roomId).version !== profileVersion) fail3("Reaction context changed.", 409);
     if ([eventId, jobId, sourceCommandId].filter(Boolean).length !== 1 || eventId && !/^[A-Za-z0-9_:-]{8,200}$/.test(eventId) || jobId && !uuid5.test(jobId) || sourceCommandId && !token2.test(sourceCommandId)) fail3("Accepted reaction selector required.");
@@ -1827,7 +1833,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     if (reason) fail3("Reaction is no longer current.", 409);
     if (!["pending", "generating", "ready"].includes(job.status)) return null;
     const prior = state.leases.get(roomId);
-    if (prior && prior.expiresAt > now() && (prior.owner !== userId || prior.device !== device || prior.activeJobId && ["claimed", "streaming", "started"].includes(state.jobs.get(prior.activeJobId)?.status))) fail3("Playback already owned.", 409);
+    if (prior && prior.expiresAt > now() && (prior.owner !== userId || prior.device !== device || !preparing && prior.activeJobId && ["claimed", "streaming", "started"].includes(state.jobs.get(prior.activeJobId)?.status))) fail3("Playback already owned.", 409);
     return { id: job.id, status: job.status };
   }
   async function bindReaction(userId, roomId, selector) {
@@ -2562,7 +2568,34 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       finishAttempt: (id2, metadata) => rpc("clubhouse_commentary_finish", { p_scope: scopeId, p_id: id2, p_metadata: metadata })
     });
     const providers = enabled ? createCommentaryProviders({ fetchImpl, allowPaid: true, allowance, durableGate: gate, getAnthropicKey: () => get("ANTHROPIC_API_KEY"), getElevenLabsKey: () => get("ELEVENLABS_API_KEY"), model: get("COMMENTARY_WRITER_MODEL") || "claude-haiku-4-5-20251001", writerLimits: { maxRequests: 1, maxInputCharacters: 5e4, maxOutputTokens: 512, deadlineMs: 12e3, maxResponseBytes: 2e4 }, audioLimits: { firstByteMs: 1e4, completeMs: 25e3, maxBytes: 524288, maxLineCharacters: 180 } }) : null;
-    const service = createCommentaryService({ store: persistence, deferAudio: true, getRoom: async (id2) => {
+    async function getRooms(ids) {
+      const result = [], hosted = [];
+      for (const id2 of ids) {
+        const local = persistence.read("localSessions", id2);
+        if (local) {
+          result.push(localRoom(local));
+          continue;
+        }
+        const batch = persistence.batchContext;
+        if (batch?.rooms.has(id2)) {
+          result.push(structuredClone(batch.rooms.get(id2)));
+          continue;
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(id2)) throw Error("Invalid source room.");
+        hosted.push(id2);
+      }
+      for (let i = 0; i < hosted.length; i += 100) {
+        const group = hosted.slice(i, i + 100), rows = await resource("clubhouse_rooms?id=in.(" + group.join(",") + ")&select=state");
+        if (!Array.isArray(rows) || rows.some((row2) => !group.includes(row2.state?.id))) throw Error("Invalid source room response.");
+        for (const id2 of group) {
+          const room = rows.find((row2) => row2.state.id === id2)?.state || null;
+          result.push(room);
+          persistence.batchContext?.rooms.set(id2, structuredClone(room));
+        }
+      }
+      return result;
+    }
+    const service = createCommentaryService({ store: persistence, deferAudio: true, getRooms, getRoom: async (id2) => {
       const local = persistence.read("localSessions", id2);
       if (local) return localRoom(local);
       const batch = persistence.batchContext;
@@ -2590,7 +2623,38 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       const pending = [...persistence.snapshot().jobs.values()].filter((job) => job.roomId === roomId && job.status === "pending").sort((a, b) => Date.parse(a.facts.acceptedAt) - Date.parse(b.facts.acceptedAt) || (a.facts.revision || 0) - (b.facts.revision || 0)).slice(-3);
       for (const job of pending) await service.prepareTrusted(job.id);
     }
-    return { persistence, service, processRoom, ingestRoom };
+    async function reaction(actor, roomId, selector, { prepareOnly = false } = {}) {
+      let missing = false, selected = null, rows = null;
+      const beforeClaim = async () => {
+        await service.authorized(actor, roomId, true);
+        if (rows) for (const row2 of rows) await service.enqueueCommitted(row2.payload);
+        const exists = [...persistence.snapshot().jobs.values()].some((j) => j.roomId === roomId && j.facts.gameId === selector.gameId && (selector.jobId ? j.id === selector.jobId : selector.sourceCommandId ? j.facts.commandId === selector.sourceCommandId : j.facts.eventId === selector.eventId));
+        if (!exists && !rows) {
+          missing = true;
+          return null;
+        }
+        selected = await service.selectReaction(actor, roomId, { ...selector, preparing: prepareOnly });
+        if (selected?.status === "generating") throw new CommentaryError("Reaction already preparing.", 409);
+        return selected?.id;
+      };
+      const afterReady = () => {
+        if (selector.signal?.aborted) throw new CommentaryError("Reaction cancelled.", 409);
+        return prepareOnly ? { prepared: true, jobId: selected.id } : service.bindReaction(actor, roomId, selector);
+      };
+      let result = await service.prepareTrusted(null, { beforeClaim, afterReady });
+      if (missing) {
+        rows = await resource("clubhouse_commentary_outbox?scope_id=eq." + scopeId + "&room_id=eq." + roomId + "&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10");
+        result = await service.prepareTrusted(null, { beforeClaim, afterReady });
+        const snapshot = persistence.snapshot();
+        waitUntil(Promise.all(rows.map((row2) => {
+          const id2 = snapshot.moments.get(row2.idempotency_key);
+          return rpc("clubhouse_commentary_ack_outbox", { p_scope: scopeId, p_idempotency_key: row2.idempotency_key, p_status: id2 ? "enqueued" : "invalidated", p_job_id: id2 || null });
+        })).catch(() => {
+        }));
+      }
+      return result;
+    }
+    return { persistence, service, processRoom, ingestRoom, reaction };
   }
   return async (request) => {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device, x-commentary-direct, x-commentary-event, x-commentary-job, x-commentary-profile", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
@@ -2602,22 +2666,8 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       if (request.method === "GET" && direct) {
         if (new URL(request.url).search) return new Response(null, { status: 400 });
         const roomId = direct[1], selector = { gameId: direct[2], device: request.headers.get("X-Commentary-Device"), eventId: request.headers.get("X-Commentary-Event"), sourceCommandId: request.headers.get("X-Commentary-Command"), jobId: request.headers.get("X-Commentary-Job"), profileVersion: Number(request.headers.get("X-Commentary-Profile")) };
-        let selected = await runtime.persistence.batch(async () => {
-          await runtime.service.authorized(actor, roomId, true);
-          return runtime.persistence.snapshot().localSessions.has(roomId) ? runtime.service.selectReaction(actor, roomId, selector) : void 0;
-        });
-        if (selected === void 0) {
-          await runtime.ingestRoom(roomId);
-          selected = await runtime.persistence.batch(() => runtime.service.selectReaction(actor, roomId, selector));
-        }
-        if (!selected) return new Response(null, { status: 204 });
         if (request.signal.aborted) return new Response(null, { status: 499 });
-        if (selected.status === "generating") throw new CommentaryError("Reaction already preparing.", 409);
-        const bind = () => {
-          if (request.signal.aborted) throw new CommentaryError("Reaction cancelled.", 409);
-          return runtime.service.bindReaction(actor, roomId, selector);
-        };
-        const result = selected.status === "ready" ? await runtime.persistence.batch(bind) : await runtime.service.prepareTrusted(selected.id, { afterReady: bind });
+        const result = await runtime.reaction(actor, roomId, { ...selector, signal: request.signal });
         if (!result) return new Response(null, { status: 204 });
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(result.binding))));
         return new Response(result.body.openStream(), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Commentary-Binding": encoded } });
@@ -2633,6 +2683,16 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
         }
       }
       onOperation(body?.operation);
+      if (body?.operation === "reaction-prepare") {
+        const fields = ["operation", "roomId", "gameId", "eventId", "jobId", "sourceCommandId", "profileVersion", "device"];
+        if (Object.keys(body).some((k) => !fields.includes(k))) return new Response(JSON.stringify({ error: "Invalid reaction selector." }), { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+        try {
+          const prepared = await runtime.reaction(actor, body.roomId, { ...body, signal: request.signal }, { prepareOnly: true });
+          return new Response(JSON.stringify({ result: prepared || { prepared: false } }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: "Reaction preparation unavailable." }), { status: error instanceof CommentaryError ? error.status : 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+        }
+      }
       const operate = async () => {
         await runtime.persistence.initialize();
         if (body?.operation === "local-start" && (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now())) throw Error("Live commentary is not configured.");
@@ -2665,7 +2725,7 @@ function createLiveCommentaryEndpoint(options = {}) {
   return async (request) => {
     const trace = createRequestTrace({ fetchImpl: options.fetchImpl || fetch, emit: options.onTelemetry || ((value) => console.info("[Commentary request]", JSON.stringify(value))), region: typeof options.env?.get === "function" ? options.env.get("SB_REGION") : options.env?.SB_REGION });
     let operation = request.method === "GET" ? new URL(request.url).pathname.includes("/reaction/") ? "reaction" : "audio" : "unknown";
-    const knownOperations = /* @__PURE__ */ new Set(["profile-read", "profile-update", "jobs-read", "playback-start", "playback-acquire", "playback-claim", "playback-event", "playback-heartbeat", "feedback", "forget", "local-start", "local-read", "local-command", "player-profile-read", "player-profile-update", "player-profile-delete"]);
+    const knownOperations = /* @__PURE__ */ new Set(["reaction-prepare", "profile-read", "profile-update", "jobs-read", "playback-start", "playback-acquire", "playback-claim", "playback-event", "playback-heartbeat", "feedback", "forget", "local-start", "local-read", "local-command", "player-profile-read", "player-profile-update", "player-profile-delete"]);
     const endpoint = createEndpoint({ ...options, fetchImpl: trace.fetch, snapshotCache, onOperation: (value) => {
       if (knownOperations.has(value)) operation = value;
     }, waitUntil: (promise) => (options.waitUntil || ((task) => task.catch(() => {

@@ -239,3 +239,29 @@ describe('direct event-driven reactions',()=>{
  first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});first.onEvent({jobId:job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-three');expect(f.player.stop).not.toHaveBeenCalled();f.client.dispose();
  });
 });
+
+describe('write ahead during actual speech',()=>{
+ async function speaking(){const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim',monotonicDeadline:12000},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();return Object.assign(f,{first,game,job});}
+ it('writes the next accepted line during speech, but opens its stream only after both preparation and terminal receipt',async()=>{
+ const f=await speaking();let release;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='reaction-prepare'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true,jobId:'prepared-next'}});}):base(p));
+ f.client.update({...f.ctx,game:{...f.game,events:[...f.game.events,{id:'score-two',type:'score'}]}});await tick();expect(f.request.mock.calls.some(([p])=>p.operation==='reaction-prepare'&&p.eventId==='score-two')).toBe(true);expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.player.stop).not.toHaveBeenCalled();
+ f.first.onEvent({jobId:f.job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();release();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');expect(f.reaction.selector.preparation).toBeUndefined();f.client.dispose();
+ });
+ it('serializes preparation and skips replaced waiting targets',async()=>{
+ const f=await speaking();let release;const requested=[];const base=f.request.getMockImplementation();f.request.mockImplementation(p=>{if(p.operation!=='reaction-prepare')return base(p);requested.push(p.eventId);return p.eventId==='score-two'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true}});}):Promise.resolve({result:{prepared:true}});});
+ let game={...f.game,events:[...f.game.events,{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});await tick();for(const id of ['score-three','score-four']){game={...game,events:[...game.events,{id,type:'score'}]};f.client.update({...f.ctx,game});}await tick();expect(requested).toEqual(['score-two']);release();for(let i=0;i<4;i++)await tick();expect(requested).toEqual(['score-two','score-four']);expect(f.player.playReaction).toHaveBeenCalledOnce();f.client.dispose();
+ });
+ it.each([{visible:false},{listenerMuted:true},{profileVersion:2}])('cancels waiting playback on %j and never starts a stale prepared line',async patch=>{
+ const f=await speaking();let release;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='reaction-prepare'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true}});}):base(p));const game={...f.game,events:[...f.game.events,{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});await tick();f.client.update({...f.ctx,game,...patch});release();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.player.stop).toHaveBeenCalled();f.client.dispose();
+ });
+ it('updates feedback from the acknowledged real receipt without a competing jobs read',async()=>{
+ const f=await speaking();const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='playback-event'?Promise.resolve({result:{jobId:f.job.id,epoch:3,status:p.status,firstExposureAt:1,heardBy:['host'],expectedAudience:['host']}}):base(p));
+ f.request.mockClear();f.first.onEvent({jobId:f.job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.client.snapshot().captions.find(c=>c.id===f.job.id).feedbackBasis).toBe('playback');expect(f.request.mock.calls.some(([p])=>p.operation==='jobs-read')).toBe(false);f.client.dispose();
+ });
+ it('replaces a prepared target that is still waiting when an even newer score arrives',async()=>{
+ const f=await speaking();let release;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='reaction-prepare'?(p.eventId==='score-two'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true}});}):Promise.resolve({result:{prepared:true}})):base(p));
+ let game={...f.game,events:[...f.game.events,{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});await tick();f.first.onEvent({jobId:f.job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();
+ game={...game,events:[...game.events,{id:'score-three',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();release();for(let i=0;i<6;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-three');f.client.dispose();
+ });
+
+});
