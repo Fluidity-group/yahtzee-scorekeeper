@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071713">
+  <title>Dice Clubhouse · After Hours</title>
+  <link rel="stylesheet" href="./prototype.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="app-header">
+    <button class="brand" id="brand-home" aria-label="Dice Clubhouse home"><span class="brand-mark" data-icon="brand"></span><span>DICE <b>CLUBHOUSE</b></span></button>
+    <div class="header-actions"><span class="preview-badge">VISUAL PLAYTEST</span><button class="icon-button" id="sound-toggle" aria-label="Mute sound" aria-pressed="false" data-icon="sound"></button><button class="icon-button" id="settings-open" aria-label="Open clubhouse settings" data-icon="menu"></button></div>
+  </header>
+
+  <main>
+    <section id="home-screen" class="screen home-screen" aria-label="Clubhouse home">
+      <div class="home-scene" aria-hidden="true"><div class="scene-light"></div></div>
+      <div class="home-content">
+        <div class="eyebrow"><span class="tiny-star">✦</span> THE AFTER HOURS COLLECTION</div>
+        <h1>Good company.<br><em>Questionable decisions.</em></h1>
+        <p class="home-intro">A little luck. A little rivalry.<br>A commentator who knows exactly what to say.</p>
+        <div class="home-roster"><span class="mini-die" data-icon="dice"></span><span>Your table is waiting.</span><span class="roster-line"></span></div>
+        <div class="mode-grid" aria-label="Choose how to play">
+          <button class="mode-card featured" data-mode="local"><span class="mode-art" data-icon="people"></span><span><small>GOOD COMPANY, ONE PHONE</small><strong>Pass the phone</strong><span class="mode-note">Your people. Your table.</span></span><span class="arrow">↗</span></button>
+          <button class="mode-card" data-mode="solo"><span class="mode-art" data-icon="dice"></span><span><small>JUST YOU &amp; THE DICE</small><strong>Play solo</strong><span class="mode-note">Make your own luck.</span></span><span class="arrow">↗</span></button>
+          <button class="mode-card" data-mode="online"><span class="mode-art" data-icon="globe"></span><span><small>A TABLE WITHOUT BORDERS</small><strong>Play online</strong><span class="mode-note">Same rivalry. Different sofas.</span></span><span class="arrow">↗</span></button>
+          <button class="mode-card" data-mode="tournament"><span class="mode-art" data-icon="trophy"></span><span><small>BRAGGING RIGHTS INCLUDED</small><strong>Tournament night</strong><span class="mode-note">Give the evening a storyline.</span></span><span class="arrow">↗</span></button>
+        </div>
+        <div class="home-footer"><span><i class="status-dot"></i> A private little escape</span><button class="text-button" id="review-open">About this playtest ↗</button></div>
+      </div>
+      <aside class="home-host" aria-label="Meet Rachel">
+        <div class="host-orbit orbit-one"></div><div class="host-orbit orbit-two"></div>
+        <div class="host-name-ghost" aria-hidden="true">Rachel.</div>
+        <img src="./assets/rachel-character.png" class="home-rachel" alt="Rachel, an original fictional clubhouse host in a plum velvet blazer" width="1280" height="1280">
+        <div class="host-caption"><span class="eyebrow">YOUR EVENING, COMMENTATED</span><h2>Meet Rachel.</h2><p>Impeccable timing.<br>Questionable bedside manner.</p><button class="host-listen" id="home-listen"><span data-icon="play"></span> Hear her welcome <span class="sample-tag">RECORDED SAMPLE</span></button><span class="sample-status" id="home-audio-status" role="status"></span></div>
+      </aside>
+    </section>
+
+    <section id="game-screen" class="screen game-screen" aria-label="Preview score table" hidden>
+      <div class="table-topbar"><button class="text-button back-home" data-home>← Clubhouse</button><span class="table-tag" id="mode-label">SHARED PHONE · PREVIEW</span><button class="text-button" id="table-info">Your table <span data-icon="people"></span></button></div>
+      <div class="game-heading"><div><div class="eyebrow">MAKE IT A NIGHT TO REMEMBER</div><h1 id="table-title">The After Hours Club</h1></div><div class="turn-chip"><i class="status-dot"></i> Alex’s scorecard</div></div>
+      <div class="game-layout">
+        <div class="score-side">
+          <div class="score-summary"><div><span class="eyebrow">ALEX · YOUR TOTAL</span><div class="total-wrap"><span id="total" aria-hidden="true">00</span><span class="points-label">POINTS<br>OF POSSIBILITY</span></div></div><div class="progress-medallion"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27"/><circle id="progress-arc" cx="32" cy="32" r="27"/></svg><span><b id="frames-used">0</b><small>OF 13</small></span></div></div>
+          <div class="scorecard" id="scorecard"><div class="scorecard-head"><span>YOUR SCORECARD <small>Tap a frame to make it count</small></span><span class="own-head">Alex <small>YOU</small></span><span class="peer-head" id="peer-head">Sam <small>DEMO</small></span></div><div id="score-rows"></div><div class="bonus-row"><span>Upper section bonus <small id="bonus-progress">0 / 63 to unlock</small></span><strong id="bonus-value">+35</strong><span id="peer-total">74</span></div></div>
+          <div class="score-actions"><button id="undo" class="secondary-button" disabled><span data-icon="undo"></span> Undo last score</button><button id="reset-demo" class="text-button">Fresh playtest</button></div>
+          <div class="try-moments"><span>TRY A SIGNATURE MOMENT</span><button data-try="fullHouse">Full House <span data-icon="house"></span></button><button data-try="yahtzee">Yahtzee <span data-icon="spark"></span></button></div>
+        </div>
+        <aside class="companion" aria-label="Rachel commentary">
+          <div class="rachel-stage" id="rachel-stage"><div class="stage-halo"></div><div class="stage-lines"></div><img src="./assets/rachel-character.png" alt="Rachel" width="1280" height="1280"><div class="rachel-nameplate"><span class="eyebrow">THE HOUSE VOICE</span><h2>Rachel<span>.</span></h2><div class="rachel-presence"><span class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span id="rachel-status">Ready for your next move</span></div></div></div>
+          <div class="quip-card"><div class="quip-label"><span class="tiny-star">✦</span><span id="quip-kind">FROM YOUR HOST</span><button id="replay-welcome" class="icon-button" aria-label="Replay Rachel’s recorded welcome" data-icon="play"></button></div><p id="quip-text">“Take a seat, Alex. Your dignity can wait outside.”</p><div class="quip-feedback"><span id="feedback-label">How did that land?</span><button class="feedback-button" id="like" aria-label="Like this remark" aria-pressed="false" data-icon="like"></button><button class="feedback-button" id="dislike" aria-label="Dislike this remark" aria-pressed="false" data-icon="dislike"></button></div><small class="quip-footnote" id="quip-footnote">Caption sketch · tap play for the recorded welcome</small></div>
+          <div class="night-note"><span data-icon="moon"></span><p><b>Let the good moments breathe.</b>Scores land immediately. Rachel never gets in the way of your next move.</p></div>
+        </aside>
+      </div>
+      <p class="playtest-note">Fictional, unsaved scores · Rachel’s welcome is recorded; scoring quips are caption previews.</p>
+    </section>
+  </main>
+
+  <dialog id="setup-dialog" class="center-dialog setup-dialog" aria-labelledby="setup-title"><button class="dialog-close icon-button" data-close aria-label="Close table setup" data-icon="close"></button><div class="dialog-emblem" data-icon="brand"></div><div class="eyebrow" id="setup-mode">SHARED PHONE</div><h2 id="setup-title">Set the mood.</h2><p class="dialog-copy" id="setup-description">A table for Alex and Sam. One phone. Plenty to say.</p><label class="field-label" for="table-name">YOUR TABLE NAME</label><input id="table-name" maxlength="40" value="The After Hours Club" autocomplete="off"><div class="setup-roster"><span class="avatar alex">A</span><span><b>Alex</b><small>You · alphabetizes the office stationery</small></span><span class="avatar sam">S</span><span><b>Sam</b><small>Demo rival</small></span></div><label class="switch-row"><span><b>Rachel at your table?</b><small>A little wit between the numbers.</small></span><input type="checkbox" id="setup-voice" checked><span class="switch-ui"></span></label><label class="switch-row"><span><b>Sound &amp; little victories</b><small>Soft taps. A fanfare when it counts.</small></span><input type="checkbox" id="setup-sound" checked><span class="switch-ui"></span></label><button id="start-table" class="primary-button">Take a seat <span>↗</span></button><small class="dialog-note">Visual playtest only. No live room, account or saved game is created.</small></dialog>
+
+  <dialog id="score-dialog" class="center-dialog entry-dialog" aria-labelledby="entry-title"><button class="dialog-close icon-button" data-close aria-label="Close score entry" data-icon="close"></button><div class="eyebrow">ALEX’S FRAME</div><div class="entry-heading"><span class="entry-icon" id="entry-icon"></span><h2 id="entry-title">Full House</h2></div><p id="entry-hint" class="dialog-copy">Choose your score.</p><div class="entry-value"><span id="entry-value">25</span><small>POINTS</small></div><div id="entry-controls"></div><p id="entry-error" class="entry-error" role="alert"></p><button class="primary-button" id="save-score">Make it count <span>↗</span></button><button class="text-button zero-button" id="score-zero">Take a zero</button><small class="dialog-note" id="entry-note">A little ceremony. Your next move is always yours.</small></dialog>
+
+  <dialog id="settings-dialog" class="drawer" aria-labelledby="settings-title"><button class="dialog-close icon-button" data-close aria-label="Close clubhouse settings" data-icon="close"></button><div class="eyebrow">MAKE YOURSELF AT HOME</div><h2 id="settings-title">Your kind of evening.</h2><p class="dialog-copy">Set the feel of this playtest.</p><label class="switch-row"><span><b>Sound</b><small>Effects and the recorded voice sample.</small></span><input type="checkbox" id="settings-sound" checked><span class="switch-ui"></span></label><label class="field-label" for="humor">RACHEL’S MOOD</label><select id="humor"><option value="dark">Dark · no prisoners</option><option value="savage">Savage · sharp edges</option><option value="playful">Playful · a lighter touch</option></select><label class="switch-row"><span><b>Strong language</b><small>Independent of how sharp she is.</small></span><input type="checkbox" id="profanity" checked><span class="switch-ui"></span></label><label class="switch-row"><span><b>Reduced motion</b><small>Keep the atmosphere. Quiet the movement.</small></span><input type="checkbox" id="reduced-motion"><span class="switch-ui"></span></label><button id="settings-done" class="primary-button">Just my style <span>✓</span></button><div class="drawer-note"><b>A note for this review</b><p>Settings and ratings last for this visit. The original Rachel portrait is fictional. Her voice sample is real, previously recorded audio; new scoring remarks are written previews.</p></div></dialog>
+
+  <dialog id="about-dialog" class="center-dialog" aria-labelledby="about-title"><button class="dialog-close icon-button" data-close aria-label="Close playtest notes" data-icon="close"></button><div class="eyebrow">A DIRECTION TO PLAY WITH</div><h2 id="about-title">A game with atmosphere.</h2><p class="dialog-copy">Explore the home menu, start a fictional table and tap any scoring frame. Try a Full House or Yahtzee, edit a score, then Undo.</p><p class="dialog-copy">Custom room and character art, original synthesized effects, centered touch entry and a real Rachel welcome sample. Scoring quips are captions. Everything stays in this visit; no cloud calls or saved games.</p><button class="primary-button" data-close>Let’s play <span>↗</span></button></dialog>
+
+  <div id="welcome-screen" class="welcome-screen" hidden><div class="welcome-inner"><div class="eyebrow">YOUR EVENING STARTS HERE</div><div class="welcome-portrait"><img src="./assets/rachel-character.png" alt="Rachel" width="1280" height="1280"></div><h2>Good evening.<br><em>I’m Rachel.</em></h2><p id="welcome-state" role="status">Your host has a few opening remarks.</p><span class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><button id="continue-table" class="secondary-button">Continue to the table ↗</button><small>Previously recorded Alex &amp; Sam welcome</small></div></div>
+  <div class="celebration" id="celebration" aria-hidden="true" hidden><div class="celebration-inner"><span id="celebration-icon"></span><small id="celebration-kicker">A LITTLE HOUSE MAGIC</small><strong id="celebration-title">Full House</strong><span id="celebration-points">+25</span></div></div>
+  <canvas id="particles" aria-hidden="true"></canvas>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div class="sr-only" id="score-announcement" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="./prototype.js"></script>
+</body>
+</html>
+
