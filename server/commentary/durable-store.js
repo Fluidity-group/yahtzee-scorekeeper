@@ -17,15 +17,15 @@ const validVersion=value=>Number.isSafeInteger(value)&&value>=0;
 /** Async initialize/refresh boundary is mandatory before shared service snapshot() reads.
  * Synchronous callbacks may rerun after CAS conflicts. NEVER call providers in callbacks. */
 export class DurableCommentaryStore {
- constructor({rpc,scopeId,maxRetries=5,incremental=false,seed=null,onSnapshot=()=>{}}={}){if(typeof rpc!=='function'||typeof scopeId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId)||!Number.isSafeInteger(maxRetries)||maxRetries<1||maxRetries>10)throw Error('Durable transport, scope UUID and bounded retries required.');this.rpc=rpc;this.scopeId=scopeId;this.maxRetries=maxRetries;this.state=null;this.version=null;this.databaseNowMs=null;this.tail=Promise.resolve();this.incremental=incremental;this.onSnapshot=onSnapshot;if(incremental&&seed&&validVersion(seed.version)&&Number.isFinite(seed.databaseNowMs)){this.state=decodeCommentaryState(encodeCommentaryState(seed.state));this.version=seed.version;this.databaseNowMs=seed.databaseNowMs;}}
+ constructor({rpc,scopeId,maxRetries=5,incremental=false,atomicBatches=false,seed=null,onSnapshot=()=>{}}={}){if(typeof rpc!=='function'||typeof scopeId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId)||!Number.isSafeInteger(maxRetries)||maxRetries<1||maxRetries>10)throw Error('Durable transport, scope UUID and bounded retries required.');this.rpc=rpc;this.scopeId=scopeId;this.maxRetries=maxRetries;this.state=null;this.version=null;this.databaseNowMs=null;this.tail=Promise.resolve();this.incremental=incremental;this.atomicBatches=atomicBatches;this.batchContext=null;this.onSnapshot=onSnapshot;if(incremental&&seed&&validVersion(seed.version)&&Number.isFinite(seed.databaseNowMs)){this.state=decodeCommentaryState(encodeCommentaryState(seed.state));this.version=seed.version;this.databaseNowMs=seed.databaseNowMs;}}
  async load(){const row=await this.rpc(this.incremental?'clubhouse_commentary_load_changed':'clubhouse_commentary_load',{p_scope:this.scopeId,...(this.incremental?{p_known_version:this.version}: {})});if(row?.notModified===true){if(!this.state||row.version!==this.version||!Number.isFinite(row.databaseNowMs))throw Error('Invalid conditional snapshot.');return {state:this.state,version:this.version,databaseNowMs:row.databaseNowMs};}if(!row||!validVersion(row.version)||!Number.isFinite(row.databaseNowMs))throw Error('Invalid durable commentary snapshot.');return {state:decodeCommentaryState(row.state),version:row.version,databaseNowMs:row.databaseNowMs};}
  install(row){this.state=row.state;this.version=row.version;this.databaseNowMs=row.databaseNowMs;this.onSnapshot({state:this.state,version:this.version,databaseNowMs:this.databaseNowMs});}
  serialized(fn){const result=this.tail.then(fn);this.tail=result.catch(()=>{});return result;}
  async initialize(){await this.refresh();return this;}
- refresh(){return this.serialized(async()=>{const row=await this.load();this.install(row);return this.snapshot();});}
+ refresh(){if(this.batchContext)return Promise.resolve(this.snapshot());return this.serialized(async()=>{const row=await this.load();this.install(row);return this.snapshot();});}
  read(collection,key){if(!this.state||!COMMENTARY_COLLECTIONS.includes(collection))throw Error('Initialized supported collection required.');return structuredClone(this.state[collection].get(key));}
  snapshot(){if(!this.state)throw Error('Await durable store initialization/refresh before snapshot.');return structuredClone(this.state);}
- transaction(fn,{skipUnchanged=false}={}){if(typeof fn!=='function')return Promise.reject(Error('Synchronous transaction callback required.'));return this.serialized(async()=>{
+ transaction(fn,{skipUnchanged=false}={}){if(this.batchContext){try{const next=structuredClone(this.state),result=fn(next,{databaseNowMs:this.databaseNowMs,version:this.version});if(result&&typeof result.then==='function')throw Error('Transaction callback must be synchronous; no provider work in transaction.');encodeCommentaryState(next);this.state=next;return Promise.resolve(structuredClone(result));}catch(error){return Promise.reject(error);}}if(typeof fn!=='function')return Promise.reject(Error('Synchronous transaction callback required.'));return this.serialized(async()=>{
   for(let attempt=0;attempt<this.maxRetries;attempt++){
    const fresh=await this.load();this.install(fresh);const next=structuredClone(fresh.state),result=fn(next,{databaseNowMs:fresh.databaseNowMs,version:fresh.version});
    if(result&&typeof result.then==='function')throw Error('Transaction callback must be synchronous; no provider work in transaction.');
@@ -45,13 +45,28 @@ export class DurableCommentaryStore {
   }
   throw Error('Durable commentary contention limit reached; provider not dispatched.');
  });}
+ // A batch never contains provider dispatch. All JS guards run on one snapshot;
+ // SQL fences both that snapshot version and every authoritative room read.
+ batch(fn){if(!this.atomicBatches||this.batchContext)return fn();return this.serialized(async()=>{
+  for(let retry=0;retry<this.maxRetries;retry++){
+   const fresh=await this.load();this.install(fresh);this.batchContext={rooms:new Map()};
+   try{
+    const result=await fn(),before=encodeCommentaryState(fresh.state),after=encodeCommentaryState(this.state),changes={},deleted={};
+    for(const c of COMMENTARY_COLLECTIONS){const values=Object.fromEntries(Object.entries(after[c]).filter(([k,v])=>JSON.stringify(v)!==JSON.stringify(before[c][k]))),keys=Object.keys(before[c]).filter(k=>!Object.hasOwn(after[c],k));if(Object.keys(values).length)changes[c]=values;if(keys.length)deleted[c]=keys;}
+    const reply=await this.rpc('clubhouse_commentary_batch',{p_scope:this.scopeId,p_expected_version:fresh.version,p_changes:changes,p_deleted:deleted,p_rooms:[...this.batchContext.rooms].map(([id,r])=>({id,revision:r?.revision??null}))});
+    this.batchContext=null;
+    if(reply?.committed===true){const expected=fresh.version+(Object.keys(changes).length||Object.keys(deleted).length?1:0);if(reply.version!==expected||!Number.isFinite(reply.databaseNowMs))throw Error('Invalid atomic batch result');this.install({state:this.state,version:reply.version,databaseNowMs:reply.databaseNowMs});return result;}
+    this.install(fresh);if(reply?.committed!==false)throw Error('Invalid atomic batch result');
+   }catch(error){this.batchContext=null;this.install(fresh);throw error;}
+  }throw Error('Atomic commentary contention limit reached; provider not dispatched.');
+ });}
  expire(){return this.serialized(async()=>{const result=await this.rpc('clubhouse_commentary_expire',{p_scope:this.scopeId});this.install(await this.load());return result;});}
  forget(accountId){if(typeof accountId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(accountId))return Promise.reject(Error('Authenticated account UUID required.'));return this.serialized(async()=>{const result=await this.rpc('clubhouse_commentary_forget',{p_scope:this.scopeId,p_account:accountId});this.install(await this.load());return result;});}
 }
 // Backend-only transport. Caller supplies the service credential; no key loading at import.
 export function createSupabaseCommentaryRpc({url,getServiceKey,fetchImplementation=fetch,timeoutMs=5000}={}){
  const base=new URL(url);if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash||typeof getServiceKey!=='function'||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>15000)throw Error('Explicit secure backend RPC configuration required.');
- const routes=new Set(['clubhouse_commentary_load','clubhouse_commentary_commit','clubhouse_commentary_expire','clubhouse_commentary_forget','clubhouse_commentary_load_changed','clubhouse_commentary_patch']);
+ const routes=new Set(['clubhouse_commentary_load','clubhouse_commentary_commit','clubhouse_commentary_expire','clubhouse_commentary_forget','clubhouse_commentary_load_changed','clubhouse_commentary_patch','clubhouse_commentary_batch']);
  return async(operation,body)=>{if(!routes.has(operation))throw Error('Unsupported commentary durability operation.');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{const key=await getServiceKey();if(typeof key!=='string'||!key||/[\r\n]/.test(key))throw Error();const response=await fetchImplementation(`${base.href.replace(/\/$/,'')}/rest/v1/rpc/${operation}`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});if(!response.ok)throw Error();return await response.json();}catch{throw Error('Commentary durability request failed.');}finally{clearTimeout(timer);}
  };

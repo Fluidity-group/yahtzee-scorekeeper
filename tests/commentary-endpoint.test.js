@@ -1,3 +1,4 @@
+import{mkdirSync,writeFileSync}from'node:fs';
 import{it,expect,vi}from'vitest';
 import{createRoom,joinRoom,startRoom,playRoom}from'../src/multiplayer/room.js';
 import{acceptedOutbox}from'../server/commentary/accepted-outbox.js';
@@ -11,7 +12,7 @@ function fixture(patch={}){
  const commandId='accepted-score-001',room=playRoom(before,{userId:host,action:{type:'score',category:'chance',value:25},commandId,expectedRevision:before.revision,gameId:before.game.id,time});
  const moment=acceptedOutbox({before,after:room,actorId:host,commandId,operation:'command',acceptedAt:time,openingFacts})[0];
  const rows=[{idempotency_key:moment.idempotencyKey,payload:{...moment,moment,beforeRoom:before,acceptedRoom:room,receipt:{room_id:roomId,command_id:commandId,actor_id:host,fingerprint:'fixture-accepted-score'}}}];
- let state=Object.fromEntries(collections.map(k=>[k,{}])),version=0,limit=null;const pending=[],acks=[],calls=[];
+ let state=Object.fromEntries(collections.map(k=>[k,{}])),version=0,limit=null;const pending=[],acks=[],calls=[],telemetry=[];
  const env={SUPABASE_URL:'https://supabase.fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-service-key',COMMENTARY_LIVE_ENABLED:'true',COMMENTARY_ALLOWANCE_ID:'fixture-approved-test',COMMENTARY_ALLOWANCE_EXPIRES_AT:new Date(Date.now()+3600000).toISOString(),ANTHROPIC_API_KEY:'sk-ant-'+ 'a'.repeat(32),ELEVENLABS_API_KEY:'b'.repeat(64),...patch};
  const fetchImpl=vi.fn(async(input,options={})=>{
   const url=new URL(input);let body=options.body?JSON.parse(options.body):null;calls.push({url:url.href,options,body});
@@ -24,6 +25,17 @@ function fixture(patch={}){
    if(url.pathname==='/rest/v1/clubhouse_commentary_outbox')return patch.failOutbox?json({private:'backend-secret'},500):json(rows.filter(r=>!r.processed_at&&(!url.searchParams.get('room_id')||url.searchParams.get('room_id')==='eq.'+r.payload.roomId)));
    if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_load_changed'&&body.p_known_version===version)return json({version,notModified:true,databaseNowMs:Date.now()});
    if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_load'||url.pathname==='/rest/v1/rpc/clubhouse_commentary_load_changed'){expect(body.p_scope).toBe(scope);return json({version,state:clone(state),databaseNowMs:Date.now()});}
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_batch'){
+    if(patch.rejectBatch)return json({committed:false,version});if(patch.bumpRoom&&!patch.bumped){patch.bumped=true;room.revision++;}if(body.p_expected_version!==version||body.p_rooms.some(r=>r.revision!==(r.id===roomId?room.revision:null)))return json({committed:false,version,databaseNowMs:Date.now()});
+    if(!Object.keys(body.p_changes).length&&!Object.keys(body.p_deleted).length)return json({committed:true,version,databaseNowMs:Date.now()});url.pathname='/rest/v1/rpc/clubhouse_commentary_patch';
+   }
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_finish'){const a=state.attempts[body.p_id];if(!a?.providerDispatchedAt)return json({},400);Object.assign(a,{providerResult:body.p_metadata,providerFinishedAt:Date.now()});version++;return json(true);}
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_dispatch'){
+    const i=body.p_input,a=state.attempts[i.requestId],job=state.jobs[i.jobId],budget=state.budgets[i.roomId],lease=state.leases[i.roomId];const used=Object.values(state.attempts).filter(a=>a.allowanceId===i.allowanceId&&a.stage===i.stage&&a.providerDispatchedAt);
+    const invalid=!a||!job||!budget||!limit||Date.parse(limit.expires_at)<=Date.now()||a.status!=='submitted'||a.providerDispatchedAt||job.roomId!==i.roomId||!job.profile.enabled||['cancelled','silent','failed'].includes(job.status)||a.stage!==i.stage||a.jobId!==i.jobId||used.length>=200||(i.stage==='tts'&&used.reduce((n,a)=>n+a.submittedCharacters,0)+i.submittedCharacters>36000)||(i.stage==='writer'&&(job.status!=='generating'||job.workerToken!==i.requestId))||(i.stage==='tts'&&(job.status!=='streaming'||job.activeTtsAttemptId!==i.requestId||!lease||lease.epoch!==job.claim.epoch||lease.owner!==job.claim.owner||lease.device!==job.claim.device||lease.expiresAt<=Date.now()));
+    if(invalid)return json({},400);const delta=Math.max(0,i.submittedCharacters-a.characters);if(budget.requests>limit.max_requests||budget.characters+delta>limit.max_characters)return json({},400);
+    budget.characters+=delta;Object.assign(a,{allowanceId:i.allowanceId,providerDispatchedAt:Date.now(),provider:i.provider,model:i.model,submittedCharacters:i.submittedCharacters,maxOutputTokens:i.maxOutputTokens??null});version++;return json({id:a.id,requestId:i.requestId,stage:i.stage,allowanceId:i.allowanceId,committed:true});
+   }
    if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_patch'){
     const next=clone(state);for(const [c,items]of Object.entries(body.p_changes))next[c]={...(next[c]||{}),...items};for(const[c,keys]of Object.entries(body.p_deleted))for(const key of keys)delete next[c][key];body={...body,p_state:next};url.pathname='/rest/v1/rpc/clubhouse_commentary_commit';
    }
@@ -47,9 +59,9 @@ function fixture(patch={}){
   }
   throw Error('External network forbidden in test');
  });
- const endpoint=createLiveCommentaryEndpoint({env,fetchImpl,waitUntil:promise=>pending.push(promise),onTelemetry:()=>{}});
+ const endpoint=createLiveCommentaryEndpoint({env,fetchImpl,waitUntil:promise=>pending.push(promise),onTelemetry:e=>telemetry.push(e)});
  const request=(body,token='host-token')=>endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({roomId,...body})}));
- return{env,request,endpoint,fetchImpl,calls,acks,rows,room,state:()=>state,seedDispatches:(stage,count,characters=1)=>{for(let i=0;i<count;i++)state.attempts['persisted-'+stage+'-'+i]={id:'persisted-'+stage+'-'+i,stage,status:'succeeded',allowanceId:env.COMMENTARY_ALLOWANCE_ID,providerDispatchedAt:Date.now(),submittedCharacters:characters};version++;},limit:()=>limit,flush:async()=>{while(pending.length)await pending.shift();}};
+ return{env,request,endpoint,fetchImpl,calls,acks,rows,room,telemetry,state:()=>state,seedDispatches:(stage,count,characters=1)=>{for(let i=0;i<count;i++)state.attempts['persisted-'+stage+'-'+i]={id:'persisted-'+stage+'-'+i,stage,status:'succeeded',allowanceId:env.COMMENTARY_ALLOWANCE_ID,providerDispatchedAt:Date.now(),submittedCharacters:characters};version++;},limit:()=>limit,flush:async()=>{while(pending.length)await pending.shift();}};
 }
 it('offline actual endpoint authenticates, enables profile CAS + intro, drains accepted outbox, writes captions, streams claimed audio and records feedback',async()=>{
  const f=fixture();const profile=await(await f.request({operation:'profile-read'})).json();expect(profile.result).toMatchObject({enabled:false,voiceOption:'rachel',frequency:'balanced',profanityAllowed:true,humorIntensity:'dark'});
@@ -84,4 +96,16 @@ it('local starts cannot shadow an existing hosted room or provision its allowanc
 it('ready caption polling performs no durable write and warm requests use version-checked snapshots',async()=>{
  const f=fixture();await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});await f.flush();
  const start=f.calls.length;await f.request({operation:'jobs-read'});await f.flush();const calls=f.calls.slice(start);expect(calls.some(c=>/_patch$|_commit$/.test(c.url))).toBe(false);expect(calls.filter(c=>c.url.includes('clubhouse_commentary_load_changed')).every(c=>Number.isInteger(c.body.p_known_version))).toBe(true);expect(calls.some(c=>c.url.includes('/auth/v1/user'))).toBe(true);
+});
+
+it('atomic request retries a changed room without consuming the request body or dispatching before commit',async()=>{const f=fixture({bumpRoom:true});const r=await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});expect(r.status).toBe(200);await f.flush();expect(f.calls.filter(c=>c.url.endsWith('clubhouse_commentary_batch')).length).toBeGreaterThan(1);});
+it('failed atomic commit cannot create a provider dispatch or provision usage',async()=>{const f=fixture({rejectBatch:true});expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).status).toBe(503);await f.flush();expect(f.limit()).toBeNull();expect(f.calls.some(c=>c.url.includes('api.anthropic.com')||c.url.includes('api.elevenlabs.io'))).toBe(false);});
+it('ready polling uses one snapshot and one atomic room-fenced check instead of repeated refreshes',async()=>{const f=fixture();await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});await f.flush();await f.request({operation:'jobs-read'});await f.flush();const metric=f.telemetry.filter(e=>e.operation==='jobs-read'&&e.stage==='response').at(-1);expect(metric.upstreamCounts.clubhouse_commentary_batch).toBe(1);expect(metric.upstreamCounts.clubhouse_commentary_load_changed).toBeLessThanOrEqual(2);expect(metric.upstreamCounts['database-resource']).toBeLessThanOrEqual(1);});
+
+it('records reduced critical-path RPC counts through the actual endpoint and stream',async()=>{
+ const f=fixture();const started=(await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).json()).result;await f.flush();
+ const jobs=(await(await f.request({operation:'jobs-read'})).json()).result;await f.flush();const job=jobs.find(j=>j.id===started.greetingJobId);const acquired=(await(await f.request({operation:'playback-start',jobId:job.id,device:'benchmark-phone'})).json()).result;
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/audio/'+job.id,{headers:{Authorization:'Bearer host-token','X-Commentary-Claim':acquired.claim.token,'X-Commentary-Epoch':String(acquired.lease.epoch),'X-Commentary-Device':'benchmark-phone'}}));await response.arrayBuffer();
+ const records=f.telemetry.filter(e=>e.stage==='stream-first-byte'||e.stage==='background-complete'&&e.upstreamCounts.writer||e.stage==='response'&&['playback-start','jobs-read'].includes(e.operation));mkdirSync('artifacts/sw031',{recursive:true});writeFileSync('artifacts/sw031/request-count-benchmark.json',JSON.stringify({source:'actual endpoint with synthetic database/providers; no live timing claim',records},null,2));
+ const first=records.find(e=>e.stage==='stream-first-byte');expect(first.upstreamCounts.clubhouse_commentary_dispatch).toBe(1);expect(first.upstreamCounts.clubhouse_commentary_load_changed).toBeLessThanOrEqual(3);expect(first.upstreamCounts.clubhouse_commentary_batch).toBeLessThanOrEqual(3);
 });

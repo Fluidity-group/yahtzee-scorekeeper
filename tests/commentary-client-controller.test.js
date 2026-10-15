@@ -214,3 +214,8 @@ it('reuses the session authenticated profile without a duplicate settings round 
 });
 
 it('uses one atomic playback-start round trip when the authenticated profile advertises it',async()=>{const f=setup(),profile={version:1,capabilities:{liveProviders:true,atomicPlaybackStart:true}},delegate=f.request.getMockImplementation();f.request.mockImplementation(async(p,...rest)=>p.operation==='playback-start'?{result:{lease:f.lease,claim:{claimed:true,token:'combined-claim'}}}:delegate(p,...rest));await f.client.refresh({profile});f.setJobs([f.job('atomic-new')]);await f.client.refresh({profile});await tick();expect(f.player.play).toHaveBeenCalledOnce();expect(f.request.mock.calls.filter(([p])=>p.operation==='playback-start')).toHaveLength(1);expect(f.request.mock.calls.some(([p])=>['playback-acquire','playback-claim'].includes(p.operation))).toBe(false);f.client.dispose();});
+
+it('plays the newest waiting score and refreshes immediately after completion without reviving old reactions',async()=>{
+ const f=setup();await f.client.refresh();f.setJobs([f.job('older'),f.job('latest')]);await f.client.refresh();await tick();expect(f.player.play.mock.calls[0][0].claim.jobId).toBe('latest');
+ f.setJobs([f.job('older'),f.job('latest'),f.job('next')]);f.emit({jobId:'latest',epoch:3,state:'started',sequence:1});f.emit({jobId:'latest',epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.player.play.mock.calls.at(-1)[0].claim.jobId).toBe('next');expect(f.player.play.mock.calls.some(([p])=>p.claim.jobId==='older')).toBe(false);f.client.dispose();
+});

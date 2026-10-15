@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 
 // server/commentary/request-trace.js
-var operations = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch", "clubhouse_commentary_commit", "clubhouse_commentary_set_limit", "clubhouse_commentary_ack_outbox", "clubhouse_commentary_expire", "clubhouse_commentary_forget"]);
+var operations = /* @__PURE__ */ new Set(["clubhouse_commentary_batch", "clubhouse_commentary_dispatch", "clubhouse_commentary_finish", "clubhouse_commentary_load", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch", "clubhouse_commentary_commit", "clubhouse_commentary_set_limit", "clubhouse_commentary_ack_outbox", "clubhouse_commentary_expire", "clubhouse_commentary_forget"]);
 function createRequestTrace({ fetchImpl = fetch, emit = () => {
 }, now = () => performance.now(), region } = {}) {
   const start = now(), counts = {}, milliseconds = {};
@@ -583,7 +583,7 @@ function decodeCommentaryState(payload) {
 }
 var validVersion = (value) => Number.isSafeInteger(value) && value >= 0;
 var DurableCommentaryStore = class {
-  constructor({ rpc, scopeId, maxRetries = 5, incremental = false, seed = null, onSnapshot = () => {
+  constructor({ rpc, scopeId, maxRetries = 5, incremental = false, atomicBatches = false, seed = null, onSnapshot = () => {
   } } = {}) {
     if (typeof rpc !== "function" || typeof scopeId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId) || !Number.isSafeInteger(maxRetries) || maxRetries < 1 || maxRetries > 10) throw Error("Durable transport, scope UUID and bounded retries required.");
     this.rpc = rpc;
@@ -594,6 +594,8 @@ var DurableCommentaryStore = class {
     this.databaseNowMs = null;
     this.tail = Promise.resolve();
     this.incremental = incremental;
+    this.atomicBatches = atomicBatches;
+    this.batchContext = null;
     this.onSnapshot = onSnapshot;
     if (incremental && seed && validVersion(seed.version) && Number.isFinite(seed.databaseNowMs)) {
       this.state = decodeCommentaryState(encodeCommentaryState(seed.state));
@@ -627,6 +629,7 @@ var DurableCommentaryStore = class {
     return this;
   }
   refresh() {
+    if (this.batchContext) return Promise.resolve(this.snapshot());
     return this.serialized(async () => {
       const row2 = await this.load();
       this.install(row2);
@@ -642,6 +645,17 @@ var DurableCommentaryStore = class {
     return structuredClone(this.state);
   }
   transaction(fn, { skipUnchanged = false } = {}) {
+    if (this.batchContext) {
+      try {
+        const next = structuredClone(this.state), result = fn(next, { databaseNowMs: this.databaseNowMs, version: this.version });
+        if (result && typeof result.then === "function") throw Error("Transaction callback must be synchronous; no provider work in transaction.");
+        encodeCommentaryState(next);
+        this.state = next;
+        return Promise.resolve(structuredClone(result));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
     if (typeof fn !== "function") return Promise.reject(Error("Synchronous transaction callback required."));
     return this.serialized(async () => {
       for (let attempt = 0; attempt < this.maxRetries; attempt++) {
@@ -672,6 +686,41 @@ var DurableCommentaryStore = class {
       throw Error("Durable commentary contention limit reached; provider not dispatched.");
     });
   }
+  // A batch never contains provider dispatch. All JS guards run on one snapshot;
+  // SQL fences both that snapshot version and every authoritative room read.
+  batch(fn) {
+    if (!this.atomicBatches || this.batchContext) return fn();
+    return this.serialized(async () => {
+      for (let retry = 0; retry < this.maxRetries; retry++) {
+        const fresh = await this.load();
+        this.install(fresh);
+        this.batchContext = { rooms: /* @__PURE__ */ new Map() };
+        try {
+          const result = await fn(), before = encodeCommentaryState(fresh.state), after = encodeCommentaryState(this.state), changes = {}, deleted = {};
+          for (const c of COMMENTARY_COLLECTIONS) {
+            const values = Object.fromEntries(Object.entries(after[c]).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(before[c][k]))), keys = Object.keys(before[c]).filter((k) => !Object.hasOwn(after[c], k));
+            if (Object.keys(values).length) changes[c] = values;
+            if (keys.length) deleted[c] = keys;
+          }
+          const reply2 = await this.rpc("clubhouse_commentary_batch", { p_scope: this.scopeId, p_expected_version: fresh.version, p_changes: changes, p_deleted: deleted, p_rooms: [...this.batchContext.rooms].map(([id2, r]) => ({ id: id2, revision: r?.revision ?? null })) });
+          this.batchContext = null;
+          if (reply2?.committed === true) {
+            const expected = fresh.version + (Object.keys(changes).length || Object.keys(deleted).length ? 1 : 0);
+            if (reply2.version !== expected || !Number.isFinite(reply2.databaseNowMs)) throw Error("Invalid atomic batch result");
+            this.install({ state: this.state, version: reply2.version, databaseNowMs: reply2.databaseNowMs });
+            return result;
+          }
+          this.install(fresh);
+          if (reply2?.committed !== false) throw Error("Invalid atomic batch result");
+        } catch (error) {
+          this.batchContext = null;
+          this.install(fresh);
+          throw error;
+        }
+      }
+      throw Error("Atomic commentary contention limit reached; provider not dispatched.");
+    });
+  }
   expire() {
     return this.serialized(async () => {
       const result = await this.rpc("clubhouse_commentary_expire", { p_scope: this.scopeId });
@@ -691,7 +740,7 @@ var DurableCommentaryStore = class {
 function createSupabaseCommentaryRpc({ url, getServiceKey, fetchImplementation = fetch, timeoutMs = 5e3 } = {}) {
   const base = new URL(url);
   if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash || typeof getServiceKey !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15e3) throw Error("Explicit secure backend RPC configuration required.");
-  const routes2 = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_commit", "clubhouse_commentary_expire", "clubhouse_commentary_forget", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch"]);
+  const routes2 = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_commit", "clubhouse_commentary_expire", "clubhouse_commentary_forget", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch", "clubhouse_commentary_batch"]);
   return async (operation, body) => {
     if (!routes2.has(operation)) throw Error("Unsupported commentary durability operation.");
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1026,7 +1075,7 @@ var positive = (v, name2) => {
   return v;
 };
 var name = (value) => String(value).replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 24);
-function createCommentaryService({ store, getRoom, now = () => Date.now(), randomId = () => crypto.randomUUID(), profile, leaseMs = 15e3, maxAgeMs = 15e3, maxLineCharacters = 500, maxAudioBytes = 524288, streamTimeoutMs = 2e4, firstByteTimeoutMs = Math.min(1e4, streamTimeoutMs), writerTimeoutMs = 1e4, budget = { maxRequests: 0, maxCharacters: 0 }, syntheticProviders = null, liveProviders = null, monotonicNow = () => performance.now(), streamValidationMs = 500 } = {}) {
+function createCommentaryService({ store, getRoom, now = () => Date.now(), randomId = () => crypto.randomUUID(), profile, leaseMs = 15e3, maxAgeMs = 15e3, maxLineCharacters = 500, maxAudioBytes = 524288, streamTimeoutMs = 2e4, firstByteTimeoutMs = Math.min(1e4, streamTimeoutMs), writerTimeoutMs = 1e4, budget = { maxRequests: 0, maxCharacters: 0 }, syntheticProviders = null, liveProviders = null, monotonicNow = () => performance.now(), streamValidationMs = 500, deferAudio = false } = {}) {
   if (!store || typeof getRoom !== "function") throw Error("Injected store and authoritative room reader required");
   for (const [label, value] of Object.entries({ leaseMs, maxAgeMs, maxLineCharacters, maxAudioBytes, streamTimeoutMs, firstByteTimeoutMs, writerTimeoutMs })) positive(value, label);
   if (!Number.isSafeInteger(budget.maxRequests) || budget.maxRequests < 0 || !Number.isSafeInteger(budget.maxCharacters) || budget.maxCharacters < 0) throw Error("Explicit bounded budget required");
@@ -1036,6 +1085,14 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   const live = !!liveProviders?.liveConfigured;
   if (liveProviders && (!live || !(store instanceof DurableCommentaryStore))) throw Error("Live commentary requires verified providers and durable persistence.");
   const refresh = () => store.refresh?.();
+  const batch = (fn) => store.batch ? store.batch(fn) : fn();
+  function coalesce(state, roomId, gameId, revision = Infinity) {
+    for (const job of state.jobs.values()) if (job.roomId === roomId && job.facts.gameId === gameId && (job.facts.revision ?? 0) <= revision && (job.facts.purpose || "score") === "score" && ["pending", "generating", "ready"].includes(job.status)) {
+      job.status = "silent";
+      job.reason = "superseded-by-newer-score";
+      job.line = null;
+    }
+  }
   function memory(state) {
     return Object.assign(new RetrievalAdaptation({ now }), { records: state.memoryRecords, feedback: state.feedback, profiles: state.playerProfiles, preferenceSharing: state.preferenceSharing, summaries: state.memorySummaries, caches: state.memoryCaches });
   }
@@ -1200,52 +1257,60 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     return store.transaction((state) => {
       if (state.moments.has(momentKey)) return state.moments.get(momentKey);
       const id2 = randomId(), p = settings(state, room.id), quiet = live && !p.enabled || ["score-correction"].includes(facts.eventType) || p.frequency === "highlights" && !facts.complete && facts.category !== "yahtzee" && facts.value < 30;
+      coalesce(state, room.id, facts.gameId, facts.revision);
       state.jobs.set(id2, { id: id2, roomId: room.id, momentKey, facts: named, profile: p, audience: room.members.map((m) => m.userId), status: quiet ? "silent" : "pending", line: null, claim: null });
       state.moments.set(momentKey, id2);
       return id2;
     });
   }
   async function prepareTrusted(jobId) {
-    await refresh();
-    const prior = store.snapshot().jobs.get(jobId);
-    if (!prior) return null;
-    const room = await getRoom(prior.roomId);
-    const authorizedSourceIds = room ? await sourcePermissions(prior.facts.accountId, room) : [];
-    const claim = await store.transaction((state) => {
-      const job = state.jobs.get(jobId);
-      if (!job || job.status !== "pending") return null;
-      const reason = room ? eligible(state, job, room) : "room-missing";
-      if (reason) {
-        cancel(state, job, reason);
-        return null;
-      }
-      if (!providers?.writeLine) {
-        job.status = "silent";
-        job.reason = "providers-disabled";
-        return null;
-      }
-      purge(state);
-      const m = memory(state);
-      for (const member of room.members) {
-        const personal = state.playerProfiles.get(member.userId);
-        if (personal?.sharedRoomIds?.includes(room.id)) {
-          personal.sharedGameIds = [.../* @__PURE__ */ new Set([...personal.sharedGameIds, room.game.id])];
-          m.setPreferenceSharing(member.userId, [room.game.id]);
+    const claim = await batch(async () => {
+      await refresh();
+      const prior = store.snapshot().jobs.get(jobId);
+      if (!prior) return null;
+      const room = await getRoom(prior.roomId);
+      const authorizedSourceIds = room ? await sourcePermissions(prior.facts.accountId, room) : [];
+      return store.transaction((state) => {
+        const job = state.jobs.get(jobId);
+        if (!job || job.status !== "pending") return null;
+        if ((job.facts.purpose || "score") === "score" && [...state.jobs.values()].some((other) => other.roomId === job.roomId && other.facts.gameId === job.facts.gameId && (other.facts.purpose || "score") === "score" && other.facts.revision > job.facts.revision)) {
+          job.status = "silent";
+          job.reason = "superseded-by-newer-score";
+          return null;
         }
-      }
-      let adaptive;
-      try {
-        adaptive = m.context({ actorId: room.hostId, targetAccountId: job.facts.accountId, audience: job.audience, gameId: job.facts.gameId, authorizedSourceIds, profile: job.profile });
-      } catch {
-        adaptive = null;
-      }
-      job.personalProfileVersion = state.playerProfiles.get(job.facts.accountId)?.profile.version || 0;
-      const local = state.localSessions?.get(job.roomId), localDraft = local?.players.find((p) => p.participantId === job.facts.accountId);
-      const input = { facts: job.facts, profile: job.profile, purpose: job.facts.purpose || "score", roomId: job.roomId, jobId: job.id, source: live ? "accepted-durable-service" : "synthetic-service-rehearsal", personalContext: localDraft ? { accountId: job.facts.accountId, gender: localDraft.gender, blurb: localDraft.blurb } : state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id) ? adaptive?.personalContext || null : null, preferences: local ? localPreferences(state, room.hostId) : adaptive?.writerPreferences || null };
-      const attempt = reserve(state, job, "writer", [...JSON.stringify(input)].length);
-      job.status = "generating";
-      job.workerToken = attempt.id;
-      return { input, attempt, jobId };
+        const reason = room ? eligible(state, job, room) : "room-missing";
+        if (reason) {
+          cancel(state, job, reason);
+          return null;
+        }
+        if (!providers?.writeLine) {
+          job.status = "silent";
+          job.reason = "providers-disabled";
+          return null;
+        }
+        purge(state);
+        const m = memory(state);
+        for (const member of room.members) {
+          const personal = state.playerProfiles.get(member.userId);
+          if (personal?.sharedRoomIds?.includes(room.id)) {
+            personal.sharedGameIds = [.../* @__PURE__ */ new Set([...personal.sharedGameIds, room.game.id])];
+            m.setPreferenceSharing(member.userId, [room.game.id]);
+          }
+        }
+        let adaptive;
+        try {
+          adaptive = m.context({ actorId: room.hostId, targetAccountId: job.facts.accountId, audience: job.audience, gameId: job.facts.gameId, authorizedSourceIds, profile: job.profile });
+        } catch {
+          adaptive = null;
+        }
+        job.personalProfileVersion = state.playerProfiles.get(job.facts.accountId)?.profile.version || 0;
+        const local = state.localSessions?.get(job.roomId), localDraft = local?.players.find((p) => p.participantId === job.facts.accountId);
+        const input = { facts: job.facts, profile: job.profile, purpose: job.facts.purpose || "score", roomId: job.roomId, jobId: job.id, source: live ? "accepted-durable-service" : "synthetic-service-rehearsal", personalContext: localDraft ? { accountId: job.facts.accountId, gender: localDraft.gender, blurb: localDraft.blurb } : state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id) ? adaptive?.personalContext || null : null, preferences: local ? localPreferences(state, room.hostId) : adaptive?.writerPreferences || null };
+        const attempt = reserve(state, job, "writer", [...JSON.stringify(input)].length);
+        job.status = "generating";
+        job.workerToken = attempt.id;
+        return { input, attempt, jobId };
+      });
     });
     if (!claim) return null;
     let line, writerTimer;
@@ -1268,35 +1333,37 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     } finally {
       clearTimeout(writerTimer);
     }
-    const fresh = await getRoom(prior.roomId);
-    return store.transaction((state) => {
-      const attempt = state.attempts.get(claim.attempt.id);
-      if (attempt?.status === "submitted") attempt.status = "succeeded";
-      const job = state.jobs.get(jobId);
-      if (job.status !== "generating" || job.workerToken !== claim.attempt.id) return null;
-      if ((state.playerProfiles.get(job.facts.accountId)?.profile.version || 0) !== job.personalProfileVersion) {
-        cancel(state, job, "personal-profile-changed");
-        return null;
-      }
-      const reason = fresh ? eligible(state, job, fresh) : "room-missing";
-      if (reason) {
-        cancel(state, job, reason);
-        return null;
-      }
-      if (line === null) {
-        job.status = "silent";
-        return null;
-      }
-      if (!line || typeof line.text !== "string" || !line.text.trim() || [...line.text].length > maxLineCharacters || /[\u0000-\u001f\u007f]/.test(line.text) || typeof line.containsProfanity !== "boolean" || !job.profile.profanityAllowed && line.containsProfanity) {
-        job.status = "failed";
-        job.reason = "invalid-candidate";
-        return null;
-      }
-      job.line = { text: line.text, containsProfanity: line.containsProfanity, mechanism: line.mechanism, subject: line.subject, source: live ? "anthropic-writer" : "synthetic" };
-      rememberTrusted(state, job, line);
-      job.status = "ready";
-      job.readyAt = now();
-      return { id: job.id, text: job.line.text };
+    return batch(async () => {
+      const fresh = await getRoom(claim.input.roomId);
+      return store.transaction((state) => {
+        const attempt = state.attempts.get(claim.attempt.id);
+        if (attempt?.status === "submitted") attempt.status = "succeeded";
+        const job = state.jobs.get(jobId);
+        if (job.status !== "generating" || job.workerToken !== claim.attempt.id) return null;
+        if ((state.playerProfiles.get(job.facts.accountId)?.profile.version || 0) !== job.personalProfileVersion) {
+          cancel(state, job, "personal-profile-changed");
+          return null;
+        }
+        const reason = fresh ? eligible(state, job, fresh) : "room-missing";
+        if (reason) {
+          cancel(state, job, reason);
+          return null;
+        }
+        if (line === null) {
+          job.status = "silent";
+          return null;
+        }
+        if (!line || typeof line.text !== "string" || !line.text.trim() || [...line.text].length > maxLineCharacters || /[\u0000-\u001f\u007f]/.test(line.text) || typeof line.containsProfanity !== "boolean" || !job.profile.profanityAllowed && line.containsProfanity) {
+          job.status = "failed";
+          job.reason = "invalid-candidate";
+          return null;
+        }
+        job.line = { text: line.text, containsProfanity: line.containsProfanity, mechanism: line.mechanism, subject: line.subject, source: live ? "anthropic-writer" : "synthetic" };
+        rememberTrusted(state, job, line);
+        job.status = "ready";
+        job.readyAt = now();
+        return { id: job.id, text: job.line.text };
+      });
     });
   }
   async function acquire(userId, roomId, { device } = {}) {
@@ -1396,156 +1463,167 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     });
   }
   async function audio(userId, roomId, { jobId, device, epoch, claimToken } = {}) {
-    const requestStarted = monotonicNow(), room = await authorized(userId, roomId, true);
-    const start = await store.transaction((state) => {
-      const serverNowMs = now(), current = lease(state, room, userId, device, epoch, serverNowMs), job = state.jobs.get(jobId);
-      if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail3("Playback claim is stale.", 409);
-      const reason = eligible(state, job, room);
-      if (reason) {
-        cancel(state, job, reason);
-        fail3("Commentary was cancelled.", 409);
-      }
-      if (job.status !== "claimed") fail3("Audio already requested.", 409);
-      if (!providers?.streamAudio) fail3("Voice provider is disabled.", 503);
-      const attempt = reserve(state, job, "tts", [...job.line.text].length);
-      job.activeTtsAttemptId = attempt.id;
-      job.status = "streaming";
-      return { attempt, text: job.line.text, profile: job.profile, remainingMs: current.expiresAt - serverNowMs };
-    });
-    const controller = new AbortController();
-    let bytes = 0, firstByteAt = null, firstByteElapsed = null, leaseDeadline = requestStarted + start.remainingMs, leaseTimer, validationTimer, validationPending = null, iterator, lastValidatedAt = monotonicNow();
-    const started = monotonicNow(), timer = setTimeout(() => controller.abort(), streamTimeoutMs), firstTimer = setTimeout(() => controller.abort(), firstByteTimeoutMs);
-    function armLease() {
-      clearTimeout(leaseTimer);
-      const remaining = leaseDeadline - monotonicNow();
-      if (remaining <= 0) controller.abort();
-      else leaseTimer = setTimeout(() => controller.abort(), remaining);
-    }
-    async function validate({ first = false } = {}) {
-      const sentAt = monotonicNow(), fresh = await getRoom(roomId);
-      const result = await store.transaction((state) => {
-        const job = state.jobs.get(jobId);
-        if (!job) return { valid: false };
-        const serverNowMs = now();
-        let reason = fresh ? eligible(state, job, fresh, { started: job.status === "started" }) : "room-missing", current;
-        try {
-          current = lease(state, fresh || room, userId, device, epoch, serverNowMs);
-        } catch {
-          reason = "playback-owner";
-        }
+    const requestStarted = monotonicNow();
+    const { room, start } = await batch(async () => {
+      const room2 = await authorized(userId, roomId, true);
+      const start2 = await store.transaction((state) => {
+        const serverNowMs = now(), current = lease(state, room2, userId, device, epoch, serverNowMs), job = state.jobs.get(jobId);
+        if (!job || job.roomId !== roomId || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) fail3("Playback claim is stale.", 409);
+        const reason = eligible(state, job, room2);
         if (reason) {
           cancel(state, job, reason);
-          return { valid: false };
+          fail3("Commentary was cancelled.", 409);
         }
-        if (!["streaming", "started"].includes(job.status) || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) return { valid: false };
-        if (first) {
-          job.audioFirstByteAt = serverNowMs;
-          const attempt = state.attempts.get(start.attempt.id);
-          if (!attempt) return { valid: false };
-          attempt.firstByteAt = serverNowMs;
-        }
-        return { valid: true, remainingMs: current.expiresAt - serverNowMs, firstByteAt: serverNowMs };
+        if (job.status !== "claimed") fail3("Audio already requested.", 409);
+        if (!providers?.streamAudio) fail3("Voice provider is disabled.", 503);
+        const attempt = reserve(state, job, "tts", [...job.line.text].length);
+        job.activeTtsAttemptId = attempt.id;
+        job.status = "streaming";
+        return { attempt, text: job.line.text, profile: job.profile, remainingMs: current.expiresAt - serverNowMs };
       });
-      if (!result.valid || controller.signal.aborted) return false;
-      lastValidatedAt = monotonicNow();
-      leaseDeadline = sentAt + result.remainingMs;
-      armLease();
-      if (first) firstByteAt = result.firstByteAt;
-      return !controller.signal.aborted;
-    }
-    function periodic() {
-      if (!live || controller.signal.aborted) return;
-      validationTimer = setTimeout(() => {
-        validationPending = validate().then((valid) => {
-          if (!valid) controller.abort();
-        }, () => controller.abort()).finally(() => {
-          validationPending = null;
-          periodic();
-        });
-      }, streamValidationMs);
-    }
-    armLease();
-    const stream = new ReadableStream({
-      async start(out) {
-        try {
-          iterator = providers.streamAudio({ text: start.text, profile: start.profile, voice: resolveCommentaryVoice(start.profile.voiceOption), roomId, jobId, requestId: start.attempt.id, signal: controller.signal, source: live ? "accepted-durable-service" : "synthetic" })[Symbol.asyncIterator]();
-          while (true) {
-            const next = await new Promise((resolve, reject) => {
-              const abort = () => reject(Error("Interrupted"));
-              if (controller.signal.aborted) {
-                abort();
-                return;
-              }
-              controller.signal.addEventListener("abort", abort, { once: true });
-              Promise.resolve(iterator.next()).then(resolve, reject).finally(() => controller.signal.removeEventListener("abort", abort));
-            });
-            if (next.done) break;
-            const chunk = next.value;
-            if (controller.signal.aborted || monotonicNow() >= leaseDeadline) throw Error("Interrupted");
-            if (!(chunk instanceof Uint8Array)) throw Error("Invalid audio");
-            if (!chunk.byteLength) continue;
-            bytes += chunk.byteLength;
-            if (bytes > maxAudioBytes) throw Error("Audio byte cap");
-            if (firstByteAt === null) {
-              if (!await validate({ first: true })) throw Error("Interrupted");
-              firstByteElapsed = monotonicNow() - started;
-              clearTimeout(firstTimer);
-              periodic();
-            } else if (!live && !await validate()) throw Error("Interrupted");
-            else if (live && monotonicNow() - lastValidatedAt >= streamValidationMs) {
-              if (validationPending) await validationPending;
-              else if (!await validate()) throw Error("Interrupted");
+      return { room: room2, start: start2 };
+    });
+    const openStream = () => {
+      const controller = new AbortController();
+      let bytes = 0, firstByteAt = null, firstByteElapsed = null, leaseDeadline = requestStarted + start.remainingMs, leaseTimer, validationTimer, validationPending = null, iterator, lastValidatedAt = monotonicNow();
+      const started = monotonicNow(), timer = setTimeout(() => controller.abort(), streamTimeoutMs), firstTimer = setTimeout(() => controller.abort(), firstByteTimeoutMs);
+      function armLease() {
+        clearTimeout(leaseTimer);
+        const remaining = leaseDeadline - monotonicNow();
+        if (remaining <= 0) controller.abort();
+        else leaseTimer = setTimeout(() => controller.abort(), remaining);
+      }
+      async function validate({ first = false } = {}) {
+        const sentAt = monotonicNow();
+        const result = await batch(async () => {
+          await refresh();
+          const fresh = await getRoom(roomId);
+          return store.transaction((state) => {
+            const job = state.jobs.get(jobId);
+            if (!job) return { valid: false };
+            const serverNowMs = now();
+            let reason = fresh ? eligible(state, job, fresh, { started: job.status === "started" }) : "room-missing", current;
+            try {
+              current = lease(state, fresh || room, userId, device, epoch, serverNowMs);
+            } catch {
+              reason = "playback-owner";
             }
-            if (controller.signal.aborted) throw Error("Interrupted");
-            out.enqueue(chunk);
-          }
-          clearTimeout(validationTimer);
-          if (validationPending) await validationPending;
-          if (!bytes || controller.signal.aborted || !await validate()) throw Error("No complete audio");
-          await store.transaction((state) => {
-            const attempt = state.attempts.get(start.attempt.id);
-            if (!attempt) throw Error("Missing attempt");
-            if (attempt.status === "submitted") attempt.status = "succeeded";
-            Object.assign(attempt, { bytes, firstByteMs: firstByteElapsed, completeMs: monotonicNow() - started, firstAudibleMs: null });
+            if (reason) {
+              cancel(state, job, reason);
+              return { valid: false };
+            }
+            if (!["streaming", "started"].includes(job.status) || job.claim?.token !== claimToken || job.claim.epoch !== epoch || job.claim.device !== device) return { valid: false };
+            if (first) {
+              job.audioFirstByteAt = serverNowMs;
+              const attempt = state.attempts.get(start.attempt.id);
+              if (!attempt) return { valid: false };
+              attempt.firstByteAt = serverNowMs;
+            }
+            return { valid: true, remainingMs: current.expiresAt - serverNowMs, firstByteAt: serverNowMs };
           });
-          out.close();
-        } catch {
-          controller.abort();
+        });
+        if (!result.valid || controller.signal.aborted) return false;
+        lastValidatedAt = monotonicNow();
+        leaseDeadline = sentAt + result.remainingMs;
+        armLease();
+        if (first) firstByteAt = result.firstByteAt;
+        return !controller.signal.aborted;
+      }
+      function periodic() {
+        if (!live || controller.signal.aborted) return;
+        validationTimer = setTimeout(() => {
+          validationPending = validate().then((valid) => {
+            if (!valid) controller.abort();
+          }, () => controller.abort()).finally(() => {
+            validationPending = null;
+            periodic();
+          });
+        }, streamValidationMs);
+      }
+      armLease();
+      const stream = new ReadableStream({
+        async start(out) {
           try {
+            iterator = providers.streamAudio({ text: start.text, profile: start.profile, voice: resolveCommentaryVoice(start.profile.voiceOption), roomId, jobId, requestId: start.attempt.id, signal: controller.signal, source: live ? "accepted-durable-service" : "synthetic" })[Symbol.asyncIterator]();
+            while (true) {
+              const next = await new Promise((resolve, reject) => {
+                const abort = () => reject(Error("Interrupted"));
+                if (controller.signal.aborted) {
+                  abort();
+                  return;
+                }
+                controller.signal.addEventListener("abort", abort, { once: true });
+                Promise.resolve(iterator.next()).then(resolve, reject).finally(() => controller.signal.removeEventListener("abort", abort));
+              });
+              if (next.done) break;
+              const chunk = next.value;
+              if (controller.signal.aborted || monotonicNow() >= leaseDeadline) throw Error("Interrupted");
+              if (!(chunk instanceof Uint8Array)) throw Error("Invalid audio");
+              if (!chunk.byteLength) continue;
+              bytes += chunk.byteLength;
+              if (bytes > maxAudioBytes) throw Error("Audio byte cap");
+              if (firstByteAt === null) {
+                if (!await validate({ first: true })) throw Error("Interrupted");
+                firstByteElapsed = monotonicNow() - started;
+                clearTimeout(firstTimer);
+                periodic();
+              } else if (!live && !await validate()) throw Error("Interrupted");
+              else if (live && monotonicNow() - lastValidatedAt >= streamValidationMs) {
+                if (validationPending) await validationPending;
+                else if (!await validate()) throw Error("Interrupted");
+              }
+              if (controller.signal.aborted) throw Error("Interrupted");
+              out.enqueue(chunk);
+            }
+            clearTimeout(validationTimer);
+            if (validationPending) await validationPending;
+            if (!bytes || controller.signal.aborted || !await validate()) throw Error("No complete audio");
             await store.transaction((state) => {
-              const job = state.jobs.get(jobId), attempt = state.attempts.get(start.attempt.id);
-              if (attempt?.status === "submitted") attempt.status = live && attempt.providerDispatchedAt != null ? "unknown" : "failed";
-              if (job && ["streaming", "claimed"].includes(job.status)) job.status = "failed";
+              const attempt = state.attempts.get(start.attempt.id);
+              if (!attempt) throw Error("Missing attempt");
+              if (attempt.status === "submitted") attempt.status = "succeeded";
+              Object.assign(attempt, { bytes, firstByteMs: firstByteElapsed, completeMs: monotonicNow() - started, firstAudibleMs: null });
             });
+            out.close();
           } catch {
+            controller.abort();
+            try {
+              await store.transaction((state) => {
+                const job = state.jobs.get(jobId), attempt = state.attempts.get(start.attempt.id);
+                if (attempt?.status === "submitted") attempt.status = live && attempt.providerDispatchedAt != null ? "unknown" : "failed";
+                if (job && ["streaming", "claimed"].includes(job.status)) job.status = "failed";
+              });
+            } catch {
+            }
+            try {
+              out.error(new CommentaryError("Commentary audio interrupted.", 502));
+            } catch {
+            }
+          } finally {
+            clearTimeout(timer);
+            clearTimeout(firstTimer);
+            clearTimeout(leaseTimer);
+            clearTimeout(validationTimer);
+            controller.abort();
           }
-          try {
-            out.error(new CommentaryError("Commentary audio interrupted.", 502));
-          } catch {
-          }
-        } finally {
+        },
+        async cancel() {
+          controller.abort();
           clearTimeout(timer);
           clearTimeout(firstTimer);
           clearTimeout(leaseTimer);
           clearTimeout(validationTimer);
-          controller.abort();
+          await store.transaction((state) => {
+            const attempt = state.attempts.get(start.attempt.id);
+            if (attempt?.status === "submitted") attempt.status = live && attempt.providerDispatchedAt != null ? "unknown" : "interrupted";
+            const job = state.jobs.get(jobId);
+            if (job) cancel(state, job, "client-disconnected");
+          });
         }
-      },
-      async cancel() {
-        controller.abort();
-        clearTimeout(timer);
-        clearTimeout(firstTimer);
-        clearTimeout(leaseTimer);
-        clearTimeout(validationTimer);
-        await store.transaction((state) => {
-          const attempt = state.attempts.get(start.attempt.id);
-          if (attempt?.status === "submitted") attempt.status = live && attempt.providerDispatchedAt != null ? "unknown" : "interrupted";
-          const job = state.jobs.get(jobId);
-          if (job) cancel(state, job, "client-disconnected");
-        });
-      }
-    });
-    return stream;
+      });
+      return stream;
+    };
+    return deferAudio ? { openStream } : openStream();
   }
   async function feedback(userId, roomId, { jobId, value, basis } = {}) {
     const room = await authorized(userId, roomId);
@@ -1653,6 +1731,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       });
       facts.label = facts.seats.find((seat) => seat.accountId === facts.accountId)?.label;
       const quiet = live && !p.enabled || p.frequency === "highlights" && moment.purpose === "score" && !facts.complete && facts.category !== "yahtzee" && facts.value < 30, id2 = randomId();
+      if (moment.purpose === "score") coalesce(state, moment.roomId, facts.gameId, facts.revision);
       state.jobs.set(id2, { id: id2, roomId: moment.roomId, momentKey: moment.idempotencyKey, facts, profile: p, audience: [...moment.audience], status: quiet ? "silent" : "pending", line: null, claim: null, evidence: { moment, beforeRoom, acceptedRoom, receipt, priorGame } });
       state.moments.set(moment.idempotencyKey, id2);
       return id2;
@@ -1705,6 +1784,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         const moment = roomId + ":" + event.commandId;
         if (!state.moments.has(moment)) {
           const p = settings(state, roomId), facts = localScoreFacts(result.session, event.id), id2 = randomId(), quiet2 = !p.enabled || p.frequency === "highlights" && !facts.complete && facts.category !== "yahtzee" && facts.value < 30;
+          coalesce(state, roomId, facts.gameId, facts.revision);
           state.jobs.set(id2, { id: id2, roomId, momentKey: moment, facts, profile: p, audience: [userId], status: quiet2 ? "silent" : "pending", line: null, claim: null, sourceType: "accepted-local-score" });
           state.moments.set(moment, id2);
         }
@@ -2042,7 +2122,8 @@ function commentaryHandler({ service, authenticate }) {
         const url = new URL(request.url), match = url.pathname.match(/\/commentary\/([0-9a-f-]{36})\/audio\/([0-9a-f-]{36})$/i);
         if (!match || url.search) throw new CommentaryError("Unknown commentary route.", 404);
         const body2 = await service.audio(user, match[1], { jobId: match[2], claimToken: request.headers.get("X-Commentary-Claim"), device: request.headers.get("X-Commentary-Device"), epoch: Number(request.headers.get("X-Commentary-Epoch")) });
-        return new Response(body2, { status: 200, headers: { ...headers2, "Content-Type": "audio/mpeg", "X-Content-Type-Options": "nosniff" } });
+        const response = (stream) => new Response(stream, { status: 200, headers: { ...headers2, "Content-Type": "audio/mpeg", "X-Content-Type-Options": "nosniff" } });
+        return typeof body2?.openStream === "function" ? () => response(body2.openStream()) : response(body2);
       }
       if (request.method !== "POST") return reply({ error: "Use GET or POST." }, 405);
       const raw = await request.text();
@@ -2445,50 +2526,34 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
   }
   const rpc = (operation, body) => resource("rpc/" + operation, { method: "POST", body: JSON.stringify(body) });
   function createRuntime() {
-    const persistence = new DurableCommentaryStore({ scopeId, incremental: true, seed: snapshotCache?.current, onSnapshot: (row2) => {
+    const persistence = new DurableCommentaryStore({ scopeId, incremental: true, atomicBatches: true, seed: snapshotCache?.current, onSnapshot: (row2) => {
       if (snapshotCache && (!snapshotCache.current || row2.version >= snapshotCache.current.version)) snapshotCache.current = row2;
     }, rpc: createSupabaseCommentaryRpc({ url, getServiceKey: () => key2, fetchImplementation: fetchImpl, timeoutMs: 8e3 }) });
     const gate = createDurableProviderGate({
       verifyPersistence: () => persistence instanceof DurableCommentaryStore && persistence.version !== null,
       readAllowance: async (id2) => id2 === allowance.id ? { ...allowance, approved: enabled, revoked: !enabled } : null,
       reserveAttempt: async (input) => {
-        const limits = await resource("clubhouse_commentary_limits?scope_id=eq." + scopeId + "&room_id=eq." + input.roomId + "&select=max_requests,max_characters,expires_at");
-        if (!limits[0] || Date.parse(limits[0].expires_at) <= Date.now()) throw Error("No current administered test allowance.");
-        return persistence.transaction((state) => {
-          const attempt = state.attempts.get(input.requestId), job = state.jobs.get(input.jobId);
-          if (!attempt || attempt.jobId !== input.jobId || attempt.stage !== input.stage || attempt.status !== "submitted" || attempt.providerDispatchedAt || job?.roomId !== input.roomId || job.profile.enabled !== true || ["cancelled", "silent", "failed"].includes(job.status) || input.allowanceId !== allowance.id || input.expiresAt !== allowance.expiresAt || Date.now() >= allowance.expiresAt) throw Error("Provider attempt is not dispatchable.");
-          if (input.stage === "writer" && (job.status !== "generating" || job.workerToken !== input.requestId) || input.stage === "tts" && (job.status !== "streaming" || !job.claim)) throw Error("Provider job stage changed.");
-          if (input.stage === "tts") {
-            const lease = state.leases.get(input.roomId);
-            if (job.activeTtsAttemptId !== input.requestId || !lease || lease.owner !== job.claim.owner || lease.device !== job.claim.device || lease.epoch !== job.claim.epoch || lease.expiresAt <= persistence.databaseNowMs) throw Error("Playback lease expired before voice dispatch.");
-          }
-          const dispatched = [...state.attempts.values()].filter((value) => value.allowanceId === allowance.id && value.providerDispatchedAt);
-          if (dispatched.filter((value) => value.stage === input.stage).length >= (input.stage === "writer" ? allowance.maxWriterRequests : allowance.maxTtsRequests) || input.stage === "tts" && dispatched.filter((value) => value.stage === "tts").reduce((total, value) => total + (value.submittedCharacters || 0), 0) + input.submittedCharacters > allowance.maxTtsCharacters) throw Error("Administered provider ceiling reached.");
-          const budget = state.budgets.get(input.roomId), delta = Math.max(0, input.submittedCharacters - attempt.characters);
-          if (budget.requests > Number(limits[0].max_requests) || budget.characters + delta > Number(limits[0].max_characters)) throw Error("Administered room ceiling reached.");
-          budget.characters += delta;
-          Object.assign(attempt, { allowanceId: input.allowanceId, providerDispatchedAt: Date.now(), provider: input.provider, model: input.model, submittedCharacters: input.submittedCharacters, maxOutputTokens: input.maxOutputTokens ?? null });
-          return { id: attempt.id, requestId: input.requestId, allowanceId: input.allowanceId, stage: input.stage, committed: true };
-        });
+        if (input.allowanceId !== allowance.id || input.expiresAt !== allowance.expiresAt || Date.now() >= allowance.expiresAt) throw Error("Administered allowance mismatch");
+        return rpc("clubhouse_commentary_dispatch", { p_scope: scopeId, p_input: input });
       },
-      finishAttempt: (id2, metadata) => persistence.transaction((state) => {
-        const attempt = state.attempts.get(id2);
-        if (!attempt) throw Error("Missing durable attempt.");
-        Object.assign(attempt, { providerResult: metadata, providerFinishedAt: Date.now() });
-        return true;
-      })
+      finishAttempt: (id2, metadata) => rpc("clubhouse_commentary_finish", { p_scope: scopeId, p_id: id2, p_metadata: metadata })
     });
     const providers = enabled ? createCommentaryProviders({ fetchImpl, allowPaid: true, allowance, durableGate: gate, getAnthropicKey: () => get("ANTHROPIC_API_KEY"), getElevenLabsKey: () => get("ELEVENLABS_API_KEY"), model: get("COMMENTARY_WRITER_MODEL") || "claude-haiku-4-5-20251001", writerLimits: { maxRequests: 1, maxInputCharacters: 5e4, maxOutputTokens: 512, deadlineMs: 12e3, maxResponseBytes: 2e4 }, audioLimits: { firstByteMs: 1e4, completeMs: 25e3, maxBytes: 524288, maxLineCharacters: 180 } }) : null;
-    const service = createCommentaryService({ store: persistence, getRoom: async (id2) => {
+    const service = createCommentaryService({ store: persistence, deferAudio: true, getRoom: async (id2) => {
       const local = persistence.read("localSessions", id2);
-      return local ? localRoom(local) : roomStore.byId(id2);
+      if (local) return localRoom(local);
+      const batch = persistence.batchContext;
+      if (batch?.rooms.has(id2)) return structuredClone(batch.rooms.get(id2));
+      const room = await roomStore.byId(id2);
+      if (batch) batch.rooms.set(id2, structuredClone(room));
+      return room;
     }, now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, maxAgeMs: 3e4, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
     async function processRoom(roomId) {
       await persistence.initialize();
       const rows = await resource("clubhouse_commentary_outbox?scope_id=eq." + scopeId + "&room_id=eq." + roomId + "&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10");
       for (const row2 of rows) {
         try {
-          const jobId = await service.enqueueCommitted(row2.payload);
+          const jobId = await persistence.batch(() => service.enqueueCommitted(row2.payload));
           await rpc("clubhouse_commentary_ack_outbox", { p_scope: scopeId, p_idempotency_key: row2.idempotency_key, p_status: jobId ? "enqueued" : "invalidated", p_job_id: jobId });
         } catch {
           await rpc("clubhouse_commentary_ack_outbox", { p_scope: scopeId, p_idempotency_key: row2.idempotency_key, p_status: "retry", p_job_id: null }).catch(() => {
@@ -2507,7 +2572,6 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       const actor = await authenticate(request);
       if (!actor) return new Response(JSON.stringify({ error: "Sign in to use commentary." }), { status: 401, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
       const runtime = createRuntime();
-      await runtime.persistence.initialize();
       let body = null;
       if (request.method === "POST") {
         const raw = await request.clone().text();
@@ -2519,18 +2583,24 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
         }
       }
       onOperation(body?.operation);
-      if (body?.operation === "local-start" && (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now())) throw Error("Live commentary is not configured.");
-      if (body?.operation === "profile-update" && body.changes?.enabled === true) {
-        await runtime.service.authorized(actor, body.roomId, true);
-        if (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now()) throw Error("Live test configuration is not enabled.");
-      }
-      const handler = composeCommentaryEndpoint({ service: runtime.service, authenticate: async () => actor, refresh: () => runtime.persistence.refresh() });
-      const response = await handler(request);
+      const operate = async () => {
+        await runtime.persistence.initialize();
+        if (body?.operation === "local-start" && (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now())) throw Error("Live commentary is not configured.");
+        if (body?.operation === "profile-update" && body.changes?.enabled === true) {
+          await runtime.service.authorized(actor, body.roomId, true);
+          if (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now()) throw Error("Live test configuration is not enabled.");
+        }
+        const handler = composeCommentaryEndpoint({ service: runtime.service, authenticate: async () => actor, refresh: () => runtime.persistence.refresh() });
+        const response2 = await handler(request.clone());
+        if (response2.ok && body?.roomId && ["jobs-read", "profile-update", "local-start", "local-command"].includes(body.operation)) await runtime.service.authorized(actor, body.roomId);
+        return response2;
+      };
+      let response = await runtime.persistence.batch(operate);
+      if (typeof response === "function") response = response();
       if (response.ok && (body?.operation === "local-start" || body?.operation === "profile-update" && body.changes?.enabled === true)) {
         await rpc("clubhouse_commentary_set_limit", { p_scope: scopeId, p_room: body.roomId, p_max_requests: 400, p_max_characters: 4e6, p_expires_at: new Date(allowance.expiresAt).toISOString() });
       }
       if (response.ok && body?.roomId && ["jobs-read", "profile-update", "local-start", "local-command"].includes(body.operation)) {
-        await runtime.service.authorized(actor, body.roomId);
         waitUntil(runtime.processRoom(body.roomId).catch(() => {
         }));
       }

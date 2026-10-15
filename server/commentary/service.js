@@ -17,7 +17,7 @@ export class CommentaryError extends Error {constructor(message,status=400){supe
 const fail=(message,status)=>{throw new CommentaryError(message,status);};
 const positive=(v,name)=>{if(!Number.isSafeInteger(v)||v<1)throw Error('Positive bounded '+name+' required');return v;};
 const name=value=>String(value).replace(/[\u0000-\u001f\u007f]/g,'').slice(0,24);
-export function createCommentaryService({store,getRoom,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null,monotonicNow=()=>performance.now(),streamValidationMs=500}={}) {
+export function createCommentaryService({store,getRoom,now=()=>Date.now(),randomId=()=>crypto.randomUUID(),profile,leaseMs=15000,maxAgeMs=15000,maxLineCharacters=500,maxAudioBytes=524288,streamTimeoutMs=20000,firstByteTimeoutMs=Math.min(10000,streamTimeoutMs),writerTimeoutMs=10000,budget={maxRequests:0,maxCharacters:0},syntheticProviders=null,liveProviders=null,monotonicNow=()=>performance.now(),streamValidationMs=500,deferAudio=false}={}) {
  if(!store||typeof getRoom!=='function')throw Error('Injected store and authoritative room reader required');
  for(const [label,value]of Object.entries({leaseMs,maxAgeMs,maxLineCharacters,maxAudioBytes,streamTimeoutMs,firstByteTimeoutMs,writerTimeoutMs}))positive(value,label);
  if(!Number.isSafeInteger(budget.maxRequests)||budget.maxRequests<0||!Number.isSafeInteger(budget.maxCharacters)||budget.maxCharacters<0)throw Error('Explicit bounded budget required');
@@ -27,6 +27,8 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
  const live=!!liveProviders?.liveConfigured;
  if(liveProviders&&(!live||!(store instanceof DurableCommentaryStore)))throw Error('Live commentary requires verified providers and durable persistence.');
  const refresh=()=>store.refresh?.();
+ const batch=fn=>store.batch?store.batch(fn):fn();
+ function coalesce(state,roomId,gameId,revision=Infinity){for(const job of state.jobs.values())if(job.roomId===roomId&&job.facts.gameId===gameId&&(job.facts.revision??0)<=revision&&(job.facts.purpose||'score')==='score'&&['pending','generating','ready'].includes(job.status)){job.status='silent';job.reason='superseded-by-newer-score';job.line=null;}}
  function memory(state){return Object.assign(new RetrievalAdaptation({now}),{records:state.memoryRecords,feedback:state.feedback,profiles:state.playerProfiles,preferenceSharing:state.preferenceSharing,summaries:state.memorySummaries,caches:state.memoryCaches});}
  function purge(state){
   memory(state).purgeExpired();for(const [key,receipt]of state.exposure)if(receipt.expiresAt!=null&&receipt.expiresAt<=now()){memory(state).invalidateDerived();state.exposure.delete(key);const job=state.jobs.get(receipt.jobId);if(job){job.line=null;job.reason='history-expired';}}
@@ -111,14 +113,15 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   return store.transaction(state=>{
    if(state.moments.has(momentKey))return state.moments.get(momentKey);
    const id=randomId(),p=settings(state,room.id),quiet=live&&!p.enabled||['score-correction'].includes(facts.eventType)||(p.frequency==='highlights'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30);
-   state.jobs.set(id,{id,roomId:room.id,momentKey,facts:named,profile:p,audience:room.members.map(m=>m.userId),status:quiet?'silent':'pending',line:null,claim:null});state.moments.set(momentKey,id);return id;
+   coalesce(state,room.id,facts.gameId,facts.revision);state.jobs.set(id,{id,roomId:room.id,momentKey,facts:named,profile:p,audience:room.members.map(m=>m.userId),status:quiet?'silent':'pending',line:null,claim:null});state.moments.set(momentKey,id);return id;
   });
  }
  async function prepareTrusted(jobId){
+  const claim=await batch(async()=>{
   await refresh();
   const prior=store.snapshot().jobs.get(jobId);if(!prior)return null;const room=await getRoom(prior.roomId);const authorizedSourceIds=room?await sourcePermissions(prior.facts.accountId,room):[];
-  const claim=await store.transaction(state=>{
-   const job=state.jobs.get(jobId);if(!job||job.status!=='pending')return null;
+  return store.transaction(state=>{
+   const job=state.jobs.get(jobId);if(!job||job.status!=='pending')return null;if((job.facts.purpose||'score')==='score'&&[...state.jobs.values()].some(other=>other.roomId===job.roomId&&other.facts.gameId===job.facts.gameId&&(other.facts.purpose||'score')==='score'&&other.facts.revision>job.facts.revision)){job.status='silent';job.reason='superseded-by-newer-score';return null;}
    const reason=room?eligible(state,job,room):'room-missing';if(reason){cancel(state,job,reason);return null;}
    if(!providers?.writeLine){job.status='silent';job.reason='providers-disabled';return null;}
    purge(state);const m=memory(state);
@@ -128,14 +131,14 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    const local=state.localSessions?.get(job.roomId),localDraft=local?.players.find(p=>p.participantId===job.facts.accountId);
    const input={facts:job.facts,profile:job.profile,purpose:job.facts.purpose||'score',roomId:job.roomId,jobId:job.id,source:live?'accepted-durable-service':'synthetic-service-rehearsal',personalContext:localDraft?{accountId:job.facts.accountId,gender:localDraft.gender,blurb:localDraft.blurb}:state.playerProfiles.get(job.facts.accountId)?.sharedRoomIds?.includes(room.id)?adaptive?.personalContext||null:null,preferences:local?localPreferences(state,room.hostId):adaptive?.writerPreferences||null};const attempt=reserve(state,job,'writer',[...JSON.stringify(input)].length);
    job.status='generating';job.workerToken=attempt.id;return {input,attempt,jobId};
-  });if(!claim)return null;
+  });});if(!claim)return null;
   let line,writerTimer;const writerController=new AbortController();
   try{
    line=await Promise.race([Promise.resolve().then(()=>providers.writeLine({...structuredClone(claim.input),requestId:claim.attempt.id,signal:writerController.signal})),new Promise((_resolve,reject)=>{writerTimer=setTimeout(()=>{writerController.abort();reject(Error('Writer timeout'));},writerTimeoutMs);})]);
   }catch{
    await store.transaction(state=>{const attempt=state.attempts.get(claim.attempt.id);if(attempt&&attempt.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'failed';const job=state.jobs.get(jobId);if(job?.workerToken===claim.attempt.id&&job.status==='generating')job.status='failed';});return null;
   }finally{clearTimeout(writerTimer);}
-  const fresh=await getRoom(prior.roomId);
+  return batch(async()=>{const fresh=await getRoom(claim.input.roomId);
   return store.transaction(state=>{
    const attempt=state.attempts.get(claim.attempt.id);if(attempt?.status==='submitted')attempt.status='succeeded';const job=state.jobs.get(jobId);
    if(job.status!=='generating'||job.workerToken!==claim.attempt.id)return null;
@@ -145,7 +148,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    // Synthetic validation only; production classifier/rewrite still required.
    if(!line||typeof line.text!=='string'||!line.text.trim()||[...line.text].length>maxLineCharacters||/[\u0000-\u001f\u007f]/.test(line.text)||typeof line.containsProfanity!=='boolean'||(!job.profile.profanityAllowed&&line.containsProfanity)){job.status='failed';job.reason='invalid-candidate';return null;}
    job.line={text:line.text,containsProfanity:line.containsProfanity,mechanism:line.mechanism,subject:line.subject,source:live?'anthropic-writer':'synthetic'};rememberTrusted(state,job,line);job.status='ready';job.readyAt=now();return {id:job.id,text:job.line.text};
-  });
+  });});
  }
  async function acquire(userId,roomId,{device}={}){
   await authorized(userId,roomId,true);if(!token.test(device||''))fail('Invalid playback device.');
@@ -192,19 +195,20 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   });
  }
  async function audio(userId,roomId,{jobId,device,epoch,claimToken}={}){
-  const requestStarted=monotonicNow(),room=await authorized(userId,roomId,true);
+  const requestStarted=monotonicNow();const {room,start}=await batch(async()=>{const room=await authorized(userId,roomId,true);
   const start=await store.transaction(state=>{
    const serverNowMs=now(),current=lease(state,room,userId,device,epoch,serverNowMs),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)fail('Playback claim is stale.',409);
    const reason=eligible(state,job,room);if(reason){cancel(state,job,reason);fail('Commentary was cancelled.',409);}
    if(job.status!=='claimed')fail('Audio already requested.',409);if(!providers?.streamAudio)fail('Voice provider is disabled.',503);
    const attempt=reserve(state,job,'tts',[...job.line.text].length);job.activeTtsAttemptId=attempt.id;job.status='streaming';return {attempt,text:job.line.text,profile:job.profile,remainingMs:current.expiresAt-serverNowMs};
   });
-  const controller=new AbortController();let bytes=0,firstByteAt=null,firstByteElapsed=null,leaseDeadline=requestStarted+start.remainingMs,leaseTimer,validationTimer,validationPending=null,iterator,lastValidatedAt=monotonicNow();
+  return {room,start};});
+  const openStream=()=>{const controller=new AbortController();let bytes=0,firstByteAt=null,firstByteElapsed=null,leaseDeadline=requestStarted+start.remainingMs,leaseTimer,validationTimer,validationPending=null,iterator,lastValidatedAt=monotonicNow();
   const started=monotonicNow(),timer=setTimeout(()=>controller.abort(),streamTimeoutMs),firstTimer=setTimeout(()=>controller.abort(),firstByteTimeoutMs);
   function armLease(){clearTimeout(leaseTimer);const remaining=leaseDeadline-monotonicNow();if(remaining<=0)controller.abort();else leaseTimer=setTimeout(()=>controller.abort(),remaining);}
   async function validate({first=false}={}){
-   const sentAt=monotonicNow(),fresh=await getRoom(roomId);
-   const result=await store.transaction(state=>{
+   const sentAt=monotonicNow();const result=await batch(async()=>{await refresh();const fresh=await getRoom(roomId);
+   return store.transaction(state=>{
     const job=state.jobs.get(jobId);if(!job)return {valid:false};
     const serverNowMs=now();let reason=fresh?eligible(state,job,fresh,{started:job.status==='started'}):'room-missing',current;
     try{current=lease(state,fresh||room,userId,device,epoch,serverNowMs);}catch{reason='playback-owner';}
@@ -212,6 +216,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
     if(!['streaming','started'].includes(job.status)||job.claim?.token!==claimToken||job.claim.epoch!==epoch||job.claim.device!==device)return {valid:false};
     if(first){job.audioFirstByteAt=serverNowMs;const attempt=state.attempts.get(start.attempt.id);if(!attempt)return {valid:false};attempt.firstByteAt=serverNowMs;}
     return {valid:true,remainingMs:current.expiresAt-serverNowMs,firstByteAt:serverNowMs};
+   });
    });
    if(!result.valid||controller.signal.aborted)return false;
    lastValidatedAt=monotonicNow();leaseDeadline=sentAt+result.remainingMs;armLease();if(first)firstByteAt=result.firstByteAt;return !controller.signal.aborted;
@@ -242,7 +247,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    },
    async cancel(){controller.abort();clearTimeout(timer);clearTimeout(firstTimer);clearTimeout(leaseTimer);clearTimeout(validationTimer);await store.transaction(state=>{const attempt=state.attempts.get(start.attempt.id);if(attempt?.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'interrupted';const job=state.jobs.get(jobId);if(job)cancel(state,job,'client-disconnected');});},
   });
-  return stream;
+  return stream;};return deferAudio?{openStream}:openStream();
  }
 
  async function feedback(userId,roomId,{jobId,value,basis}={}){
@@ -288,7 +293,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    }else if(facts.accountId!==moment.actorId||facts.gameId!==acceptedRoom.game.id||!factsValid(facts,acceptedRoom.game))throw Error('Invalid committed score.');
    facts.seats.forEach(seat=>{seat.label=name(acceptedRoom.game.players[seat.seat].name);seat.displayName=seat.label;});facts.label=facts.seats.find(seat=>seat.accountId===facts.accountId)?.label;
    const quiet=live&&!p.enabled||(p.frequency==='highlights'&&moment.purpose==='score'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30),id=randomId();
-   state.jobs.set(id,{id,roomId:moment.roomId,momentKey:moment.idempotencyKey,facts,profile:p,audience:[...moment.audience],status:quiet?'silent':'pending',line:null,claim:null,evidence:{moment,beforeRoom,acceptedRoom,receipt,priorGame}});state.moments.set(moment.idempotencyKey,id);return id;
+   if(moment.purpose==='score')coalesce(state,moment.roomId,facts.gameId,facts.revision);state.jobs.set(id,{id,roomId:moment.roomId,momentKey:moment.idempotencyKey,facts,profile:p,audience:[...moment.audience],status:quiet?'silent':'pending',line:null,claim:null,evidence:{moment,beforeRoom,acceptedRoom,receipt,priorGame}});state.moments.set(moment.idempotencyKey,id);return id;
   });
  }
 
@@ -304,7 +309,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
  async function commitLocal(userId,roomId,{commands,quiet=false}={}){
   if(typeof quiet!=='boolean')fail('Invalid replay flag.');await authorized(userId,roomId,true);return store.transaction(state=>{const prior=state.localSessions.get(roomId);if(!prior||prior.ownerId!==userId)fail('Local session is not yours.',403);let result;try{result=applyLocalCommands(prior,commands,new Date(now()).toISOString());}catch(error){fail(error.message,409);}state.localSessions.set(roomId,result.session);
    const changes=result.events.filter(e=>['score-undo','score-correction'].includes(e.type));for(const change of changes)for(const job of state.jobs.values())if(job.roomId===roomId&&(job.facts.eventId===change.target||job.facts.scoreDependencies?.includes(change.target)))cancel(state,job,'invalid-event');
-   const event=['score','bonus','final-chain-roll','final-chain-end'].map(type=>result.events.findLast(e=>e.type===type)).find(Boolean);if(event&&!changes.length&&!quiet){const moment=roomId+':'+event.commandId;if(!state.moments.has(moment)){const p=settings(state,roomId),facts=localScoreFacts(result.session,event.id),id=randomId(),quiet=!p.enabled||(p.frequency==='highlights'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30);state.jobs.set(id,{id,roomId,momentKey:moment,facts,profile:p,audience:[userId],status:quiet?'silent':'pending',line:null,claim:null,sourceType:'accepted-local-score'});state.moments.set(moment,id);}}
+   const event=['score','bonus','final-chain-roll','final-chain-end'].map(type=>result.events.findLast(e=>e.type===type)).find(Boolean);if(event&&!changes.length&&!quiet){const moment=roomId+':'+event.commandId;if(!state.moments.has(moment)){const p=settings(state,roomId),facts=localScoreFacts(result.session,event.id),id=randomId(),quiet=!p.enabled||(p.frequency==='highlights'&&!facts.complete&&facts.category!=='yahtzee'&&facts.value<30);coalesce(state,roomId,facts.gameId,facts.revision);state.jobs.set(id,{id,roomId,momentKey:moment,facts,profile:p,audience:[userId],status:quiet?'silent':'pending',line:null,claim:null,sourceType:'accepted-local-score'});state.moments.set(moment,id);}}
    return {room:localRoom(result.session)};});
  }
  async function acquireAndClaim(userId,roomId,{device,jobId}={}){

@@ -61,7 +61,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   // Preserve real native evidence only. A host receipt never marks other people as having heard.
   current.receipts=current.receipts.then(()=>invoke('playback-event',payload,undefined,current.roomId)).catch(()=>{});
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
-  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});}
+  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});void Promise.resolve(pending).then(()=>refresh()).catch(()=>{});}
  }
  async function refresh({profile:suppliedProfile}={}){
   if(disposed||!context?.userId||!context?.game||!context?.roomId)return;
@@ -88,7 +88,8 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
     const capability=profile.capabilities||{},voiceAllowed=capability.liveProviders===true||allowSyntheticPlayback&&capability.providerMode==='synthetic';
     if(!voiceAllowed){if(run)invalidate('provider-unavailable');publish({status:'caption-only'});return;}
     if(!speakable()||run)return;
-    const job=captionJobs.find(job=>job.status==='ready'&&(!greetingAllowed(job)||['opening','return','next-game'].includes(job.purpose)&&job.lifecycleVerified===true)&&(!hydrated.has(job.id)||greetingAllowed(job))&&!attempted.has(job.id));if(!job)return;
+    const job=[...captionJobs].reverse().find(job=>job.status==='ready'&&(!greetingAllowed(job)||['opening','return','next-game'].includes(job.purpose)&&job.lifecycleVerified===true)&&(!hydrated.has(job.id)||greetingAllowed(job))&&!attempted.has(job.id));if(!job)return;
+    if((job.purpose||'score')==='score')for(const older of captionJobs)if(older!==job&&(older.purpose||'score')==='score'&&older.status==='ready')attempted.add(older.id);
     attempted.add(job.id);greetings.delete(job.id);greetingCommands.delete(job.sourceCommandId);if(['opening','return','next-game'].includes(job.purpose))playedGreetingCommands.add(job.sourceCommandId);
     const acquisitionSentAt=monotonicNow();
     const combined=capability.atomicPlaybackStart===true?await invoke('playback-start',{device:deviceId,jobId:job.id},signal):null;if(combined&&!combined.claim?.claimed)return;

@@ -27,7 +27,7 @@ export function commentaryHandler({service,authenticate}){
     const url=new URL(request.url),match=url.pathname.match(/\/commentary\/([0-9a-f-]{36})\/audio\/([0-9a-f-]{36})$/i);
     if(!match||url.search)throw new CommentaryError('Unknown commentary route.',404);
     const body=await service.audio(user,match[1],{jobId:match[2],claimToken:request.headers.get('X-Commentary-Claim'),device:request.headers.get('X-Commentary-Device'),epoch:Number(request.headers.get('X-Commentary-Epoch'))});
-    return new Response(body,{status:200,headers:{...headers,'Content-Type':'audio/mpeg','X-Content-Type-Options':'nosniff'}});
+    const response=stream=>new Response(stream,{status:200,headers:{...headers,'Content-Type':'audio/mpeg','X-Content-Type-Options':'nosniff'}});return typeof body?.openStream==='function'?()=>response(body.openStream()):response(body);
    }
    if(request.method!=='POST')return reply({error:'Use GET or POST.'},405);
    const raw=await request.text();if(raw.length>4096)throw new CommentaryError('Request too large.',413);
