@@ -352,3 +352,40 @@ it('does not let a delayed old-scope terminal receipt block or mutate a new welc
  expect(f.client.allowGreeting({jobId:'new-welcome',gameId:'new-game',profileVersion:1})).toBe(true);await f.client.refresh();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.jobId).toBe('new-welcome');
  const before=f.client.snapshot();rejectReceipt(Error('abandoned terminal receipt'));for(let i=0;i<4;i++)await tick();expect(f.client.snapshot()).toEqual(before);f.client.dispose();
 });
+
+
+it('drains the newest waiting score once after an unbound request rejects and native output stops',async()=>{
+ const f=setup();let rejectFirst,releaseStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('unbound native request rejected'));await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(releaseStop).toBeTypeOf('function');
+ releaseStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');expect(f.request.mock.calls.some(([p])=>p.operation==='playback-event')).toBe(false);f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+it('does not resurrect an unbound waiting reaction after its native stop completes in another context',async()=>{
+ const f=setup();let rejectFirst,releaseStop;f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('unbound rejected'));await tick();const oldStop=releaseStop;
+ f.client.update({...f.ctx,userId:null});oldStop();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.client.snapshot().status).toBe('offline');f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+it('keeps a new valid score from a combined Undo-and-score snapshot after cancelling dependent speech',async()=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'}]}});await f.client.refresh();await tick();
+ expect(f.player.stop).toHaveBeenCalledWith('facts-invalidated');expect(first.signal.aborted).toBe(true);expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');f.client.dispose();
+});
+
+
+it.each([{profileVersion:2},{visible:false},{listenerMuted:true},{userId:'guest'},{leaseEpoch:4}])('does not rearm a combined corrected snapshot across an unavailable boundary %j',async patch=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
+ f.client.update({...f.ctx,...patch,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'}]}});await f.client.refresh();await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();f.client.dispose();
+});
+
+it('does not rearm a new score already undone within the same combined snapshot',async()=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'undo-one',type:'score-undo',target:'score-one'},{id:'score-two',type:'score'},{id:'undo-two',type:'score-undo',target:'score-two'}]}});await f.client.refresh();await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();f.client.dispose();
+});

@@ -31,7 +31,10 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(newest&&speakable()){if(desired)desired.superseded=true;desired={eventId:newest.id,queuedAt:monotonicNow()};}
   if(switched||profileChanged||!speakable())desired=null;
   if(changedTargets.length)publish({captions:state.captions.filter(caption=>!changedTargets.some(id=>caption.eventId===id||caption.dependencyEventIds.includes(id)))});
+  const replacement=dependent&&!switched&&!profileChanged&&!epochLost&&speakable()&&newest&&!changedTargets.includes(newest.id)?desired:null;
   if(switched||profileChanged||epochLost||dependent||!speakable())invalidate(switched?'context-changed':profileChanged?'profile-changed':epochLost?'lease-lost':dependent?'facts-invalidated':'playback-unavailable');
+  // A corrected prior line does not erase a distinct newly accepted score in the same snapshot.
+  if(replacement)desired=replacement;
   if(switched){suppressed=new Set();playedGreetingCommands=new Set();}
   if(switched||profileChanged){initial=true;hydrated=new Set();attempted=new Set();greetings=new Set();greetingCommands=new Set();publish({captions:[],error:null,measurement:null});}
   if(!context?.userId||!context?.roomId||!context?.game)publish({status:'offline',captions:[]});
@@ -75,16 +78,17 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   const active={job:{id:'connecting',eventId:target.eventId,dependencyEventIds:target.eventId?[target.eventId]:[]},claim:{epoch:0},roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve(),awaitingPreparation:!!preparation};
   run=active;publish({status:'connecting',playing:null});
   try{if(preparation)await preparation;if(fence!==generation||run!==active||active.abort.signal.aborted)return;active.awaitingPreparation=false;console.info('[Commentary direct]',JSON.stringify({stage:'request',queueMs,preparationWaitMs:Math.max(0,Math.round(monotonicNow()-dequeuedAt)),sinceQueuedMs:Math.max(0,Math.round(monotonicNow()-queuedAt))}));await player.playReaction({selector:{roomId:context.roomId,gameId:context.game.id,deviceId,profileVersion:context.profileVersion,...target},signal:active.abort.signal,onBind:binding=>{
-   if(fence!==generation||run!==active||active.abort.signal.aborted||!validCaptionJob(binding?.job)||target.eventId&&binding.job.eventId!==target.eventId||target.jobId&&binding.job.id!==target.jobId||target.sourceCommandId&&binding.job.sourceCommandId!==target.sourceCommandId||binding.claim?.jobId!==binding.job.id||binding.claim.roomId!==context.roomId||binding.claim.deviceId!==deviceId||binding.lease.owner!==context.userId||binding.lease.device!==deviceId||binding.lease.epoch!==binding.claim.epoch)return false;
+   if(fence!==generation||run!==active||active.cancelled||active.abort.signal.aborted||!validCaptionJob(binding?.job)||target.eventId&&binding.job.eventId!==target.eventId||target.jobId&&binding.job.id!==target.jobId||target.sourceCommandId&&binding.job.sourceCommandId!==target.sourceCommandId||binding.claim?.jobId!==binding.job.id||binding.claim.roomId!==context.roomId||binding.claim.deviceId!==deviceId||binding.lease.owner!==context.userId||binding.lease.device!==deviceId||binding.lease.epoch!==binding.claim.epoch)return false;
    active.job=binding.job;active.claim=binding.claim;lease={...binding.lease,monotonicDeadline:binding.claim.monotonicDeadline};
    publish({playing:{jobId:active.job.id,caption:active.job.caption},status:'playing',captions:[...state.captions.filter(c=>c.id!==active.job.id),{...active.job}].slice(-20)});return true;
   },onEvent:event=>receive(active,event)});
-  }catch{if(fence===generation){if(run===active&&active.claim.epoch>0){
-   // A rejected bound request must release native output and settle its terminal receipt before the next claim.
+  }catch{if(fence===generation){if(run===active){
+   // Stop even an unbound failed request before draining newer work; only bound output has a receipt identity.
+   if(active.claim.epoch===0)active.cancelled=true;
    try{await player.stop('player-failed');}catch{if(fence===generation){invalidate('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}return;}
    if(fence!==generation)return;
-   if(run===active)receive(active,{jobId:active.job.id,epoch:active.claim.epoch,state:'failed',sequence:active.sequence+1,reason:'native-request-failed',measurementBasis:'client-request-failure'});
-  }else if(run===active)stop('player-failed');publish({error:'Voice unavailable. Scores are saved normally.'});}}
+   if(run===active&&active.claim.epoch>0)receive(active,{jobId:active.job.id,epoch:active.claim.epoch,state:'failed',sequence:active.sequence+1,reason:'native-request-failed',measurementBasis:'client-request-failure'});
+  }publish({error:'Voice unavailable. Scores are saved normally.'});}}
   finally{if(run===active&&active.claim.epoch===0){run=null;publish({status:'ready',playing:null});void react();}}
  }
  let completionBarrier=null;
