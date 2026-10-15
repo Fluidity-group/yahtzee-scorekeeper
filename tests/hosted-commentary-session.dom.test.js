@@ -107,3 +107,20 @@ it('native direct mode has no periodic profile/jobs discovery requests',async()=
  await f.session.refresh({forceProfile:true});f.session.update(f.context);await wait();f.request.mockClear();
  vi.useFakeTimers();try{f.session.update(f.context);await wait();f.request.mockClear();await vi.advanceTimersByTimeAsync(16000);expect(f.request).not.toHaveBeenCalled();}finally{f.session.dispose();vi.useRealTimers();}
 });
+
+it('starts an explicitly requested welcome when cached setup refresh is still settling',async()=>{
+ const gameId='44444444-4444-4444-8444-444444444444',jobId='55555555-5555-4555-8555-555555555555';
+ const profile={version:1,enabled:true,capabilities:{liveProviders:true,directReaction:true}};
+ const request=vi.fn(async()=>({result:profile}));const player={play:vi.fn(),playReaction:vi.fn(async()=>{}),stop:vi.fn()};
+ const session=createHostedCommentarySession({request,player,deviceId:'phone-001',nativeAudioAvailable:true,initialListenerMuted:false,pollMs:0});
+ session.update({room:{id:roomId,hostId:host,members:[{userId:host}],game:{id:gameId,events:[]}},userId:host,visible:true,connected:true,initialProfile:profile});
+ // Local creation calls update then arms the welcome without waiting for that update's detached refresh.
+ expect(await session.allowGreeting({jobId,gameId,profileVersion:1})).toBe(true);await wait();
+ expect(player.playReaction).toHaveBeenCalledOnce();expect(player.playReaction.mock.calls[0][0].selector.jobId).toBe(jobId);session.dispose();
+});
+
+it('does not arm a welcome from an abandoned session while its profile loads',async()=>{
+ let release;const request=vi.fn(()=>new Promise(resolve=>{release=()=>resolve({result:{version:1,enabled:true,capabilities:{liveProviders:true,directReaction:true}}});})),player={play:vi.fn(),playReaction:vi.fn(),stop:vi.fn()};
+ const session=createHostedCommentarySession({request,player,deviceId:'phone-001',nativeAudioAvailable:true,initialListenerMuted:false,pollMs:0}),gameId='44444444-4444-4444-8444-444444444444';session.update({room:{id:roomId,hostId:host,members:[{userId:host}],game:{id:gameId,events:[]}},userId:host,connected:true,visible:true});
+ const opening=session.allowGreeting({jobId:'55555555-5555-4555-8555-555555555555',gameId});session.update({room:null,userId:null});release();expect(await opening).toBe(false);expect(player.playReaction).not.toHaveBeenCalled();session.dispose();
+});
