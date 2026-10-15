@@ -2429,7 +2429,8 @@ function createSupabaseRoomAdapter({ url, key: key2, fetchImplementation = (...a
 }
 
 // server/commentary/endpoint.js
-function createEndpoint({ env, fetchImpl = fetch, snapshotCache, waitUntil = (promise) => promise.catch(() => {
+function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = () => {
+}, waitUntil = (promise) => promise.catch(() => {
 }) } = {}) {
   const get = (name2) => typeof env?.get === "function" ? env.get(name2) : env?.[name2];
   const scopeId = "d1ce0000-0000-4000-8000-000000000026";
@@ -2517,6 +2518,7 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, waitUntil = (pr
           }
         }
       }
+      onOperation(body?.operation);
       if (body?.operation === "local-start" && (!enabled || !Number.isFinite(allowance.expiresAt) || allowance.expiresAt <= Date.now())) throw Error("Live commentary is not configured.");
       if (body?.operation === "profile-update" && body.changes?.enabled === true) {
         await runtime.service.authorized(actor, body.roomId, true);
@@ -2543,14 +2545,11 @@ function createLiveCommentaryEndpoint(options = {}) {
   return async (request) => {
     const trace = createRequestTrace({ fetchImpl: options.fetchImpl || fetch, emit: options.onTelemetry || ((value) => console.info("[Commentary request]", JSON.stringify(value))), region: typeof options.env?.get === "function" ? options.env.get("SB_REGION") : options.env?.SB_REGION });
     let operation = request.method === "GET" ? "audio" : "unknown";
-    if (request.method === "POST") {
-      try {
-        const body = await request.clone().json();
-        if (typeof body?.operation === "string" && /^[a-z-]{1,40}$/.test(body.operation)) operation = body.operation;
-      } catch {
-      }
-    }
-    const endpoint = createEndpoint({ ...options, fetchImpl: trace.fetch, snapshotCache });
+    const knownOperations = /* @__PURE__ */ new Set(["profile-read", "profile-update", "jobs-read", "playback-start", "playback-acquire", "playback-claim", "playback-event", "playback-heartbeat", "feedback", "forget", "local-start", "local-read", "local-command", "player-profile-read", "player-profile-update", "player-profile-delete"]);
+    const endpoint = createEndpoint({ ...options, fetchImpl: trace.fetch, snapshotCache, onOperation: (value) => {
+      if (knownOperations.has(value)) operation = value;
+    }, waitUntil: (promise) => (options.waitUntil || ((task) => task.catch(() => {
+    })))(promise.finally(() => trace.report("background-complete", operation, 200))) });
     const response = await endpoint(request);
     if (request.method === "OPTIONS") return response;
     trace.report("response", operation, response.status);
