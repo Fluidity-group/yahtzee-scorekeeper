@@ -13,20 +13,23 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
  const scope=c=>`${c?.roomId||''}/${c?.game?.id||''}/${c?.userId||''}`;
  const speakable=()=>context?.userId&&context.userId===context.hostId&&context.enabled&&!context.listenerMuted&&!context.paused&&context.visible!==false;
  const invoke=(operation,payload={},signal=abort.signal,roomId=context.roomId)=>request({operation,roomId,...payload},{signal}).then(response=>response.result);
+ function stopNative(reason){
+  // Install the barrier before calling native code: stop may emit a terminal callback synchronously.
+  const prior=nativeStopBarrier;let resolveStop,rejectStop;const stopped=new Promise((resolve,reject)=>{resolveStop=resolve;rejectStop=reject;});
+  const barrier=Promise.all([prior?.catch(()=>{}),stopped]);nativeStopBarrier=barrier;
+  void barrier.then(()=>{
+   if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;nativeStopFailed=false;
+   // Invalidation discards abandoned work; only currently authorized desired work can drain.
+   void react();
+  },()=>{
+   if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;nativeStopFailed=true;desired=null;
+   if(!disposed&&speakable())publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});
+  });
+  try{Promise.resolve(player.stop(reason)).then(resolveStop,rejectStop);}catch(error){rejectStop(error);}
+  return barrier;
+ }
  function stop(reason){
-  if(run){
-   run.cancelled=true;run.abort.abort();
-   let stopped;try{stopped=Promise.resolve(player.stop(reason));}catch{stopped=Promise.reject(Error('Native stop unavailable'));}
-   const barrier=Promise.all([nativeStopBarrier,stopped]);nativeStopBarrier=barrier;run=null;
-   void barrier.then(()=>{
-    if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;
-    // Invalidation clears old desired work; drain only the currently authorized target after actual output stops.
-    void react();
-   },()=>{
-    if(nativeStopBarrier!==barrier)return;nativeStopBarrier=null;desired=null;
-    if(!disposed&&speakable())publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});
-   });
-  }
+  if(run){const active=run;active.cancelled=true;if(!nativeStopFailed)void stopNative(reason);active.abort.abort();run=null;}
   lease=null;publish({playing:null});
  }
  function invalidate(reason){generation++;abort.abort();abort=new AbortController();pending=null;desired=null;completionBarrier=null;stop(reason);}
@@ -50,7 +53,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(switched){suppressed=new Set();playedGreetingCommands=new Set();}
   if(switched||profileChanged){initial=true;hydrated=new Set();attempted=new Set();greetings=new Set();greetingCommands=new Set();publish({captions:[],error:null,measurement:null});}
   if(!context?.userId||!context?.roomId||!context?.game)publish({status:'offline',captions:[]});
-  else publish({status:context.paused?'paused':speakable()?'ready':'caption-only'});
+  else publish({status:context.paused?'paused':speakable()&&!nativeStopFailed?'ready':'caption-only'});
   const replaceWaiting=newest&&run?.awaitingPreparation;
   if(replaceWaiting)stop('superseded-pending-reaction');
   if(newest&&(run?.started||replaceWaiting)&&desired&&direct())prepareAhead(desired);
@@ -71,7 +74,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
    if(index<0||context.game.events.slice(index+1).some(event=>['score-undo','score-correction'].includes(event.type)&&(event.target===job.eventId||job.dependencyEventIds.includes(event.target))))return false;
   }
   return typeof job?.id==='string'&&job.gameId===context.game.id&&job.profileVersion===context.profileVersion&&['ready','claimed','streaming','started','completed','interrupted','failed'].includes(job.status)&&typeof job.caption==='string'&&job.caption.length>0&&job.caption.length<=1000&&Array.isArray(job.dependencyEventIds);}
- let desired=null,preparationTail=Promise.resolve(),nativeStopBarrier=null;
+ let desired=null,preparationTail=Promise.resolve(),nativeStopBarrier=null,nativeStopFailed=false;
  function prepareAhead(target){
   const fence=generation,signal=abort.signal,roomId=context.roomId,gameId=context.game.id,profileVersion=context.profileVersion;
   target.preparation=preparationTail=preparationTail.catch(()=>{}).then(async()=>{
@@ -84,7 +87,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
 
  const direct=()=>typeof player.playReaction==='function'&&context?.directReaction===true;
  async function react(){
-  if(disposed||!direct()||!speakable()||run||completionBarrier||nativeStopBarrier||!desired)return;
+  if(disposed||!direct()||!speakable()||run||completionBarrier||nativeStopBarrier||nativeStopFailed||!desired)return;
   const {queuedAt=monotonicNow(),preparation,superseded,...target}=desired;desired=null;const fence=generation,dequeuedAt=monotonicNow(),queueMs=Math.max(0,Math.round(dequeuedAt-queuedAt));
   console.info('[Commentary direct]',JSON.stringify({stage:'dequeued',queueMs}));
   const active={job:{id:'connecting',eventId:target.eventId,dependencyEventIds:target.eventId?[target.eventId]:[]},claim:{epoch:0},roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve(),awaitingPreparation:!!preparation};
@@ -97,7 +100,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   }catch{if(fence===generation){if(run===active){
    // Stop even an unbound failed request before draining newer work; only bound output has a receipt identity.
    if(active.claim.epoch===0)active.cancelled=true;
-   try{await player.stop('player-failed');}catch{if(fence===generation){invalidate('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}return;}
+   try{await stopNative('player-failed');}catch{if(fence===generation){invalidate('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}return;}
    if(fence!==generation)return;
    if(run===active&&active.claim.epoch>0)receive(active,{jobId:active.job.id,epoch:active.claim.epoch,state:'failed',sequence:active.sequence+1,reason:'native-request-failed',measurementBasis:'client-request-failure'});
   }publish({error:'Voice unavailable. Scores are saved normally.'});}}
