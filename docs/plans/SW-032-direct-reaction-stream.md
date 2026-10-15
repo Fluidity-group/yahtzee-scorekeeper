@@ -26,3 +26,15 @@ High: provider duplication or stale authority; durable writer claim, exact CAS/r
 ## Evidence and completion
 
 Pending implementation and qualification. Preserve all existing games/profiles and root dirty work. Root task record is not evidence of current installed state.
+
+## Delivered implementation and evidence
+
+Direct accepted-event/native response path implemented. Local owner mirror avoids outbox discovery; hosted accepted outbox authorization retained. Final writer validation+claim+voice reservation share one CAS/room-fenced batch, with providers outside retryable work. Native binds server authority before receipts, never manufactures hearing. No native ready-job polling/start handshake;5second timer only renews an active safety lease. Current speech/terminal receipts, latest waiting score, explicit welcomes, quiet resume, feedback/Forget and cancellation remain.
+
+Clean34084bc qualified under Node24:1,023tests passed/13optionalcamera skips/all builds/unchanged source;31real PostgreSQL checks, including combined direct commit before bytes. New SQL fixture failures were corrected (explicit settings and live-configured offline fake providers), then complete suite passed. Android compile/38assets/private-key-pattern scan passed. Synthetic direct local first-byte trace covers4snapshot/4batch phases across writing+audio; not live latency evidence.
+
+Commentaryv8 deployed/canonical readback matched/unsigned401; roomv9 unchanged, no migration or agent-triggered paid diagnostic. Pixel serial verified, APK3c0613297c050dc19159a946c1367944b93f35e82bc4adbc01f6060b672dfc20 installed-r/readback/launch verified with data preserved. Rendered keypad checked, owner interaction untouched. A startup Capacitor triggerEvent error was logged while UI rendered; no physical voice proof inferred. [Release, exact identities, owner test and rollback](../releases/SW-032-direct-reaction-stream.md). Actual owner latency/quality acceptance remains open.
+
+## First installed-build retest
+
+Owner activity immediately supplied fresh exact-build proxies:9,063ms in an inspected earlier score; retained queued samples26,280/26,211ms with16,987/16,691ms current-speech waits and~7.9/8.3s native request/startup. Hosted backend first-byte6.7–7.5s; writer1.8–2.3s,voice0.17–0.21s. Remaining hosted conditional loads/batches/resource reads and writer-after-speech scheduling still dominate. Rollout and no-poll/no-start-handshake architecture verified; latency acceptance remains failed/open. See release retest section and root ignored artifacts/sw032/first-retest-*.json. No additional agent-triggered generation.
