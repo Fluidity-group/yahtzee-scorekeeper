@@ -1,5 +1,46 @@
 import { Buffer } from "node:buffer";
 
+// server/commentary/request-trace.js
+var operations = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch", "clubhouse_commentary_commit", "clubhouse_commentary_set_limit", "clubhouse_commentary_ack_outbox", "clubhouse_commentary_expire", "clubhouse_commentary_forget"]);
+function createRequestTrace({ fetchImpl = fetch, emit = () => {
+}, now = () => performance.now(), region } = {}) {
+  const start = now(), counts = {}, milliseconds = {};
+  let submittedBytes = 0;
+  const label = (input) => {
+    try {
+      const url = new URL(input);
+      const name2 = url.pathname.split("/").at(-1);
+      if (operations.has(name2)) return name2;
+      if (url.pathname === "/auth/v1/user") return "auth";
+      if (url.hostname === "api.anthropic.com") return "writer";
+      if (url.hostname === "api.elevenlabs.io") return "voice";
+      return "database-resource";
+    } catch {
+      return "other";
+    }
+  };
+  const elapsed = () => Math.round((now() - start) * 100) / 100;
+  return {
+    async fetch(input, options = {}) {
+      const operation = label(input), began = now();
+      counts[operation] = (counts[operation] || 0) + 1;
+      if (typeof options.body === "string") submittedBytes += new TextEncoder().encode(options.body).length;
+      try {
+        return await fetchImpl(input, options);
+      } finally {
+        milliseconds[operation] = Math.round(((milliseconds[operation] || 0) + now() - began) * 100) / 100;
+      }
+    },
+    report(stage, operation, status) {
+      try {
+        emit({ stage, operation, status, elapsedMs: elapsed(), upstreamCounts: { ...counts }, upstreamHeadersMs: { ...milliseconds }, submittedBytes, ...typeof region === "string" && /^[a-z0-9-]{1,30}$/.test(region) ? { region } : {} });
+      } catch {
+      }
+    },
+    serverTiming: () => "commentary;dur=" + elapsed()
+  };
+}
+
 // src/game/categories.js
 var UPPER = [
   { key: "aces", name: "Aces", face: 1, hint: "Add up your 1s", type: "count" },
@@ -542,7 +583,8 @@ function decodeCommentaryState(payload) {
 }
 var validVersion = (value) => Number.isSafeInteger(value) && value >= 0;
 var DurableCommentaryStore = class {
-  constructor({ rpc, scopeId, maxRetries = 5 } = {}) {
+  constructor({ rpc, scopeId, maxRetries = 5, incremental = false, seed = null, onSnapshot = () => {
+  } } = {}) {
     if (typeof rpc !== "function" || typeof scopeId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId) || !Number.isSafeInteger(maxRetries) || maxRetries < 1 || maxRetries > 10) throw Error("Durable transport, scope UUID and bounded retries required.");
     this.rpc = rpc;
     this.scopeId = scopeId;
@@ -551,9 +593,20 @@ var DurableCommentaryStore = class {
     this.version = null;
     this.databaseNowMs = null;
     this.tail = Promise.resolve();
+    this.incremental = incremental;
+    this.onSnapshot = onSnapshot;
+    if (incremental && seed && validVersion(seed.version) && Number.isFinite(seed.databaseNowMs)) {
+      this.state = decodeCommentaryState(encodeCommentaryState(seed.state));
+      this.version = seed.version;
+      this.databaseNowMs = seed.databaseNowMs;
+    }
   }
   async load() {
-    const row2 = await this.rpc("clubhouse_commentary_load", { p_scope: this.scopeId });
+    const row2 = await this.rpc(this.incremental ? "clubhouse_commentary_load_changed" : "clubhouse_commentary_load", { p_scope: this.scopeId, ...this.incremental ? { p_known_version: this.version } : {} });
+    if (row2?.notModified === true) {
+      if (!this.state || row2.version !== this.version || !Number.isFinite(row2.databaseNowMs)) throw Error("Invalid conditional snapshot.");
+      return { state: this.state, version: this.version, databaseNowMs: row2.databaseNowMs };
+    }
     if (!row2 || !validVersion(row2.version) || !Number.isFinite(row2.databaseNowMs)) throw Error("Invalid durable commentary snapshot.");
     return { state: decodeCommentaryState(row2.state), version: row2.version, databaseNowMs: row2.databaseNowMs };
   }
@@ -561,6 +614,7 @@ var DurableCommentaryStore = class {
     this.state = row2.state;
     this.version = row2.version;
     this.databaseNowMs = row2.databaseNowMs;
+    this.onSnapshot({ state: this.state, version: this.version, databaseNowMs: this.databaseNowMs });
   }
   serialized(fn) {
     const result = this.tail.then(fn);
@@ -587,7 +641,7 @@ var DurableCommentaryStore = class {
     if (!this.state) throw Error("Await durable store initialization/refresh before snapshot.");
     return structuredClone(this.state);
   }
-  transaction(fn) {
+  transaction(fn, { skipUnchanged = false } = {}) {
     if (typeof fn !== "function") return Promise.reject(Error("Synchronous transaction callback required."));
     return this.serialized(async () => {
       for (let attempt = 0; attempt < this.maxRetries; attempt++) {
@@ -595,7 +649,19 @@ var DurableCommentaryStore = class {
         this.install(fresh);
         const next = structuredClone(fresh.state), result = fn(next, { databaseNowMs: fresh.databaseNowMs, version: fresh.version });
         if (result && typeof result.then === "function") throw Error("Transaction callback must be synchronous; no provider work in transaction.");
-        const payload = encodeCommentaryState(next), committed = await this.rpc("clubhouse_commentary_commit", { p_scope: this.scopeId, p_expected_version: fresh.version, p_state: payload });
+        const payload = encodeCommentaryState(next);
+        let committed;
+        if (this.incremental) {
+          const before = encodeCommentaryState(fresh.state), changes = {}, deleted = {};
+          for (const collection of COMMENTARY_COLLECTIONS) {
+            const updates = Object.fromEntries(Object.entries(payload[collection]).filter(([key2, value]) => JSON.stringify(value) !== JSON.stringify(before[collection][key2])));
+            const removals = Object.keys(before[collection]).filter((key2) => !Object.hasOwn(payload[collection], key2));
+            if (Object.keys(updates).length) changes[collection] = updates;
+            if (removals.length) deleted[collection] = removals;
+          }
+          if (skipUnchanged && !Object.keys(changes).length && !Object.keys(deleted).length) return structuredClone(result);
+          committed = await this.rpc("clubhouse_commentary_patch", { p_scope: this.scopeId, p_expected_version: fresh.version, p_changes: changes, p_deleted: deleted });
+        } else committed = await this.rpc("clubhouse_commentary_commit", { p_scope: this.scopeId, p_expected_version: fresh.version, p_state: payload });
         if (committed?.committed === true) {
           if (committed.version !== fresh.version + 1 || !Number.isFinite(committed.databaseNowMs)) throw Error("Invalid durable commit version.");
           this.install({ state: next, version: committed.version, databaseNowMs: committed.databaseNowMs });
@@ -625,7 +691,7 @@ var DurableCommentaryStore = class {
 function createSupabaseCommentaryRpc({ url, getServiceKey, fetchImplementation = fetch, timeoutMs = 5e3 } = {}) {
   const base = new URL(url);
   if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash || typeof getServiceKey !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15e3) throw Error("Explicit secure backend RPC configuration required.");
-  const routes2 = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_commit", "clubhouse_commentary_expire", "clubhouse_commentary_forget"]);
+  const routes2 = /* @__PURE__ */ new Set(["clubhouse_commentary_load", "clubhouse_commentary_commit", "clubhouse_commentary_expire", "clubhouse_commentary_forget", "clubhouse_commentary_load_changed", "clubhouse_commentary_patch"]);
   return async (operation, body) => {
     if (!routes2.has(operation)) throw Error("Unsupported commentary durability operation.");
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1229,6 +1295,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       job.line = { text: line.text, containsProfanity: line.containsProfanity, mechanism: line.mechanism, subject: line.subject, source: live ? "anthropic-writer" : "synthetic" };
       rememberTrusted(state, job, line);
       job.status = "ready";
+      job.readyAt = now();
       return { id: job.id, text: job.line.text };
     });
   }
@@ -1271,7 +1338,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         if (reason) cancel(state, job, reason);
       }
       return [...state.jobs.values()].filter((j) => j.roomId === roomId && j.facts.gameId === room.game?.id).slice(-20).map((j) => ({ id: j.id, gameId: j.facts.gameId, eventId: j.facts.eventId, sourceCommandId: j.facts.commandId, acceptedAt: j.facts.acceptedAt, purpose: j.facts.purpose || "score", lifecycleVerified: j.facts.observation === "accepted-lifecycle-only" && !eligible(state, j, room, { started: ["started", "completed", "interrupted"].includes(j.status) }), dependencyEventIds: [...j.facts.scoreDependencies || []], status: j.status, caption: j.line?.text || null, reason: j.reason || null, profileVersion: j.profile.version, ...feedbackProjection(state, j, userId) }));
-    });
+    }, { skipUnchanged: true });
   }
   async function claimPlayback(userId, roomId, { jobId, device, epoch } = {}) {
     const room = await authorized(userId, roomId, true);
@@ -2362,7 +2429,7 @@ function createSupabaseRoomAdapter({ url, key: key2, fetchImplementation = (...a
 }
 
 // server/commentary/endpoint.js
-function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (promise) => promise.catch(() => {
+function createEndpoint({ env, fetchImpl = fetch, snapshotCache, waitUntil = (promise) => promise.catch(() => {
 }) } = {}) {
   const get = (name2) => typeof env?.get === "function" ? env.get(name2) : env?.[name2];
   const scopeId = "d1ce0000-0000-4000-8000-000000000026";
@@ -2377,7 +2444,9 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
   }
   const rpc = (operation, body) => resource("rpc/" + operation, { method: "POST", body: JSON.stringify(body) });
   function createRuntime() {
-    const persistence = new DurableCommentaryStore({ scopeId, rpc: createSupabaseCommentaryRpc({ url, getServiceKey: () => key2, fetchImplementation: fetchImpl, timeoutMs: 8e3 }) });
+    const persistence = new DurableCommentaryStore({ scopeId, incremental: true, seed: snapshotCache?.current, onSnapshot: (row2) => {
+      if (snapshotCache && (!snapshotCache.current || row2.version >= snapshotCache.current.version)) snapshotCache.current = row2;
+    }, rpc: createSupabaseCommentaryRpc({ url, getServiceKey: () => key2, fetchImplementation: fetchImpl, timeoutMs: 8e3 }) });
     const gate = createDurableProviderGate({
       verifyPersistence: () => persistence instanceof DurableCommentaryStore && persistence.version !== null,
       readAllowance: async (id2) => id2 === allowance.id ? { ...allowance, approved: enabled, revoked: !enabled } : null,
@@ -2467,6 +2536,50 @@ function createLiveCommentaryEndpoint({ env, fetchImpl = fetch, waitUntil = (pro
     } catch {
       return new Response(JSON.stringify({ error: "Commentary unavailable. Scores can continue." }), { status: 503, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
     }
+  };
+}
+function createLiveCommentaryEndpoint(options = {}) {
+  const snapshotCache = { current: null };
+  return async (request) => {
+    const trace = createRequestTrace({ fetchImpl: options.fetchImpl || fetch, emit: options.onTelemetry || ((value) => console.info("[Commentary request]", JSON.stringify(value))), region: typeof options.env?.get === "function" ? options.env.get("SB_REGION") : options.env?.SB_REGION });
+    let operation = request.method === "GET" ? "audio" : "unknown";
+    if (request.method === "POST") {
+      try {
+        const body = await request.clone().json();
+        if (typeof body?.operation === "string" && /^[a-z-]{1,40}$/.test(body.operation)) operation = body.operation;
+      } catch {
+      }
+    }
+    const endpoint = createEndpoint({ ...options, fetchImpl: trace.fetch, snapshotCache });
+    const response = await endpoint(request);
+    if (request.method === "OPTIONS") return response;
+    trace.report("response", operation, response.status);
+    const headers3 = new Headers(response.headers);
+    headers3.set("Server-Timing", trace.serverTiming());
+    if (operation !== "audio" || !response.ok || !response.body) return new Response(response.body, { status: response.status, headers: headers3 });
+    const reader = response.body.getReader();
+    let first = true;
+    return new Response(new ReadableStream({ async pull(controller) {
+      try {
+        const next = await reader.read();
+        if (next.done) {
+          trace.report("stream-complete", operation, response.status);
+          controller.close();
+          return;
+        }
+        if (first) {
+          first = false;
+          trace.report("stream-first-byte", operation, response.status);
+        }
+        controller.enqueue(next.value);
+      } catch (error) {
+        trace.report("stream-failed", operation, response.status);
+        controller.error(error);
+      }
+    }, async cancel(reason) {
+      await reader.cancel(reason);
+      trace.report("stream-cancelled", operation, response.status);
+    } }), { status: response.status, headers: headers3 });
   };
 }
 

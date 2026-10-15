@@ -15,24 +15,28 @@ const image='timescale/timescaledb:2.29.2-pg16',container=`yahtzee-commentary-${
 const scope='00000000-0000-4000-8000-000000000099',roomId='00000000-0000-4000-8000-000000000010',host='00000000-0000-4000-8000-000000000001',guest='00000000-0000-4000-8000-000000000002';
 const migration=readFileSync('supabase/migrations/202610140005_commentary_durable_state.sql','utf8');
 const localMigration=readFileSync('supabase/migrations/202610140008_local_commentary_sessions.sql','utf8');
+const incrementalMigration=readFileSync('supabase/migrations/202610140009_commentary_incremental_transport.sql','utf8');
 const roomMigration=readFileSync('supabase/migrations/202610140006_commentary_room_outbox.sql','utf8');
-const report={localMigrationSha256:createHash('sha256').update(localMigration).digest('hex'),roomMigrationSha256:createHash('sha256').update(roomMigration).digest('hex'),startedAt:new Date().toISOString(),image,migrationSha256:createHash('sha256').update(migration).digest('hex'),checks:[],passed:false};let created=false;
+const report={incrementalMigrationSha256:createHash('sha256').update(incrementalMigration).digest('hex'),localMigrationSha256:createHash('sha256').update(localMigration).digest('hex'),roomMigrationSha256:createHash('sha256').update(roomMigration).digest('hex'),startedAt:new Date().toISOString(),image,migrationSha256:createHash('sha256').update(migration).digest('hex'),checks:[],passed:false};let created=false;
 const quote=value=>`'${String(value).replaceAll("'","''")}'`,json=value=>`${quote(JSON.stringify(value))}::jsonb`;
 function run(sql){return spawnSync('docker',['exec','-i',container,'psql','-U','postgres','-d','postgres','-qAt','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8',timeout:30000});}
 function query(sql){const result=run(sql);if(result.status!==0)throw Error(result.stderr);return result.stdout.trim();}
 async function check(label,fn){await fn();report.checks.push({label,passed:true});console.log(`PASS ${label}`);}
-const parameters={clubhouse_commentary_load:b=>`${quote(b.p_scope)}::uuid`,clubhouse_commentary_commit:b=>`${quote(b.p_scope)}::uuid,${b.p_expected_version},${json(b.p_state)}`,clubhouse_commentary_expire:b=>`${quote(b.p_scope)}::uuid`,clubhouse_commentary_forget:b=>`${quote(b.p_scope)}::uuid,${quote(b.p_account)}::uuid`};
+const parameters={clubhouse_commentary_load_changed:b=>`${quote(b.p_scope)}::uuid,${b.p_known_version??'null'}`,clubhouse_commentary_patch:b=>`${quote(b.p_scope)}::uuid,${b.p_expected_version},${json(b.p_changes)},${json(b.p_deleted)}`,clubhouse_commentary_load:b=>`${quote(b.p_scope)}::uuid`,clubhouse_commentary_commit:b=>`${quote(b.p_scope)}::uuid,${b.p_expected_version},${json(b.p_state)}`,clubhouse_commentary_expire:b=>`${quote(b.p_scope)}::uuid`,clubhouse_commentary_forget:b=>`${quote(b.p_scope)}::uuid,${quote(b.p_account)}::uuid`};
 let collisions=0;
 const rpc=async(operation,body)=>{assert(parameters[operation]);const result=JSON.parse(query(`set role service_role;select public.${operation}(${parameters[operation](body)});`));if(result.committed===false)collisions++;return result;};
-const store=()=>new DurableCommentaryStore({rpc,scopeId:scope});
+const store=()=>new DurableCommentaryStore({rpc,scopeId:scope,incremental:true});
 const limit=(requests,characters=1000000)=>query(`set role service_role;select public.clubhouse_commentary_set_limit('${scope}','${roomId}',${requests},${characters},clock_timestamp()+interval '1 hour');`);
 try{
  execFileSync('docker',['image','inspect',image],{encoding:'utf8',timeout:10000});
  execFileSync('docker',['run','--pull','never','--rm','-d','--network','none','--tmpfs','/var/lib/postgresql/data','--name',container,'-e','POSTGRES_HOST_AUTH_METHOD=trust',image],{encoding:'utf8',timeout:30000});created=true;
  let ready=false;for(let n=0;n<60;n++){if(spawnSync('docker',['exec',container,'pg_isready','-h','127.0.0.1','-U','postgres'],{encoding:'utf8',timeout:2000}).status===0){ready=true;break;}await new Promise(resolve=>setTimeout(resolve,250));}assert(ready,'Disposable database did not start');
  query('create role anon;create role authenticated;create role service_role bypassrls;');
- await check('migration reruns without changing existing room or score schema',()=>{query('create table public.test_scores(id text primary key,score integer);insert into public.test_scores values(\'existing-score\',50);');query(migration);query(migration);query(localMigration);assert.equal(query('select score from public.test_scores;'),'50');});
- await check('anonymous/authenticated roles cannot read/write state or invoke privileged RPCs/allowances',()=>{for(const role of ['anon','authenticated'])for(const sql of [`select * from public.clubhouse_commentary_items;`,`select public.clubhouse_commentary_load('${scope}');`,`select public.clubhouse_commentary_set_limit('${scope}','${roomId}',100,100000,clock_timestamp()+interval '1 hour');`])assert.notEqual(run(`set role ${role};${sql}`).status,0);assert.notEqual(run(`set role service_role;insert into public.clubhouse_commentary_items(scope_id,collection,item_key,value)values('${scope}','jobs','forged','{}');`).status,0);});
+ await check('migration reruns without changing existing room or score schema',()=>{query('create table public.test_scores(id text primary key,score integer);insert into public.test_scores values(\'existing-score\',50);');query(migration);query(migration);query(localMigration);query(incrementalMigration);assert.equal(query('select score from public.test_scores;'),'50');});
+ await check('anonymous/authenticated roles cannot read/write state or invoke privileged RPCs/allowances',()=>{for(const role of ['anon','authenticated'])for(const sql of [`select * from public.clubhouse_commentary_items;`,`select public.clubhouse_commentary_load('${scope}');`,`select public.clubhouse_commentary_load_changed('${scope}',null);`,`select public.clubhouse_commentary_patch('${scope}',0,'{}','{}');`,`select public.clubhouse_commentary_set_limit('${scope}','${roomId}',100,100000,clock_timestamp()+interval '1 hour');`])assert.notEqual(run(`set role ${role};${sql}`).status,0);assert.notEqual(run(`set role service_role;insert into public.clubhouse_commentary_items(scope_id,collection,item_key,value)values('${scope}','jobs','forged','{}');`).status,0);});
+ await check('incremental conditional loads are current and no-op reads do not advance the global version',async()=>{
+  const current=await store().initialize(),before=current.version;await current.refresh();assert.equal(current.version,before);const raw=await rpc('clubhouse_commentary_load_changed',{p_scope:scope,p_known_version:before});assert.equal(raw.notModified,true);assert.equal(raw.state,undefined);await current.transaction(()=>true,{skipUnchanged:true});assert.equal(current.version,before);
+ });
  const a=await store().initialize();
  await check('initialized durable store survives new instance and independent concurrent CAS retains both writers',async()=>{const b=await store().initialize();await Promise.all([a.transaction(state=>state.settings.set('a',{version:1})),b.transaction(state=>state.settings.set('b',{version:1}))]);const restarted=await store().initialize();assert.deepEqual([...restarted.snapshot().settings.keys()].sort(),['a','b']);assert(collisions>=1);});
  const time=new Date().toISOString();let game=createCoreGame({id:roomId,names:['Alice','Bob'],source:'manual',time});game=command(game,{type:'start',seat:0},{id:'start-test',time});game=command(game,{type:'score',seat:0,category:'chance',value:25},{id:'score-test',time});const room={id:roomId,hostId:host,members:[{userId:host,name:'Alice'},{userId:guest,name:'Bob'}],game};
@@ -88,7 +92,7 @@ try{
 
  await check('atomic room wrapper migration and grants qualify on actual PostgreSQL',()=>{
   query("create schema auth;create function auth.uid()returns uuid language sql as 'select null::uuid';create table public.clubhouse_rooms(id uuid primary key,code text unique,host_id uuid,member_ids uuid[],revision bigint,state jsonb,created_at timestamptz default now());grant all on public.clubhouse_rooms to service_role;");
-  query(readFileSync('supabase/migrations/202610130001_hosted_game_history.sql','utf8'));query(roomMigration);query(localMigration);
+  query(readFileSync('supabase/migrations/202610130001_hosted_game_history.sql','utf8'));query(roomMigration);query(localMigration);query(incrementalMigration);
   assert.equal(query('set role service_role;select public.clubhouse_commentary_atomic_available();'),'t');
   for(const role of ['anon','authenticated'])assert.notEqual(run('set role '+role+';select public.clubhouse_commentary_atomic_available();').status,0);
  });
@@ -145,6 +149,10 @@ try{
   query("update public.clubhouse_commentary_items set updated_at=clock_timestamp()-interval '91 days'where scope_id='"+scope+"'and collection='localSessions';set role service_role;select public.clubhouse_commentary_expire('"+scope+"');reset role;");assert.equal(query("select count(*)from public.clubhouse_commentary_items where scope_id='"+scope+"'and collection='localSessions';"),'0');assert.equal(query("select score from public.test_scores where id='existing-score';"),'50');
  });
 
+ await check('incremental patches retain canonical anti-delete and immutable owner guards',async()=>{
+  const current=await store().initialize();const old=current.snapshot();const attemptId=[...old.attempts.keys()][0];assert(attemptId);await assert.rejects(current.transaction(state=>state.attempts.delete(attemptId)),/cannot|erase|retained|delete/i);
+  const after=await store().initialize();assert(after.snapshot().attempts.has(attemptId));
+ });
  report.passed=true;
 }catch(error){report.failure=error.message;throw error;}finally{report.finishedAt=new Date().toISOString();mkdirSync(directory,{recursive:true});writeFileSync(`${directory}/report.json`,JSON.stringify(report,null,2));if(created)spawnSync('docker',['rm','-f',container],{encoding:'utf8',timeout:10000});console.log(`Evidence ${directory}/report.json`);}
 

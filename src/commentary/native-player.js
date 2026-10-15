@@ -10,7 +10,7 @@ export function streamRequest(serviceBase,claim,accessToken,monotonicNow=perform
  return {endpoint,accessToken,claimToken:claim.token,deviceId:claim.deviceId,jobId:claim.jobId,epoch:claim.epoch,leaseRemainingMs:Math.min(15000,Math.floor(remaining))};
 }
 // Native position advancing is a playout proxy. It never proves speaker sound or audience hearing.
-export function createNativeCommentaryPlayer({plugin=nativePlugin,serviceBase,getAccessToken,onMeasurement=()=>{},monotonicNow=()=>performance.now()}={}){
+export function createNativeCommentaryPlayer({plugin=nativePlugin,serviceBase,getAccessToken,onMeasurement=event=>console.info('[Commentary native]',JSON.stringify({stage:event.state,jobId:event.jobId,elapsedMs:event.nativeElapsedMs})),monotonicNow=()=>performance.now()}={}){
  let listener=null,listenerPending=null,current=null,generation=0;
  const seen=new Set();
  const finishCurrent=()=>{current?.removeAbort?.();current=null;};

@@ -1,10 +1,11 @@
+import {createRequestTrace} from './request-trace.js';
 import {localRoom} from './local-sessions.js';
 import {createCommentaryService} from './service.js';
 import {DurableCommentaryStore,createSupabaseCommentaryRpc} from './durable-store.js';
 import {createCommentaryProviders,createDurableProviderGate,composeCommentaryEndpoint} from './provider-runtime.js';
 import {createSupabaseRoomAdapter} from '../rooms/supabase-adapter.js';
 
-export function createLiveCommentaryEndpoint({env,fetchImpl=fetch,waitUntil=promise=>promise.catch(()=>{})}={}){
+function createEndpoint({env,fetchImpl=fetch,snapshotCache,onOperation=()=>{},waitUntil=promise=>promise.catch(()=>{})}={}){
  const get=name=>typeof env?.get==='function'?env.get(name):env?.[name];
 const scopeId='d1ce0000-0000-4000-8000-000000000026';
 const url=get('SUPABASE_URL'),key=get('SUPABASE_SERVICE_ROLE_KEY');
@@ -17,7 +18,7 @@ async function resource(path,options={}){
 }
 const rpc=(operation,body)=>resource('rpc/'+operation,{method:'POST',body:JSON.stringify(body)});
 function createRuntime(){
- const persistence=new DurableCommentaryStore({scopeId,rpc:createSupabaseCommentaryRpc({url,getServiceKey:()=>key,fetchImplementation:fetchImpl,timeoutMs:8000})});
+ const persistence=new DurableCommentaryStore({scopeId,incremental:true,seed:snapshotCache?.current,onSnapshot:row=>{if(snapshotCache&&(!snapshotCache.current||row.version>=snapshotCache.current.version))snapshotCache.current=row;},rpc:createSupabaseCommentaryRpc({url,getServiceKey:()=>key,fetchImplementation:fetchImpl,timeoutMs:8000})});
  const gate=createDurableProviderGate({
   verifyPersistence:()=>persistence instanceof DurableCommentaryStore&&persistence.version!==null,
   readAllowance:async id=>id===allowance.id?{...allowance,approved:enabled,revoked:!enabled}:null,
@@ -58,6 +59,7 @@ return async request=>{
   const actor=await authenticate(request);if(!actor)return new Response(JSON.stringify({error:'Sign in to use commentary.'}),{status:401,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
   const runtime=createRuntime();await runtime.persistence.initialize();
   let body=null;if(request.method==='POST'){const raw=await request.clone().text();if(raw.length<=4096){try{body=JSON.parse(raw);}catch{}}}
+  onOperation(body?.operation);
   if(body?.operation==='local-start'&&(!enabled||!Number.isFinite(allowance.expiresAt)||allowance.expiresAt<=Date.now()))throw Error('Live commentary is not configured.');
   if(body?.operation==='profile-update'&&body.changes?.enabled===true){
    await runtime.service.authorized(actor,body.roomId,true);
@@ -74,4 +76,23 @@ return async request=>{
   return response;
  }catch{return new Response(JSON.stringify({error:'Commentary unavailable. Scores can continue.'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});}
 };
+}
+
+// Request-scoped diagnostics wrap the existing endpoint without changing its guards.
+export function createLiveCommentaryEndpoint(options={}){
+ // A private warm-isolate snapshot is only a transfer hint. Every request still
+ // authenticates and checks its version against the database before any use.
+ const snapshotCache={current:null};
+ return async request=>{
+  const trace=createRequestTrace({fetchImpl:options.fetchImpl||fetch,emit:options.onTelemetry||((value)=>console.info('[Commentary request]',JSON.stringify(value))),region:typeof options.env?.get==='function'?options.env.get('SB_REGION'):options.env?.SB_REGION});
+  let operation=request.method==='GET'?'audio':'unknown';
+  const knownOperations=new Set(['profile-read','profile-update','jobs-read','playback-start','playback-acquire','playback-claim','playback-event','playback-heartbeat','feedback','forget','local-start','local-read','local-command','player-profile-read','player-profile-update','player-profile-delete']);
+  const endpoint=createEndpoint({...options,fetchImpl:trace.fetch,snapshotCache,onOperation:value=>{if(knownOperations.has(value))operation=value;},waitUntil:promise=>(options.waitUntil||((task)=>task.catch(()=>{})))(promise.finally(()=>trace.report('background-complete',operation,200)))});
+  const response=await endpoint(request);if(request.method==='OPTIONS')return response;
+  trace.report('response',operation,response.status);
+  const headers=new Headers(response.headers);headers.set('Server-Timing',trace.serverTiming());
+  if(operation!=='audio'||!response.ok||!response.body)return new Response(response.body,{status:response.status,headers});
+  const reader=response.body.getReader();let first=true;
+  return new Response(new ReadableStream({async pull(controller){try{const next=await reader.read();if(next.done){trace.report('stream-complete',operation,response.status);controller.close();return;}if(first){first=false;trace.report('stream-first-byte',operation,response.status);}controller.enqueue(next.value);}catch(error){trace.report('stream-failed',operation,response.status);controller.error(error);}},async cancel(reason){await reader.cancel(reason);trace.report('stream-cancelled',operation,response.status);}}),{status:response.status,headers});
+ };
 }

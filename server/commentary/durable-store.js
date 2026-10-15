@@ -17,19 +17,29 @@ const validVersion=value=>Number.isSafeInteger(value)&&value>=0;
 /** Async initialize/refresh boundary is mandatory before shared service snapshot() reads.
  * Synchronous callbacks may rerun after CAS conflicts. NEVER call providers in callbacks. */
 export class DurableCommentaryStore {
- constructor({rpc,scopeId,maxRetries=5}={}){if(typeof rpc!=='function'||typeof scopeId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId)||!Number.isSafeInteger(maxRetries)||maxRetries<1||maxRetries>10)throw Error('Durable transport, scope UUID and bounded retries required.');this.rpc=rpc;this.scopeId=scopeId;this.maxRetries=maxRetries;this.state=null;this.version=null;this.databaseNowMs=null;this.tail=Promise.resolve();}
- async load(){const row=await this.rpc('clubhouse_commentary_load',{p_scope:this.scopeId});if(!row||!validVersion(row.version)||!Number.isFinite(row.databaseNowMs))throw Error('Invalid durable commentary snapshot.');return {state:decodeCommentaryState(row.state),version:row.version,databaseNowMs:row.databaseNowMs};}
- install(row){this.state=row.state;this.version=row.version;this.databaseNowMs=row.databaseNowMs;}
+ constructor({rpc,scopeId,maxRetries=5,incremental=false,seed=null,onSnapshot=()=>{}}={}){if(typeof rpc!=='function'||typeof scopeId!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId)||!Number.isSafeInteger(maxRetries)||maxRetries<1||maxRetries>10)throw Error('Durable transport, scope UUID and bounded retries required.');this.rpc=rpc;this.scopeId=scopeId;this.maxRetries=maxRetries;this.state=null;this.version=null;this.databaseNowMs=null;this.tail=Promise.resolve();this.incremental=incremental;this.onSnapshot=onSnapshot;if(incremental&&seed&&validVersion(seed.version)&&Number.isFinite(seed.databaseNowMs)){this.state=decodeCommentaryState(encodeCommentaryState(seed.state));this.version=seed.version;this.databaseNowMs=seed.databaseNowMs;}}
+ async load(){const row=await this.rpc(this.incremental?'clubhouse_commentary_load_changed':'clubhouse_commentary_load',{p_scope:this.scopeId,...(this.incremental?{p_known_version:this.version}: {})});if(row?.notModified===true){if(!this.state||row.version!==this.version||!Number.isFinite(row.databaseNowMs))throw Error('Invalid conditional snapshot.');return {state:this.state,version:this.version,databaseNowMs:row.databaseNowMs};}if(!row||!validVersion(row.version)||!Number.isFinite(row.databaseNowMs))throw Error('Invalid durable commentary snapshot.');return {state:decodeCommentaryState(row.state),version:row.version,databaseNowMs:row.databaseNowMs};}
+ install(row){this.state=row.state;this.version=row.version;this.databaseNowMs=row.databaseNowMs;this.onSnapshot({state:this.state,version:this.version,databaseNowMs:this.databaseNowMs});}
  serialized(fn){const result=this.tail.then(fn);this.tail=result.catch(()=>{});return result;}
  async initialize(){await this.refresh();return this;}
  refresh(){return this.serialized(async()=>{const row=await this.load();this.install(row);return this.snapshot();});}
  read(collection,key){if(!this.state||!COMMENTARY_COLLECTIONS.includes(collection))throw Error('Initialized supported collection required.');return structuredClone(this.state[collection].get(key));}
  snapshot(){if(!this.state)throw Error('Await durable store initialization/refresh before snapshot.');return structuredClone(this.state);}
- transaction(fn){if(typeof fn!=='function')return Promise.reject(Error('Synchronous transaction callback required.'));return this.serialized(async()=>{
+ transaction(fn,{skipUnchanged=false}={}){if(typeof fn!=='function')return Promise.reject(Error('Synchronous transaction callback required.'));return this.serialized(async()=>{
   for(let attempt=0;attempt<this.maxRetries;attempt++){
    const fresh=await this.load();this.install(fresh);const next=structuredClone(fresh.state),result=fn(next,{databaseNowMs:fresh.databaseNowMs,version:fresh.version});
    if(result&&typeof result.then==='function')throw Error('Transaction callback must be synchronous; no provider work in transaction.');
-   const payload=encodeCommentaryState(next),committed=await this.rpc('clubhouse_commentary_commit',{p_scope:this.scopeId,p_expected_version:fresh.version,p_state:payload});
+   const payload=encodeCommentaryState(next);let committed;
+   if(this.incremental){
+    const before=encodeCommentaryState(fresh.state),changes={},deleted={};
+    for(const collection of COMMENTARY_COLLECTIONS){
+     const updates=Object.fromEntries(Object.entries(payload[collection]).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(before[collection][key])));
+     const removals=Object.keys(before[collection]).filter(key=>!Object.hasOwn(payload[collection],key));
+     if(Object.keys(updates).length)changes[collection]=updates;if(removals.length)deleted[collection]=removals;
+    }
+    if(skipUnchanged&&!Object.keys(changes).length&&!Object.keys(deleted).length)return structuredClone(result);
+    committed=await this.rpc('clubhouse_commentary_patch',{p_scope:this.scopeId,p_expected_version:fresh.version,p_changes:changes,p_deleted:deleted});
+   }else committed=await this.rpc('clubhouse_commentary_commit',{p_scope:this.scopeId,p_expected_version:fresh.version,p_state:payload});
    if(committed?.committed===true){if(committed.version!==fresh.version+1||!Number.isFinite(committed.databaseNowMs))throw Error('Invalid durable commit version.');this.install({state:next,version:committed.version,databaseNowMs:committed.databaseNowMs});return structuredClone(result);}
    if(committed?.committed!==false)throw Error('Invalid durable commit result.');
   }
@@ -41,7 +51,7 @@ export class DurableCommentaryStore {
 // Backend-only transport. Caller supplies the service credential; no key loading at import.
 export function createSupabaseCommentaryRpc({url,getServiceKey,fetchImplementation=fetch,timeoutMs=5000}={}){
  const base=new URL(url);if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash||typeof getServiceKey!=='function'||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>15000)throw Error('Explicit secure backend RPC configuration required.');
- const routes=new Set(['clubhouse_commentary_load','clubhouse_commentary_commit','clubhouse_commentary_expire','clubhouse_commentary_forget']);
+ const routes=new Set(['clubhouse_commentary_load','clubhouse_commentary_commit','clubhouse_commentary_expire','clubhouse_commentary_forget','clubhouse_commentary_load_changed','clubhouse_commentary_patch']);
  return async(operation,body)=>{if(!routes.has(operation))throw Error('Unsupported commentary durability operation.');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{const key=await getServiceKey();if(typeof key!=='string'||!key||/[\r\n]/.test(key))throw Error();const response=await fetchImplementation(`${base.href.replace(/\/$/,'')}/rest/v1/rpc/${operation}`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify(body),signal:controller.signal});if(!response.ok)throw Error();return await response.json();}catch{throw Error('Commentary durability request failed.');}finally{clearTimeout(timer);}
  };
