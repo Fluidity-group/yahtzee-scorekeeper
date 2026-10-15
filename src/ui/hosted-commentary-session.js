@@ -22,7 +22,7 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
   if(fence!==epoch||signal.aborted)throw Error('Commentary session changed.');return result.result;
  };
  function sync(){
-  controller.update(authorized()?{roomId:current.room.id,userId:current.userId,hostId:current.room.hostId,game:current.room.game,profileVersion:profile?.version||1,enabled:intent().enabled,listenerMuted:listenerMuted||!isHost()||!nativeAudioAvailable,paused:current.room.tournament?.status==='paused'||current.room.paused===true,visible:current.visible!==false&&current.connected!==false}:{userId:null});
+  controller.update(authorized()?{roomId:current.room.id,userId:current.userId,hostId:current.room.hostId,game:current.room.game,directReaction:profile?.capabilities?.directReaction===true,profileVersion:profile?.version||1,enabled:intent().enabled,listenerMuted:listenerMuted||!isHost()||!nativeAudioAvailable,paused:current.room.tournament?.status==='paused'||current.room.paused===true,visible:current.visible!==false&&current.connected!==false}:{userId:null});
  }
  function renderCaptions(){
   const root=drawer?.querySelector('[data-hosted-captions]');if(!root)return;
@@ -62,7 +62,7 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
   if(before!==after||current?.room?.hostId!==next?.room?.hostId){const sameTable=current?.room?.id===next?.room?.id&&current?.userId===next?.userId;reset({keepProfile:sameTable});if(!sameTable&&next?.room?.status==='lobby'&&nativeAudioAvailable&&initialListenerMuted===undefined)listenerMuted=false;}
   current=next;if(next?.initialProfile&&!profile){profile=next.initialProfile;profileReadAt=performance.now();}if(typeof next?.listenerMuted==='boolean')listenerMuted=next.listenerMuted;sync();refreshSurface();
   clearInterval(timer);timer=null;
-  if(authorized()&&current.connected!==false&&current.visible!==false){void refresh();if(pollMs>0)timer=setInterval(()=>{void refresh();},pollMs);}
+  if(authorized()&&current.connected!==false&&current.visible!==false){void refresh();if(typeof player.playReaction==='function')timer=setInterval(()=>{void controller.heartbeat();},5000);else if(pollMs>0)timer=setInterval(()=>{void refresh();},pollMs);}
  }
  function personalForm(){
   const p=personal||{version:0,gender:'',blurb:'',displayName:'',shareWithRoom:false};
@@ -105,13 +105,13 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
     const expectedGameId=current.room.game?.id;let greeting=null;
     const explicit=value.profile&&['highlights','balanced','lively'].includes(value.profile.frequency);
     const form=settingsRoot.querySelector('[data-commentary-form]');
-    try{profile=await invoke('profile-update',{expectedVersion:settingsVersion,changes:{enabled:value.enabled,humorIntensity:form.elements.humorIntensity.value,profanityAllowed:form.elements.profanityAllowed.checked,frequency:explicit?value.profile.frequency:profile.frequency,voiceOption:form.elements.voiceOption.value}});settingsVersion=profile.version;greeting=profile.greetingJobId?{jobId:profile.greetingJobId,gameId:expectedGameId,profileVersion:profile.version}:null;}catch{throw Error('Could not save table settings. Reopen commentary and try again.');}
+    try{profile={...profile,...await invoke('profile-update',{expectedVersion:settingsVersion,changes:{enabled:value.enabled,humorIntensity:form.elements.humorIntensity.value,profanityAllowed:form.elements.profanityAllowed.checked,frequency:explicit?value.profile.frequency:profile.frequency,voiceOption:form.elements.voiceOption.value}})};settingsVersion=profile.version;greeting=profile.greetingJobId?{jobId:profile.greetingJobId,gameId:expectedGameId,profileVersion:profile.version}:null;}catch{throw Error('Could not save table settings. Reopen commentary and try again.');}
     onPreferencesSaved({profile,listenerMuted});intents.set(key(),{enabled:value.enabled,frequencyChosen:!!explicit});profileReadAt=performance.now();sync();if(greeting)controller.allowGreeting(greeting);await refresh();
    }});
    const personalRoot=panel.querySelector('[data-hosted-personal-root]');personalRoot.innerHTML=current.room.localSession?'<p class="core-muted">The commentator uses the player details you entered when setting up this shared-phone game.</p>':personalForm();if(!current.room.localSession)bindPersonal(personalRoot);renderCaptions();return true;
   }catch{if(drawer===panel){panel.querySelector('p').textContent='Commentary is unavailable. Close this panel and keep playing.';}return false;}
  }
- async function configure({profile:chosen,enabled=chosen.enabled,listenerMuted:muted=listenerMuted}={}){await refresh({forceProfile:true});if(!isHost())throw Error('The host controls commentary.');profile=await invoke('profile-update',{expectedVersion:profile.version,changes:{enabled,humorIntensity:chosen.humorIntensity,profanityAllowed:chosen.profanityAllowed,frequency:chosen.frequency,voiceOption:chosen.voiceOption}});profileReadAt=performance.now();listenerMuted=muted;sync();return profile;}
+ async function configure({profile:chosen,enabled=chosen.enabled,listenerMuted:muted=listenerMuted}={}){await refresh({forceProfile:true});if(!isHost())throw Error('The host controls commentary.');profile={...profile,...await invoke('profile-update',{expectedVersion:profile.version,changes:{enabled,humorIntensity:chosen.humorIntensity,profanityAllowed:chosen.profanityAllowed,frequency:chosen.frequency,voiceOption:chosen.voiceOption}})};profileReadAt=performance.now();listenerMuted=muted;sync();return profile;}
  return {setListenerMuted(value){listenerMuted=value===true;sync();},muteForGame(){listenerMuted=true;sync();},configure,subscribe(callback){subscribers.add(callback);return()=>subscribers.delete(callback);},update,refresh,open,close,mountSurface,refreshSurface,allowGreeting:async metadata=>{if(controller.allowGreeting(metadata)){await refresh();return true;}await refresh();if(controller.allowGreeting(metadata)){await controller.refresh({profile});return true;}return false;},snapshot:()=>controller.snapshot(),dispose(){if(disposed)return;clearInterval(timer);reset();controller.dispose();disposed=true;current=null;refreshSurface();inlineCleanup();surfaceRoot=null;}};
 }
 

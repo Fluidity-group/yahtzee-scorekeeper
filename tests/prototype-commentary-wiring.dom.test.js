@@ -25,7 +25,7 @@ beforeAll(async()=>{
 afterAll(()=>{window.dispatchEvent(new Event('pagehide'));vi.unstubAllEnvs();});
 it('wires configured authenticated room/menu/connection/visibility/signout without waiting for commentary in scoring',async()=>{
  click('[data-action="online"]');await vi.waitFor(()=>expect(createHostedCommentarySession).toHaveBeenCalledOnce());
- expect(createAuthenticatedCommentaryTransport).toHaveBeenCalledWith({auth:mock.auth,serviceBase:'https://service.example.test/live-commentary',anonymousKey:expect.any(String)});
+ expect(createAuthenticatedCommentaryTransport).toHaveBeenCalledWith({auth:mock.auth,serviceBase:'https://service.example.test/live-commentary',directReaction:false,anonymousKey:expect.any(String)});
  expect(createHostedCommentarySession.mock.calls[0][0].nativeAudioAvailable).toBe(false);
  expect(mock.update).toHaveBeenCalledWith({room:mock.room,userId:host,connected:true,visible:!document.hidden});
  click('[data-action="choose"][data-key="fullHouse"]');const scoreDialog=document.querySelector('#coreDialog');expect(scoreDialog.open).toBe(true);click('[data-action="game-menu"]');expect(mock.open).not.toHaveBeenCalled();expect(scoreDialog.open).toBe(true);expect(scoreDialog.textContent).toContain('Full House');

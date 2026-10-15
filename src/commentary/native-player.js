@@ -1,5 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 const nativePlugin=registerPlugin('LiveCommentary');
+const safeId=value=>typeof value==='string'&&/^[A-Za-z0-9_:-]{8,200}$/.test(value);
 const safeHeader=(value,max)=>typeof value==='string'&&value.length>0&&value.length<=max&&!/[\r\n]/.test(value);
 export function streamRequest(serviceBase,claim,accessToken,monotonicNow=performance.now()){
  const base=new URL(serviceBase);
@@ -9,28 +10,57 @@ export function streamRequest(serviceBase,claim,accessToken,monotonicNow=perform
  const endpoint=`${base.href.replace(/\/$/,'')}/commentary/${encodeURIComponent(claim.roomId)}/audio/${encodeURIComponent(claim.jobId)}`;
  return {endpoint,accessToken,claimToken:claim.token,deviceId:claim.deviceId,jobId:claim.jobId,epoch:claim.epoch,leaseRemainingMs:Math.min(15000,Math.floor(remaining))};
 }
+export function reactionRequest(serviceBase,selector,accessToken){
+ const base=new URL(serviceBase);
+ if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash||!safeHeader(accessToken,8192)||!safeId(selector?.roomId)||!safeId(selector?.gameId)||!safeId(selector?.deviceId)||!Number.isSafeInteger(selector.profileVersion)||selector.profileVersion<1||[selector.eventId,selector.jobId,selector.sourceCommandId].filter(Boolean).length!==1||[selector.eventId,selector.jobId,selector.sourceCommandId].filter(Boolean).some(id=>!safeId(id)))throw Error('Accepted reaction selector required.');
+ return {endpoint:`${base.href.replace(/\/$/,'')}/commentary/${selector.roomId}/reaction/${selector.gameId}`,accessToken,deviceId:selector.deviceId,direct:true,requestId:crypto.randomUUID(),profileVersion:selector.profileVersion,eventId:selector.eventId||'',jobId:selector.jobId||'',sourceCommandId:selector.sourceCommandId||''};
+}
 // Native position advancing is a playout proxy. It never proves speaker sound or audience hearing.
 export function createNativeCommentaryPlayer({plugin=nativePlugin,serviceBase,getAccessToken,onMeasurement=event=>console.info('[Commentary native]',JSON.stringify({stage:event.state,jobId:event.jobId,elapsedMs:event.nativeElapsedMs})),monotonicNow=()=>performance.now()}={}){
  let listener=null,listenerPending=null,current=null,generation=0;
  const seen=new Set();
  const finishCurrent=()=>{current?.removeAbort?.();current=null;};
  const listen=async()=>{if(listener)return;if(listenerPending){await listenerPending;return;}listenerPending=plugin.addListener('playback',event=>{
-  const active=current;if(!active||event.jobId!==active.claim.jobId||event.epoch!==active.claim.epoch||!Number.isSafeInteger(event.sequence)||event.sequence<=active.sequence)return;
+  const active=current;if(!active)return;
+  if(active.direct&&event.requestId===active.requestId&&event.state==='bound'){
+   try{const binding=event.binding;
+    const remaining=binding?.lease?.remainingMs;
+    if(active.bound||!Number.isSafeInteger(remaining)||remaining<=0||remaining>15000||!safeHeader(binding.claim?.token,512)||!Number.isSafeInteger(binding.claim.epoch)||binding.claim.epoch<1)throw Error('Invalid binding');
+    // Native subtracts the full request interval conservatively before emitting this remaining lease.
+    binding.claim.monotonicDeadline=monotonicNow()+remaining;
+    if(active.onBind(binding)!==true)throw Error('Reaction context changed');
+    active.bound=true;active.claim=binding.claim;return;
+   }catch{void stop('invalid-binding').catch(()=>{});return;}
+  }
+  if(active.direct&&!active.bound){if(event.requestId===active.requestId&&['failed','interrupted','completed','unavailable'].includes(event.state)){finishCurrent();if(event.state==='failed')active.reject?.(Error('Native reaction unavailable'));else active.resolve?.();}return;}
+  if(event.jobId!==active.claim.jobId||event.epoch!==active.claim.epoch||!Number.isSafeInteger(event.sequence)||event.sequence<=active.sequence)return;
   active.sequence=event.sequence;
   if(['first-byte','playout-started'].includes(event.state))onMeasurement({...event,physicalAudibilityVerified:false});
   if(event.state==='playout-started')active.onEvent({...event,state:'started',physicalAudibilityVerified:false});
-  else if(['completed','interrupted','failed'].includes(event.state)){active.onEvent(event);finishCurrent();}
+  else if(['completed','interrupted','failed'].includes(event.state)){active.onEvent(event);finishCurrent();active.resolve?.();}
  });listener=await listenerPending;listenerPending=null;};
  const stop=async(reason='cancelled')=>{
-  generation++;const prior=current;finishCurrent();await plugin.stop({reason});
-  if(prior)prior.onEvent({jobId:prior.claim.jobId,epoch:prior.claim.epoch,state:'interrupted',sequence:prior.sequence+1,reason,measurementBasis:'client-cancellation',physicalAudibilityVerified:false});
+  generation++;const prior=current;finishCurrent();prior?.resolve?.();await plugin.stop({reason});
+  if(prior?.claim)prior.onEvent({jobId:prior.claim.jobId,epoch:prior.claim.epoch,state:'interrupted',sequence:prior.sequence+1,reason,measurementBasis:'client-cancellation',physicalAudibilityVerified:false});
  };
  return {
+  async playReaction({selector,signal,onBind,onEvent=()=>{}}){
+   if(signal?.aborted)return;
+   const ownGeneration=generation+1;await stop('superseded');if(generation!==ownGeneration||signal?.aborted)return;await listen();
+   const accessToken=await getAccessToken();if(signal?.aborted||generation!==ownGeneration)return;
+   const request=reactionRequest(serviceBase,selector,accessToken);
+   let resolve,reject;const done=new Promise((r,j)=>{resolve=r;reject=j;});
+   void done.catch(()=>{});
+   const abort=()=>{void stop('aborted').catch(()=>{});};
+   const active={direct:true,requestId:request.requestId,bound:false,claim:null,sequence:0,onBind,onEvent,resolve,reject,removeAbort:()=>signal?.removeEventListener('abort',abort)};
+   current=active;signal?.addEventListener('abort',abort,{once:true});
+   try{await plugin.play(request);await done;}catch(error){if(current===active){finishCurrent();resolve();}throw error;}
+  },
   async play({claim,signal,onEvent=()=>{}}){
    if(signal?.aborted)return false;
    const key=`${claim?.jobId}:${claim?.epoch}:${claim?.token}`;if(seen.has(key))return false;
    const ownGeneration=++generation;const prior=current;finishCurrent();await plugin.stop({reason:'superseded'});
-   if(prior)prior.onEvent({jobId:prior.claim.jobId,epoch:prior.claim.epoch,state:'interrupted',sequence:prior.sequence+1,reason:'superseded',measurementBasis:'client-cancellation'});
+   if(prior?.claim)prior.onEvent({jobId:prior.claim.jobId,epoch:prior.claim.epoch,state:'interrupted',sequence:prior.sequence+1,reason:'superseded',measurementBasis:'client-cancellation'});
    if(generation!==ownGeneration||signal?.aborted)return false;await listen();
    const accessToken=await getAccessToken();if(generation!==ownGeneration||signal?.aborted)return false;
    const request=streamRequest(serviceBase,claim,accessToken,monotonicNow());seen.add(key);
@@ -40,7 +70,7 @@ export function createNativeCommentaryPlayer({plugin=nativePlugin,serviceBase,ge
   },
   stop,
   async renew({claim}){
-   if(!current||claim.jobId!==current.claim.jobId||claim.epoch!==current.claim.epoch||claim.token!==current.claim.token)return false;
+   if(!current?.claim||claim.jobId!==current.claim.jobId||claim.epoch!==current.claim.epoch||claim.token!==current.claim.token)return false;
    const request=streamRequest(serviceBase,claim,'renewal-validation-only',monotonicNow());current.claim=claim;
    await plugin.renew({jobId:claim.jobId,epoch:claim.epoch,leaseRemainingMs:request.leaseRemainingMs});return true;
   },

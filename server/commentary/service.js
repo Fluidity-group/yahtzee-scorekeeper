@@ -92,7 +92,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   const attempt={id:randomId(),jobId:job.id,stage,characters,status:'submitted',at:now()};
   state.budgets.set(job.roomId,{requests:used.requests+1,characters:used.characters+characters});state.attempts.set(attempt.id,attempt);return attempt;
  }
- async function getProfile(userId,roomId){await authorized(userId,roomId);return {...settings(store.snapshot(),roomId),capabilities:{providerMode:live?'live':syntheticProviders?'synthetic':'disabled',liveProviders:live,atomicPlaybackStart:true}};}
+ async function getProfile(userId,roomId){await authorized(userId,roomId);return {...settings(store.snapshot(),roomId),capabilities:{providerMode:live?'live':syntheticProviders?'synthetic':'disabled',liveProviders:live,atomicPlaybackStart:true,directReaction:true}};}
  async function setProfile(userId,roomId,{expectedVersion,changes}={}){
   const room=await authorized(userId,roomId,true);if(!Number.isSafeInteger(expectedVersion)||!changes||typeof changes!=='object'||Object.keys(changes).some(k=>!['enabled','profanityAllowed','humorIntensity','frequency','voiceOption'].includes(k)))fail('Invalid settings change.');
   return store.transaction(state=>{const prior=settings(state,roomId);if(prior.version!==expectedVersion)fail('Commentary settings changed.',409);let next;try{next=updateProfile(prior,changes);}catch{fail('Invalid commentary settings.');}state.settings.set(roomId,next);for(const job of state.jobs.values())if(job.roomId===room.id)cancel(state,job,'profile-changed');
@@ -116,7 +116,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    coalesce(state,room.id,facts.gameId,facts.revision);state.jobs.set(id,{id,roomId:room.id,momentKey,facts:named,profile:p,audience:room.members.map(m=>m.userId),status:quiet?'silent':'pending',line:null,claim:null});state.moments.set(momentKey,id);return id;
   });
  }
- async function prepareTrusted(jobId){
+ async function prepareTrusted(jobId,{afterReady}={}){
   const claim=await batch(async()=>{
   await refresh();
   const prior=store.snapshot().jobs.get(jobId);if(!prior)return null;const room=await getRoom(prior.roomId);const authorizedSourceIds=room?await sourcePermissions(prior.facts.accountId,room):[];
@@ -139,7 +139,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    await store.transaction(state=>{const attempt=state.attempts.get(claim.attempt.id);if(attempt&&attempt.status==='submitted')attempt.status=live&&attempt.providerDispatchedAt!=null?'unknown':'failed';const job=state.jobs.get(jobId);if(job?.workerToken===claim.attempt.id&&job.status==='generating')job.status='failed';});return null;
   }finally{clearTimeout(writerTimer);}
   return batch(async()=>{const fresh=await getRoom(claim.input.roomId);
-  return store.transaction(state=>{
+  const ready=await store.transaction(state=>{
    const attempt=state.attempts.get(claim.attempt.id);if(attempt?.status==='submitted')attempt.status='succeeded';const job=state.jobs.get(jobId);
    if(job.status!=='generating'||job.workerToken!==claim.attempt.id)return null;
    if((state.playerProfiles.get(job.facts.accountId)?.profile.version||0)!==job.personalProfileVersion){cancel(state,job,'personal-profile-changed');return null;}
@@ -148,7 +148,7 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
    // Synthetic validation only; production classifier/rewrite still required.
    if(!line||typeof line.text!=='string'||!line.text.trim()||[...line.text].length>maxLineCharacters||/[\u0000-\u001f\u007f]/.test(line.text)||typeof line.containsProfanity!=='boolean'||(!job.profile.profanityAllowed&&line.containsProfanity)){job.status='failed';job.reason='invalid-candidate';return null;}
    job.line={text:line.text,containsProfanity:line.containsProfanity,mechanism:line.mechanism,subject:line.subject,source:live?'anthropic-writer':'synthetic'};rememberTrusted(state,job,line);job.status='ready';job.readyAt=now();return {id:job.id,text:job.line.text};
-  });});
+  });return ready&&afterReady?afterReady():ready;});
  }
  async function acquire(userId,roomId,{device}={}){
   await authorized(userId,roomId,true);if(!token.test(device||''))fail('Invalid playback device.');
@@ -302,9 +302,9 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   await refresh();if(!uuid.test(userId||''))fail('Sign in for live commentary.',401);if(!live)fail('Live commentary is unavailable.',503);
   let p;try{p=createProfile({...requested,enabled:true,version:1});}catch{fail('Invalid saved commentary settings.');}
   const existing=await getRoom(roomId);if(existing&&!existing.localSession)fail('Room identifier collision.',409);
-  return store.transaction(state=>{const prior=state.localSessions.get(roomId);if(prior){if(prior.ownerId!==userId||prior.startCommandId!==commandId||prior.fingerprint!==JSON.stringify(config))fail('Local session collision.',409);return {room:localRoom(prior),profile:{...settings(state,roomId),capabilities:{liveProviders:live,atomicPlaybackStart:true}},greetingJobId:state.moments.get(roomId+':local-opening')};}
+  return store.transaction(state=>{const prior=state.localSessions.get(roomId);if(prior){if(prior.ownerId!==userId||prior.startCommandId!==commandId||prior.fingerprint!==JSON.stringify(config))fail('Local session collision.',409);return {room:localRoom(prior),profile:{...settings(state,roomId),capabilities:{liveProviders:live,atomicPlaybackStart:true,directReaction:true}},greetingJobId:state.moments.get(roomId+':local-opening')};}
    if([...state.localSessions.values()].filter(s=>s.ownerId===userId).length>=100)fail('Local commentary session limit.',429);
-   const session=createLocalSession({roomId,ownerId:userId,commandId,config,time:new Date(now()).toISOString()}),id=randomId();state.localSessions.set(roomId,session);state.settings.set(roomId,p);state.jobs.set(id,{id,roomId,momentKey:roomId+':local-opening',facts:localOpening(session),profile:p,audience:[userId],status:'pending',line:null,claim:null,sourceType:'accepted-local-opening'});state.moments.set(roomId+':local-opening',id);return {room:localRoom(session),profile:{...p,capabilities:{liveProviders:live,atomicPlaybackStart:true}},greetingJobId:id};});
+   const session=createLocalSession({roomId,ownerId:userId,commandId,config,time:new Date(now()).toISOString()}),id=randomId();state.localSessions.set(roomId,session);state.settings.set(roomId,p);state.jobs.set(id,{id,roomId,momentKey:roomId+':local-opening',facts:localOpening(session),profile:p,audience:[userId],status:'pending',line:null,claim:null,sourceType:'accepted-local-opening'});state.moments.set(roomId+':local-opening',id);return {room:localRoom(session),profile:{...p,capabilities:{liveProviders:live,atomicPlaybackStart:true,directReaction:true}},greetingJobId:id};});
  }
  async function commitLocal(userId,roomId,{commands,quiet=false}={}){
   if(typeof quiet!=='boolean')fail('Invalid replay flag.');await authorized(userId,roomId,true);return store.transaction(state=>{const prior=state.localSessions.get(roomId);if(!prior||prior.ownerId!==userId)fail('Local session is not yours.',403);let result;try{result=applyLocalCommands(prior,commands,new Date(now()).toISOString());}catch(error){fail(error.message,409);}state.localSessions.set(roomId,result.session);
@@ -316,8 +316,26 @@ export function createCommentaryService({store,getRoom,now=()=>Date.now(),random
   const room=await authorized(userId,roomId,true);if(!token.test(device||''))fail('Invalid playback device.');return store.transaction(state=>{const serverNowMs=now(),prior=state.leases.get(roomId),job=state.jobs.get(jobId);if(!job||job.roomId!==roomId)fail('Commentary job not found.',404);const reason=eligible(state,job,room);if(reason){cancel(state,job,reason);return {claim:{claimed:false,reason}};}if(job.status!=='ready')fail('Commentary is not ready.',409);if(prior&&prior.expiresAt>serverNowMs&&(prior.owner!==userId||prior.device!==device))fail('Another host device owns playback.',409);if(prior?.activeJobId){const active=state.jobs.get(prior.activeJobId);if(active&&['claimed','streaming','started'].includes(active.status))fail('Commentary is already playing.',409);}const current={owner:userId,device,epoch:prior&&prior.expiresAt>serverNowMs?prior.epoch:(prior?.epoch||0)+1,expiresAt:serverNowMs+leaseMs,activeJobId:jobId};state.leases.set(roomId,current);job.claim={token:randomId(),owner:userId,device,epoch:current.epoch};job.status='claimed';return {lease:projectLeaseClock(current,serverNowMs),claim:{claimed:true,token:job.claim.token}};});
  }
 
+ async function selectReaction(userId,roomId,{gameId,eventId,jobId,sourceCommandId,profileVersion,device}={}){
+  const room=await authorized(userId,roomId,true);
+  if(!token.test(device||'')||!uuid.test(gameId||'')||room.game?.id!==gameId||!Number.isSafeInteger(profileVersion)||settings(store.snapshot(),roomId).version!==profileVersion)fail('Reaction context changed.',409);
+  if([eventId,jobId,sourceCommandId].filter(Boolean).length!==1||eventId&&!/^[A-Za-z0-9_:-]{8,200}$/.test(eventId)||jobId&&!uuid.test(jobId)||sourceCommandId&&!token.test(sourceCommandId))fail('Accepted reaction selector required.');
+  const state=store.snapshot(),job=[...state.jobs.values()].find(j=>j.roomId===roomId&&j.facts.gameId===gameId&&(jobId?j.id===jobId:sourceCommandId?j.facts.commandId===sourceCommandId:j.facts.eventId===eventId));
+  if(!job)fail('Accepted reaction not found.',404);
+  const reason=eligible(state,job,room);if(reason)fail('Reaction is no longer current.',409);
+  if(!['pending','generating','ready'].includes(job.status))return null;
+  const prior=state.leases.get(roomId);if(prior&&prior.expiresAt>now()&&((prior.owner!==userId||prior.device!==device)||prior.activeJobId&&['claimed','streaming','started'].includes(state.jobs.get(prior.activeJobId)?.status)))fail('Playback already owned.',409);
+  return {id:job.id,status:job.status};
+ }
+ async function bindReaction(userId,roomId,selector){
+  const selected=await selectReaction(userId,roomId,selector);if(!selected||selected.status!=='ready')return null;
+  const playback=await acquireAndClaim(userId,roomId,{jobId:selected.id,device:selector.device});if(!playback.claim.claimed)return null;
+  const body=await audio(userId,roomId,{jobId:selected.id,device:selector.device,epoch:playback.lease.epoch,claimToken:playback.claim.token});
+  const projection=(await list(userId,roomId)).find(j=>j.id===selected.id);
+  return {body,binding:{job:projection,claim:{roomId,jobId:selected.id,token:playback.claim.token,epoch:playback.lease.epoch,deviceId:selector.device},lease:playback.lease}};
+ }
  async function readLocal(userId,roomId){const room=await authorized(userId,roomId,true);if(!room.localSession)fail('Not a local commentary session.');return {room,profile:await getProfile(userId,roomId)};}
- return {readLocal,startLocal,commitLocal,acquireAndClaim,enqueueCommitted,feedback,getPlayerProfile,setPlayerProfile,deletePlayerProfile,forgetHistory,authorized,getProfile,setProfile,enqueueAccepted,prepareTrusted,acquire,heartbeat,list,claimPlayback,playbackEvent,audio};
+ return {selectReaction,bindReaction,readLocal,startLocal,commitLocal,acquireAndClaim,enqueueCommitted,feedback,getPlayerProfile,setPlayerProfile,deletePlayerProfile,forgetHistory,authorized,getProfile,setProfile,enqueueAccepted,prepareTrusted,acquire,heartbeat,list,claimPlayback,playbackEvent,audio};
 }
 
 

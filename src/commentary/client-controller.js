@@ -26,7 +26,10 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   const epochLost=run&&next&&Object.hasOwn(next,'leaseEpoch')&&next.leaseEpoch!==run.claim.epoch;
   const dependent=run&&changedTargets.some(id=>run.job.dependencyEventIds.includes(id)||run.job.eventId===id);
   if(context?.game&&next?.game&&context.game.id===next.game.id&&next.visible!==false)for(const event of next.game.events||[])if(!seen.has(event.id))observeScoreEvent(event);
+  const newest=!switched?(next?.game?.events||[]).filter(e=>!seen.has(e.id)&&['score','bonus'].includes(e.type)).at(-1):null;
   context=next;
+  if(newest&&speakable())desired={eventId:newest.id,queuedAt:monotonicNow()};
+  if(switched||profileChanged||!speakable())desired=null;
   if(changedTargets.length)publish({captions:state.captions.filter(caption=>!changedTargets.some(id=>caption.eventId===id||caption.dependencyEventIds.includes(id)))});
   if(switched||profileChanged||epochLost||dependent||!speakable())invalidate(switched?'context-changed':profileChanged?'profile-changed':epochLost?'lease-lost':dependent?'facts-invalidated':'playback-unavailable');
   if(switched){suppressed=new Set();playedGreetingCommands=new Set();}
@@ -47,6 +50,22 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
    if(index<0||context.game.events.slice(index+1).some(event=>['score-undo','score-correction'].includes(event.type)&&(event.target===job.eventId||job.dependencyEventIds.includes(event.target))))return false;
   }
   return typeof job?.id==='string'&&job.gameId===context.game.id&&job.profileVersion===context.profileVersion&&['ready','claimed','streaming','started','completed','interrupted','failed'].includes(job.status)&&typeof job.caption==='string'&&job.caption.length>0&&job.caption.length<=1000&&Array.isArray(job.dependencyEventIds);}
+ let desired=null;
+ const direct=()=>typeof player.playReaction==='function'&&context?.directReaction===true;
+ async function react(){
+  if(disposed||!direct()||!speakable()||run||completionBarrier||!desired)return;
+  const {queuedAt=monotonicNow(),...target}=desired;desired=null;const fence=generation;
+  console.info('[Commentary direct]',JSON.stringify({stage:'request',queueMs:Math.max(0,Math.round(monotonicNow()-queuedAt))}));
+  const active={job:{id:'connecting',eventId:target.eventId,dependencyEventIds:target.eventId?[target.eventId]:[]},claim:{epoch:0},roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve()};
+  run=active;publish({status:'connecting',playing:null});
+  try{await player.playReaction({selector:{roomId:context.roomId,gameId:context.game.id,deviceId,profileVersion:context.profileVersion,...target},signal:active.abort.signal,onBind:binding=>{
+   if(fence!==generation||run!==active||active.abort.signal.aborted||!validCaptionJob(binding?.job)||target.eventId&&binding.job.eventId!==target.eventId||target.jobId&&binding.job.id!==target.jobId||target.sourceCommandId&&binding.job.sourceCommandId!==target.sourceCommandId||binding.claim?.jobId!==binding.job.id||binding.claim.roomId!==context.roomId||binding.claim.deviceId!==deviceId||binding.lease.owner!==context.userId||binding.lease.device!==deviceId||binding.lease.epoch!==binding.claim.epoch)return false;
+   active.job=binding.job;active.claim=binding.claim;lease={...binding.lease,monotonicDeadline:binding.claim.monotonicDeadline};
+   publish({playing:{jobId:active.job.id,caption:active.job.caption},status:'playing',captions:[...state.captions.filter(c=>c.id!==active.job.id),{...active.job}].slice(-20)});return true;
+  },onEvent:event=>receive(active,event)});
+  }catch{if(fence===generation){if(run===active)stop('player-failed');publish({error:'Voice unavailable. Scores are saved normally.'});}}
+  finally{if(run===active&&active.claim.epoch===0){run=null;publish({status:'ready',playing:null});void react();}}
+ }
  let completionBarrier=null;
  function receive(current,event){
   event={...event,status:event?.state||event?.status};
@@ -62,9 +81,13 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   // Preserve real native evidence only. A host receipt never marks other people as having heard.
   current.receipts=current.receipts.then(()=>invoke('playback-event',payload,undefined,current.roomId)).catch(()=>{});
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
-  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
+  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;if(direct()){void react();return refresh({readCaptions:true});}return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
  }
- async function refresh({profile:suppliedProfile}={}){
+ async function refresh({profile:suppliedProfile,readCaptions=false}={}){
+  if(direct()){
+   if(readCaptions&&context?.userId){try{const projection=await invoke('jobs-read');const jobs=Array.isArray(projection)?projection:projection.jobs;publish({captions:jobs.filter(validCaptionJob)});}catch{}}
+   void react();return;
+  }
   if(disposed||!context?.userId||!context?.game||!context?.roomId)return;
   if(pending)return pending;
   const fence=generation,signal=abort.signal;
@@ -156,10 +179,11 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(disposed||!context?.userId||context.userId!==context.hostId||!context.enabled||gameId!==context.game?.id||profileVersion!==undefined&&profileVersion!==context.profileVersion)return false;
   if(jobId!==undefined){
    if(typeof jobId!=='string'||!/^[A-Za-z0-9_-]{8,200}$/.test(jobId)||attempted.has(jobId)||suppressed.has(jobId))return false;
-   greetings.add(jobId);hydrated.delete(jobId);return true;
+   greetings.add(jobId);hydrated.delete(jobId);if(direct())desired={jobId};return true;
   }
   if(typeof sourceCommandId!=='string'||!/^[A-Za-z0-9_-]{8,100}$/.test(sourceCommandId)||playedGreetingCommands.has(sourceCommandId))return false;
   greetingCommands.add(sourceCommandId);
+  if(direct())desired={sourceCommandId};
   for(const caption of state.captions)if(caption.sourceCommandId===sourceCommandId)hydrated.delete(caption.id);
   return true;
  }

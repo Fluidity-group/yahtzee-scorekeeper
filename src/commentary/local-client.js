@@ -3,7 +3,7 @@ import {createHostedCommentarySession} from '../ui/hosted-commentary-session.js'
 import {readCommentaryPreferences,persistCommentaryPatch} from './preferences.js';
 const mapKey=id=>'dice-clubhouse:local-commentary:'+id;
 export async function createLocalCommentary({auth,serviceBase,anonymousKey='',player,game,players=[],root,scoreDialog,onNotice=()=>{},resume=false}={}){
- const transport=createAuthenticatedCommentaryTransport({auth,serviceBase,anonymousKey});await transport.getAccessToken();
+ const transport=createAuthenticatedCommentaryTransport({auth,serviceBase,anonymousKey,directReaction:typeof player.playReaction==='function'});await transport.getAccessToken();
  let mapping;try{mapping=JSON.parse(localStorage.getItem(mapKey(game.id))||'null');}catch{}
  if(resume&&!mapping)throw Error('This saved game has no live commentary session.');
  const roomId=mapping?.roomId||crypto.randomUUID(),prefs=readCommentaryPreferences();

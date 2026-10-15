@@ -1,6 +1,6 @@
 import {createRequestTrace} from './request-trace.js';
 import {localRoom} from './local-sessions.js';
-import {createCommentaryService} from './service.js';
+import {createCommentaryService,CommentaryError} from './service.js';
 import {DurableCommentaryStore,createSupabaseCommentaryRpc} from './durable-store.js';
 import {createCommentaryProviders,createDurableProviderGate,composeCommentaryEndpoint} from './provider-runtime.js';
 import {createSupabaseRoomAdapter} from '../rooms/supabase-adapter.js';
@@ -27,23 +27,46 @@ function createRuntime(){
  });
  const providers=enabled?createCommentaryProviders({fetchImpl,allowPaid:true,allowance,durableGate:gate,getAnthropicKey:()=>get('ANTHROPIC_API_KEY'),getElevenLabsKey:()=>get('ELEVENLABS_API_KEY'),model:get('COMMENTARY_WRITER_MODEL')||'claude-haiku-4-5-20251001',writerLimits:{maxRequests:1,maxInputCharacters:50000,maxOutputTokens:512,deadlineMs:12000,maxResponseBytes:20000},audioLimits:{firstByteMs:10000,completeMs:25000,maxBytes:524288,maxLineCharacters:180}}):null;
  const service=createCommentaryService({store:persistence,deferAudio:true,getRoom:async id=>{const local=persistence.read('localSessions',id);if(local)return localRoom(local);const batch=persistence.batchContext;if(batch?.rooms.has(id))return structuredClone(batch.rooms.get(id));const room=await roomStore.byId(id);if(batch)batch.rooms.set(id,structuredClone(room));return room;},now:()=>persistence.databaseNowMs??Date.now(),profile:{enabled:false,profanityAllowed:true,humorIntensity:'dark',frequency:'balanced',voiceOption:'rachel'},liveProviders:providers,maxAgeMs:30000,writerTimeoutMs:15000,streamTimeoutMs:30000,budget:{maxRequests:400,maxCharacters:4000000}});
- async function processRoom(roomId){
+ async function ingestRoom(roomId){
   await persistence.initialize();
   const rows=await resource('clubhouse_commentary_outbox?scope_id=eq.'+scopeId+'&room_id=eq.'+roomId+'&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10');
   for(const row of rows){
    try{const jobId=await persistence.batch(()=>service.enqueueCommitted(row.payload));await rpc('clubhouse_commentary_ack_outbox',{p_scope:scopeId,p_idempotency_key:row.idempotency_key,p_status:jobId?'enqueued':'invalidated',p_job_id:jobId});}catch{await rpc('clubhouse_commentary_ack_outbox',{p_scope:scopeId,p_idempotency_key:row.idempotency_key,p_status:'retry',p_job_id:null}).catch(()=>{});}
   }
+ }
+ async function processRoom(roomId){
+  await ingestRoom(roomId);
   await persistence.refresh();
   const pending=[...persistence.snapshot().jobs.values()].filter(job=>job.roomId===roomId&&job.status==='pending').sort((a,b)=>Date.parse(a.facts.acceptedAt)-Date.parse(b.facts.acceptedAt)||(a.facts.revision||0)-(b.facts.revision||0)).slice(-3);
   for(const job of pending)await service.prepareTrusted(job.id);
  }
- return {persistence,service,processRoom};
+ return {persistence,service,processRoom,ingestRoom};
 }
 return async request=>{
- if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device','Access-Control-Allow-Methods':'GET, POST, OPTIONS'}});
+ if(request.method==='OPTIONS')return new Response(null,{status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device, x-commentary-direct, x-commentary-event, x-commentary-job, x-commentary-profile','Access-Control-Allow-Methods':'GET, POST, OPTIONS'}});
  try{
   const actor=await authenticate(request);if(!actor)return new Response(JSON.stringify({error:'Sign in to use commentary.'}),{status:401,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*'}});
   const runtime=createRuntime();
+  const direct=new URL(request.url).pathname.match(/\/commentary\/([0-9a-f-]{36})\/reaction\/([0-9a-f-]{36})$/i);
+  if(request.method==='GET'&&direct){
+   if(new URL(request.url).search)return new Response(null,{status:400});
+   const roomId=direct[1],selector={gameId:direct[2],device:request.headers.get('X-Commentary-Device'),eventId:request.headers.get('X-Commentary-Event'),sourceCommandId:request.headers.get('X-Commentary-Command'),jobId:request.headers.get('X-Commentary-Job'),profileVersion:Number(request.headers.get('X-Commentary-Profile'))};
+   // Local accepted jobs already exist in the owner mirror; no outbox/discovery round trip.
+   // Hosted ingestion still follows real host authorization before touching accepted receipts.
+   let selected=await runtime.persistence.batch(async()=>{await runtime.service.authorized(actor,roomId,true);return runtime.persistence.snapshot().localSessions.has(roomId)?runtime.service.selectReaction(actor,roomId,selector):undefined;});
+   if(selected===undefined){await runtime.ingestRoom(roomId);selected=await runtime.persistence.batch(()=>runtime.service.selectReaction(actor,roomId,selector));}
+   if(!selected)return new Response(null,{status:204});
+   if(request.signal.aborted)return new Response(null,{status:499});
+   // Exclusive durable writer claims are never polled or redispatched.
+   if(selected.status==='generating')throw new CommentaryError('Reaction already preparing.',409);
+   const bind=()=>{if(request.signal.aborted)throw new CommentaryError('Reaction cancelled.',409);return runtime.service.bindReaction(actor,roomId,selector);};
+   // Final writer validation + claim + TTS reservation share one atomic fenced commit.
+   // The provider/stream opens only after that commit succeeds.
+   const result=selected.status==='ready'?await runtime.persistence.batch(bind):await runtime.service.prepareTrusted(selected.id,{afterReady:bind});
+   if(!result)return new Response(null,{status:204});
+   const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(result.binding))));
+   return new Response(result.body.openStream(),{headers:{'Content-Type':'audio/mpeg','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Commentary-Binding':encoded}});
+  }
   let body=null;if(request.method==='POST'){const raw=await request.clone().text();if(raw.length<=4096){try{body=JSON.parse(raw);}catch{}}}
   onOperation(body?.operation);
   const operate=async()=>{await runtime.persistence.initialize();
@@ -59,11 +82,11 @@ return async request=>{
   return response;};
   let response=await runtime.persistence.batch(operate);if(typeof response==='function')response=response();
   if(response.ok&&(body?.operation==='local-start'||body?.operation==='profile-update'&&body.changes?.enabled===true)){await rpc('clubhouse_commentary_set_limit',{p_scope:scopeId,p_room:body.roomId,p_max_requests:400,p_max_characters:4000000,p_expires_at:new Date(allowance.expiresAt).toISOString()});}
-  if(response.ok&&body?.roomId&&['jobs-read','profile-update','local-start','local-command'].includes(body.operation)){
+  if(response.ok&&request.headers.get('X-Commentary-Direct')!=='1'&&body?.roomId&&['jobs-read','profile-update','local-start','local-command'].includes(body.operation)){
    waitUntil(runtime.processRoom(body.roomId).catch(()=>{}));
   }
   return response;
- }catch{return new Response(JSON.stringify({error:'Commentary unavailable. Scores can continue.'}),{status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});}
+ }catch(error){return new Response(JSON.stringify({error:'Commentary unavailable. Scores can continue.'}),{status:request.method==='GET'&&error instanceof CommentaryError?error.status:503,headers:{'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}});}
 };
 }
 
@@ -74,13 +97,13 @@ export function createLiveCommentaryEndpoint(options={}){
  const snapshotCache={current:null};
  return async request=>{
   const trace=createRequestTrace({fetchImpl:options.fetchImpl||fetch,emit:options.onTelemetry||((value)=>console.info('[Commentary request]',JSON.stringify(value))),region:typeof options.env?.get==='function'?options.env.get('SB_REGION'):options.env?.SB_REGION});
-  let operation=request.method==='GET'?'audio':'unknown';
+  let operation=request.method==='GET'?(new URL(request.url).pathname.includes('/reaction/')?'reaction':'audio'):'unknown';
   const knownOperations=new Set(['profile-read','profile-update','jobs-read','playback-start','playback-acquire','playback-claim','playback-event','playback-heartbeat','feedback','forget','local-start','local-read','local-command','player-profile-read','player-profile-update','player-profile-delete']);
   const endpoint=createEndpoint({...options,fetchImpl:trace.fetch,snapshotCache,onOperation:value=>{if(knownOperations.has(value))operation=value;},waitUntil:promise=>(options.waitUntil||((task)=>task.catch(()=>{})))(promise.finally(()=>trace.report('background-complete',operation,200)))});
   const response=await endpoint(request);if(request.method==='OPTIONS')return response;
   trace.report('response',operation,response.status);
   const headers=new Headers(response.headers);headers.set('Server-Timing',trace.serverTiming());
-  if(operation!=='audio'||!response.ok||!response.body)return new Response(response.body,{status:response.status,headers});
+  if(!['audio','reaction'].includes(operation)||!response.ok||!response.body)return new Response(response.body,{status:response.status,headers});
   const reader=response.body.getReader();let first=true;
   return new Response(new ReadableStream({async pull(controller){try{const next=await reader.read();if(next.done){trace.report('stream-complete',operation,response.status);controller.close();return;}if(first){first=false;trace.report('stream-first-byte',operation,response.status);}controller.enqueue(next.value);}catch(error){trace.report('stream-failed',operation,response.status);controller.error(error);}},async cancel(reason){await reader.cancel(reason);trace.report('stream-cancelled',operation,response.status);}}),{status:response.status,headers});
  };

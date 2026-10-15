@@ -88,3 +88,28 @@ describe('native monotonic timing includes asynchronous preparation',()=>{
   const pending=player.play({claim});await Promise.resolve();await Promise.resolve();now=13000;release({remove:vi.fn()});await expect(pending).rejects.toThrow('expired');expect(f.plugin.play).not.toHaveBeenCalled();await player.dispose();
  });
 });
+
+it('direct native binds response metadata before real playout and sends no preclaim',async()=>{
+ const f=fixture(),states=vi.fn(),bind=vi.fn(()=>true);const player=createNativeCommentaryPlayer({plugin:f.plugin,serviceBase:'https://game.example',getAccessToken:async()=> 'jwt',monotonicNow:()=>1000});
+ const pending=player.playReaction({selector:{roomId:'room-0001',gameId:'game-0001',eventId:'score-0001',deviceId:'phone-001',profileVersion:2},onBind:bind,onEvent:states});
+ for(let i=0;i<15;i++)await Promise.resolve();
+ const req=f.plugin.play.mock.calls[0][0];expect(req.endpoint).toContain('/reaction/game-0001');expect(req.claimToken).toBeUndefined();expect(req.accessToken).toBe('jwt');
+ const binding={claim:{roomId:'room-0001',jobId:'job-00001',deviceId:'phone-001',token:'server-claim',epoch:4},job:{id:'job-00001'},lease:{remainingMs:13000}};
+ f.emit({requestId:req.requestId,state:'bound',binding});expect(bind).toHaveBeenCalledOnce();expect(states).not.toHaveBeenCalled();
+ f.emit({requestId:req.requestId,jobId:'job-00001',epoch:4,state:'playout-started',sequence:2});expect(states.mock.calls[0][0].state).toBe('started');f.emit({jobId:'job-00001',epoch:4,state:'completed',sequence:3});await pending;await player.dispose();
+});
+
+it.each(['failed','interrupted'])('direct prebinding %s never produces a hearing receipt',async state=>{
+ const f=fixture(),states=vi.fn(),player=createNativeCommentaryPlayer({plugin:f.plugin,serviceBase:'https://game.example',getAccessToken:async()=> 'jwt'});
+ const pending=player.playReaction({selector:{roomId:'room-0001',gameId:'game-0001',eventId:'score-0001:2',deviceId:'phone-001',profileVersion:2},onBind:()=>true,onEvent:states});
+ for(let i=0;i<15;i++)await Promise.resolve();const req=f.plugin.play.mock.calls[0][0];
+ f.emit({requestId:req.requestId,state,sequence:1});if(state==='failed')await expect(pending).rejects.toThrow('unavailable');else await pending;
+ expect(states).not.toHaveBeenCalled();await player.dispose();
+});
+
+it('a canceled direct authentication wait cannot open or supersede a newer request',async()=>{
+ const f=fixture();let release;const token=new Promise(r=>{release=r;}),abort=new AbortController();
+ const player=createNativeCommentaryPlayer({plugin:f.plugin,serviceBase:'https://game.example',getAccessToken:()=>token});
+ const pending=player.playReaction({selector:{roomId:'room-0001',gameId:'game-0001',eventId:'score-0001:2',deviceId:'phone-001',profileVersion:2},signal:abort.signal,onBind:()=>true});
+ for(let i=0;i<8;i++)await Promise.resolve();abort.abort();release('jwt');await pending;expect(f.plugin.play).not.toHaveBeenCalled();await player.dispose();
+});

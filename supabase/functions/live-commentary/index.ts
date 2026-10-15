@@ -1214,7 +1214,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
   }
   async function getProfile(userId, roomId) {
     await authorized(userId, roomId);
-    return { ...settings(store.snapshot(), roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live, atomicPlaybackStart: true } };
+    return { ...settings(store.snapshot(), roomId), capabilities: { providerMode: live ? "live" : syntheticProviders ? "synthetic" : "disabled", liveProviders: live, atomicPlaybackStart: true, directReaction: true } };
   }
   async function setProfile(userId, roomId, { expectedVersion, changes } = {}) {
     const room = await authorized(userId, roomId, true);
@@ -1263,7 +1263,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return id2;
     });
   }
-  async function prepareTrusted(jobId) {
+  async function prepareTrusted(jobId, { afterReady } = {}) {
     const claim = await batch(async () => {
       await refresh();
       const prior = store.snapshot().jobs.get(jobId);
@@ -1335,7 +1335,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
     }
     return batch(async () => {
       const fresh = await getRoom(claim.input.roomId);
-      return store.transaction((state) => {
+      const ready = await store.transaction((state) => {
         const attempt = state.attempts.get(claim.attempt.id);
         if (attempt?.status === "submitted") attempt.status = "succeeded";
         const job = state.jobs.get(jobId);
@@ -1364,6 +1364,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
         job.readyAt = now();
         return { id: job.id, text: job.line.text };
       });
+      return ready && afterReady ? afterReady() : ready;
     });
   }
   async function acquire(userId, roomId, { device } = {}) {
@@ -1753,7 +1754,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       const prior = state.localSessions.get(roomId);
       if (prior) {
         if (prior.ownerId !== userId || prior.startCommandId !== commandId2 || prior.fingerprint !== JSON.stringify(config)) fail3("Local session collision.", 409);
-        return { room: localRoom(prior), profile: { ...settings(state, roomId), capabilities: { liveProviders: live, atomicPlaybackStart: true } }, greetingJobId: state.moments.get(roomId + ":local-opening") };
+        return { room: localRoom(prior), profile: { ...settings(state, roomId), capabilities: { liveProviders: live, atomicPlaybackStart: true, directReaction: true } }, greetingJobId: state.moments.get(roomId + ":local-opening") };
       }
       if ([...state.localSessions.values()].filter((s) => s.ownerId === userId).length >= 100) fail3("Local commentary session limit.", 429);
       const session = createLocalSession({ roomId, ownerId: userId, commandId: commandId2, config, time: new Date(now()).toISOString() }), id2 = randomId();
@@ -1761,7 +1762,7 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       state.settings.set(roomId, p);
       state.jobs.set(id2, { id: id2, roomId, momentKey: roomId + ":local-opening", facts: localOpening(session), profile: p, audience: [userId], status: "pending", line: null, claim: null, sourceType: "accepted-local-opening" });
       state.moments.set(roomId + ":local-opening", id2);
-      return { room: localRoom(session), profile: { ...p, capabilities: { liveProviders: live, atomicPlaybackStart: true } }, greetingJobId: id2 };
+      return { room: localRoom(session), profile: { ...p, capabilities: { liveProviders: live, atomicPlaybackStart: true, directReaction: true } }, greetingJobId: id2 };
     });
   }
   async function commitLocal(userId, roomId, { commands, quiet = false } = {}) {
@@ -1816,12 +1817,34 @@ function createCommentaryService({ store, getRoom, now = () => Date.now(), rando
       return { lease: projectLeaseClock(current, serverNowMs), claim: { claimed: true, token: job.claim.token } };
     });
   }
+  async function selectReaction(userId, roomId, { gameId, eventId, jobId, sourceCommandId, profileVersion, device } = {}) {
+    const room = await authorized(userId, roomId, true);
+    if (!token2.test(device || "") || !uuid5.test(gameId || "") || room.game?.id !== gameId || !Number.isSafeInteger(profileVersion) || settings(store.snapshot(), roomId).version !== profileVersion) fail3("Reaction context changed.", 409);
+    if ([eventId, jobId, sourceCommandId].filter(Boolean).length !== 1 || eventId && !/^[A-Za-z0-9_:-]{8,200}$/.test(eventId) || jobId && !uuid5.test(jobId) || sourceCommandId && !token2.test(sourceCommandId)) fail3("Accepted reaction selector required.");
+    const state = store.snapshot(), job = [...state.jobs.values()].find((j) => j.roomId === roomId && j.facts.gameId === gameId && (jobId ? j.id === jobId : sourceCommandId ? j.facts.commandId === sourceCommandId : j.facts.eventId === eventId));
+    if (!job) fail3("Accepted reaction not found.", 404);
+    const reason = eligible(state, job, room);
+    if (reason) fail3("Reaction is no longer current.", 409);
+    if (!["pending", "generating", "ready"].includes(job.status)) return null;
+    const prior = state.leases.get(roomId);
+    if (prior && prior.expiresAt > now() && (prior.owner !== userId || prior.device !== device || prior.activeJobId && ["claimed", "streaming", "started"].includes(state.jobs.get(prior.activeJobId)?.status))) fail3("Playback already owned.", 409);
+    return { id: job.id, status: job.status };
+  }
+  async function bindReaction(userId, roomId, selector) {
+    const selected = await selectReaction(userId, roomId, selector);
+    if (!selected || selected.status !== "ready") return null;
+    const playback = await acquireAndClaim(userId, roomId, { jobId: selected.id, device: selector.device });
+    if (!playback.claim.claimed) return null;
+    const body = await audio(userId, roomId, { jobId: selected.id, device: selector.device, epoch: playback.lease.epoch, claimToken: playback.claim.token });
+    const projection = (await list(userId, roomId)).find((j) => j.id === selected.id);
+    return { body, binding: { job: projection, claim: { roomId, jobId: selected.id, token: playback.claim.token, epoch: playback.lease.epoch, deviceId: selector.device }, lease: playback.lease } };
+  }
   async function readLocal(userId, roomId) {
     const room = await authorized(userId, roomId, true);
     if (!room.localSession) fail3("Not a local commentary session.");
     return { room, profile: await getProfile(userId, roomId) };
   }
-  return { readLocal, startLocal, commitLocal, acquireAndClaim, enqueueCommitted, feedback, getPlayerProfile, setPlayerProfile, deletePlayerProfile, forgetHistory, authorized, getProfile, setProfile, enqueueAccepted, prepareTrusted, acquire, heartbeat, list, claimPlayback, playbackEvent, audio };
+  return { selectReaction, bindReaction, readLocal, startLocal, commitLocal, acquireAndClaim, enqueueCommitted, feedback, getPlayerProfile, setPlayerProfile, deletePlayerProfile, forgetHistory, authorized, getProfile, setProfile, enqueueAccepted, prepareTrusted, acquire, heartbeat, list, claimPlayback, playbackEvent, audio };
 }
 
 // server/commentary/writer-prompt.js
@@ -2092,7 +2115,7 @@ function createAnthropicWriter({ model, workspaceId, getKey, fetchImpl = fetch, 
 }
 
 // server/commentary/handler.js
-var headers2 = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Content-Type": "application/json", "Cache-Control": "no-store" };
+var headers2 = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device, x-commentary-direct", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Content-Type": "application/json", "Cache-Control": "no-store" };
 var reply = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: headers2 });
 var allowed = {
   "local-read": ["operation", "roomId"],
@@ -2548,7 +2571,7 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       if (batch) batch.rooms.set(id2, structuredClone(room));
       return room;
     }, now: () => persistence.databaseNowMs ?? Date.now(), profile: { enabled: false, profanityAllowed: true, humorIntensity: "dark", frequency: "balanced", voiceOption: "rachel" }, liveProviders: providers, maxAgeMs: 3e4, writerTimeoutMs: 15e3, streamTimeoutMs: 3e4, budget: { maxRequests: 400, maxCharacters: 4e6 } });
-    async function processRoom(roomId) {
+    async function ingestRoom(roomId) {
       await persistence.initialize();
       const rows = await resource("clubhouse_commentary_outbox?scope_id=eq." + scopeId + "&room_id=eq." + roomId + "&processed_at=is.null&select=idempotency_key,payload&order=created_at.asc&limit=10");
       for (const row2 of rows) {
@@ -2560,18 +2583,45 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
           });
         }
       }
+    }
+    async function processRoom(roomId) {
+      await ingestRoom(roomId);
       await persistence.refresh();
       const pending = [...persistence.snapshot().jobs.values()].filter((job) => job.roomId === roomId && job.status === "pending").sort((a, b) => Date.parse(a.facts.acceptedAt) - Date.parse(b.facts.acceptedAt) || (a.facts.revision || 0) - (b.facts.revision || 0)).slice(-3);
       for (const job of pending) await service.prepareTrusted(job.id);
     }
-    return { persistence, service, processRoom };
+    return { persistence, service, processRoom, ingestRoom };
   }
   return async (request) => {
-    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-commentary-claim, x-commentary-epoch, x-commentary-device, x-commentary-direct, x-commentary-event, x-commentary-job, x-commentary-profile", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" } });
     try {
       const actor = await authenticate(request);
       if (!actor) return new Response(JSON.stringify({ error: "Sign in to use commentary." }), { status: 401, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
       const runtime = createRuntime();
+      const direct = new URL(request.url).pathname.match(/\/commentary\/([0-9a-f-]{36})\/reaction\/([0-9a-f-]{36})$/i);
+      if (request.method === "GET" && direct) {
+        if (new URL(request.url).search) return new Response(null, { status: 400 });
+        const roomId = direct[1], selector = { gameId: direct[2], device: request.headers.get("X-Commentary-Device"), eventId: request.headers.get("X-Commentary-Event"), sourceCommandId: request.headers.get("X-Commentary-Command"), jobId: request.headers.get("X-Commentary-Job"), profileVersion: Number(request.headers.get("X-Commentary-Profile")) };
+        let selected = await runtime.persistence.batch(async () => {
+          await runtime.service.authorized(actor, roomId, true);
+          return runtime.persistence.snapshot().localSessions.has(roomId) ? runtime.service.selectReaction(actor, roomId, selector) : void 0;
+        });
+        if (selected === void 0) {
+          await runtime.ingestRoom(roomId);
+          selected = await runtime.persistence.batch(() => runtime.service.selectReaction(actor, roomId, selector));
+        }
+        if (!selected) return new Response(null, { status: 204 });
+        if (request.signal.aborted) return new Response(null, { status: 499 });
+        if (selected.status === "generating") throw new CommentaryError("Reaction already preparing.", 409);
+        const bind = () => {
+          if (request.signal.aborted) throw new CommentaryError("Reaction cancelled.", 409);
+          return runtime.service.bindReaction(actor, roomId, selector);
+        };
+        const result = selected.status === "ready" ? await runtime.persistence.batch(bind) : await runtime.service.prepareTrusted(selected.id, { afterReady: bind });
+        if (!result) return new Response(null, { status: 204 });
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(result.binding))));
+        return new Response(result.body.openStream(), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Commentary-Binding": encoded } });
+      }
       let body = null;
       if (request.method === "POST") {
         const raw = await request.clone().text();
@@ -2600,13 +2650,13 @@ function createEndpoint({ env, fetchImpl = fetch, snapshotCache, onOperation = (
       if (response.ok && (body?.operation === "local-start" || body?.operation === "profile-update" && body.changes?.enabled === true)) {
         await rpc("clubhouse_commentary_set_limit", { p_scope: scopeId, p_room: body.roomId, p_max_requests: 400, p_max_characters: 4e6, p_expires_at: new Date(allowance.expiresAt).toISOString() });
       }
-      if (response.ok && body?.roomId && ["jobs-read", "profile-update", "local-start", "local-command"].includes(body.operation)) {
+      if (response.ok && request.headers.get("X-Commentary-Direct") !== "1" && body?.roomId && ["jobs-read", "profile-update", "local-start", "local-command"].includes(body.operation)) {
         waitUntil(runtime.processRoom(body.roomId).catch(() => {
         }));
       }
       return response;
-    } catch {
-      return new Response(JSON.stringify({ error: "Commentary unavailable. Scores can continue." }), { status: 503, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: "Commentary unavailable. Scores can continue." }), { status: request.method === "GET" && error instanceof CommentaryError ? error.status : 503, headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" } });
     }
   };
 }
@@ -2614,7 +2664,7 @@ function createLiveCommentaryEndpoint(options = {}) {
   const snapshotCache = { current: null };
   return async (request) => {
     const trace = createRequestTrace({ fetchImpl: options.fetchImpl || fetch, emit: options.onTelemetry || ((value) => console.info("[Commentary request]", JSON.stringify(value))), region: typeof options.env?.get === "function" ? options.env.get("SB_REGION") : options.env?.SB_REGION });
-    let operation = request.method === "GET" ? "audio" : "unknown";
+    let operation = request.method === "GET" ? new URL(request.url).pathname.includes("/reaction/") ? "reaction" : "audio" : "unknown";
     const knownOperations = /* @__PURE__ */ new Set(["profile-read", "profile-update", "jobs-read", "playback-start", "playback-acquire", "playback-claim", "playback-event", "playback-heartbeat", "feedback", "forget", "local-start", "local-read", "local-command", "player-profile-read", "player-profile-update", "player-profile-delete"]);
     const endpoint = createEndpoint({ ...options, fetchImpl: trace.fetch, snapshotCache, onOperation: (value) => {
       if (knownOperations.has(value)) operation = value;
@@ -2625,7 +2675,7 @@ function createLiveCommentaryEndpoint(options = {}) {
     trace.report("response", operation, response.status);
     const headers3 = new Headers(response.headers);
     headers3.set("Server-Timing", trace.serverTiming());
-    if (operation !== "audio" || !response.ok || !response.body) return new Response(response.body, { status: response.status, headers: headers3 });
+    if (!["audio", "reaction"].includes(operation) || !response.ok || !response.body) return new Response(response.body, { status: response.status, headers: headers3 });
     const reader = response.body.getReader();
     let first = true;
     return new Response(new ReadableStream({ async pull(controller) {

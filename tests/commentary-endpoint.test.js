@@ -109,3 +109,46 @@ it('records reduced critical-path RPC counts through the actual endpoint and str
  const records=f.telemetry.filter(e=>e.stage==='stream-first-byte'||e.stage==='background-complete'&&e.upstreamCounts.writer||e.stage==='response'&&['playback-start','jobs-read'].includes(e.operation));mkdirSync('artifacts/sw031',{recursive:true});writeFileSync('artifacts/sw031/request-count-benchmark.json',JSON.stringify({source:'actual endpoint with synthetic database/providers; no live timing claim',records},null,2));
  const first=records.find(e=>e.stage==='stream-first-byte');expect(first.upstreamCounts.clubhouse_commentary_dispatch).toBe(1);expect(first.upstreamCounts.clubhouse_commentary_load_changed).toBeLessThanOrEqual(3);expect(first.upstreamCounts.clubhouse_commentary_batch).toBeLessThanOrEqual(3);
 });
+
+async function directFixture(){
+ const f=fixture();
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({roomId,operation:'profile-update',expectedVersion:1,changes:{enabled:true}})}));
+ const profile=(await response.json()).result;
+ f.reaction=(headers={},token='host-token')=>f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/reaction/'+f.room.game.id,{headers:{Authorization:'Bearer '+token,'X-Commentary-Device':'host-native-device','X-Commentary-Profile':String(profile.version),'X-Commentary-Event':f.room.game.events.find(e=>e.type==='score').id,...headers}}));
+ return {f,profile};
+}
+it('direct accepted reaction streams with server binding, without discovery or playback-start round trips',async()=>{
+ const {f}=await directFixture();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+ const response=await f.reaction();expect(response.status).toBe(200);
+ const binding=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString('utf8'));
+ expect(binding).toMatchObject({job:{status:'streaming',gameId:f.room.game.id,caption:expect.any(String)},claim:{roomId,deviceId:'host-native-device',epoch:1,token:expect.any(String)},lease:{owner:host,remainingMs:15000}});
+ expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1,2,3]);
+ expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(1);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(1);
+ expect(Object.keys(f.state().exposure)).toHaveLength(0);
+ const duplicate=await f.reaction();expect(duplicate.status).toBe(204);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(1);
+});
+it.each([{'X-Commentary-Event':'fabricated-event-001'},{'X-Commentary-Profile':'99'},{'X-Commentary-Device':'bad'},{'X-Commentary-Job':'00000000-0000-4000-8000-000000000099'}])('direct invalid selector cannot dispatch writer or voice %s',async headers=>{
+ const {f}=await directFixture();expect((await f.reaction(headers)).status).toBeGreaterThanOrEqual(400);expect(f.calls.some(c=>/api\.(anthropic|elevenlabs)/.test(c.url))).toBe(false);
+});
+it('direct route rejects guests before outbox ingestion or provider dispatch',async()=>{const {f}=await directFixture();const before=f.calls.length;expect((await f.reaction({},'guest-token')).status).toBe(403);expect(f.calls.slice(before).some(c=>c.url.includes('outbox')||c.url.includes('api.anthropic.com'))).toBe(false);});
+it('direct explicitly armed welcome binds selected commentator caption from persisted greeting',async()=>{const {f,profile}=await directFixture();const response=await f.reaction({'X-Commentary-Event':'','X-Commentary-Job':profile.greetingJobId});expect(response.status).toBe(200);const b=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString());expect(b.job).toMatchObject({id:profile.greetingJobId,lifecycleVerified:true});expect(b.job.purpose).toBe('return');await response.arrayBuffer();});
+it('direct paid ceilings remain enforced with no automatic provider retry',async()=>{const {f}=await directFixture();f.seedDispatches('writer',200);expect((await f.reaction()).status).toBe(204);expect(f.calls.some(c=>c.url.includes('api.anthropic.com')||c.url.includes('api.elevenlabs.io'))).toBe(false);});
+
+it('direct ownership conflict dispatches no second writer and Undo invalidates a pending reaction',async()=>{
+ const {f}=await directFixture();await f.reaction({'X-Commentary-Event':'fabricated-event-001'});const job=Object.values(f.state().jobs).find(j=>j.facts.eventId===f.room.game.events.find(e=>e.type==='score').id);
+ await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({roomId,operation:'playback-acquire',device:'another-device'})}));
+ expect((await f.reaction()).status).toBe(409);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+ f.room.game.events.push({id:'undo-event-001',type:'score-undo',target:job.facts.eventId});f.room.revision++;
+ expect((await f.reaction()).status).toBe(409);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+});
+
+it('direct local welcome uses one request, speaks Rachel intro and avoids the hosted outbox',async()=>{
+ const f=fixture(),localId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',gameId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const start=await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({operation:'local-start',roomId:localId,commandId:'direct-local-start',config:{gameId,names:['Alex','Sam'],mode:'standard'},settings:{enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'lively',voiceOption:'rachel'}})}));
+ const result=(await start.json()).result;expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);const before=f.calls.length;
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+localId+'/reaction/'+gameId,{headers:{Authorization:'Bearer host-token','X-Commentary-Device':'host-native-device','X-Commentary-Profile':String(result.profile.version),'X-Commentary-Job':result.greetingJobId}}));expect(response.status).toBe(200);
+ const binding=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString());expect(binding.job.caption).toMatch(/^I'm Rachel\./);await response.arrayBuffer();
+ expect(f.calls.slice(before).some(c=>c.url.includes('clubhouse_commentary_outbox'))).toBe(false);
+ const metric=f.telemetry.find(e=>e.operation==='reaction'&&e.stage==='stream-first-byte');expect(metric.upstreamCounts.writer).toBe(1);expect(metric.upstreamCounts.voice).toBe(1);
+ mkdirSync('artifacts/sw032',{recursive:true});writeFileSync('artifacts/sw032/direct-request-benchmark.json',JSON.stringify({basis:'actual composed endpoint with synthetic providers; not live latency',records:f.telemetry.filter(e=>e.operation==='reaction')},null,2));
+});

@@ -1,5 +1,5 @@
 const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-export function createAuthenticatedCommentaryTransport({auth,serviceBase,anonymousKey='',fetchImpl=fetch,timeoutMs=12000}={}){
+export function createAuthenticatedCommentaryTransport({auth,serviceBase,anonymousKey='',directReaction=false,fetchImpl=fetch,timeoutMs=12000}={}){
  const base=new URL(serviceBase);
  if(base.protocol!=='https:'||base.username||base.password||base.search||base.hash||typeof auth?.getSession!=='function'||typeof fetchImpl!=='function'||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>30000)throw Error('Configured authenticated HTTPS commentary transport required.');
  const endpoint=base.href.replace(/\/$/,'');
@@ -17,7 +17,7 @@ export function createAuthenticatedCommentaryTransport({auth,serviceBase,anonymo
   const timer=setTimeout(()=>abort.abort(),timeoutMs);
   try{
    const token=await getAccessToken();if(abort.signal.aborted)throw Error('Commentary request cancelled.');
-   const response=await fetchImpl(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,...(anonymousKey?{apikey:anonymousKey}:{})},body:JSON.stringify(payload),signal:abort.signal,redirect:'error'});
+   const response=await fetchImpl(endpoint,{method:'POST',headers:{'Content-Type':'application/json',...(directReaction?{'X-Commentary-Direct':'1'}:{}),Authorization:`Bearer ${token}`,...(anonymousKey?{apikey:anonymousKey}:{})},body:JSON.stringify(payload),signal:abort.signal,redirect:'error'});
    if(!response.ok){const error=Error(response.status===409?'Commentary changed. Refresh and try again.':response.status===401?'Sign in to use commentary.':'Commentary unavailable. Scores can continue.');error.status=response.status;throw error;}
    if(!response.body)throw Error('Commentary unavailable.');
    const reader=response.body.getReader(),decoder=new TextDecoder();let body='',bytes=0;

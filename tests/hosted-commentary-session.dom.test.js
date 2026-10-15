@@ -99,3 +99,11 @@ it('configures and unmutes Android lobby before game, retains choices on Start a
  const f=fixture(host,{lobby:true});await f.session.open();const form=document.querySelector('[data-commentary-form]');expect(form.elements.listenerMuted.checked).toBe(false);form.elements.enabled.checked=true;form.elements.frequency.value='lively';form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(f.request.mock.calls.some(([p])=>p.operation==='profile-update')).toBe(true));await f.session.refresh();expect(f.request.mock.calls.some(([p])=>p.operation==='jobs-read')).toBe(false);expect(f.player.play).not.toHaveBeenCalled();
  const profileReads=f.request.mock.calls.filter(([p])=>p.operation==='profile-read').length,gameId='44444444-4444-4444-8444-444444444444',sourceCommandId='accepted_lobby_start_001',jobId='55555555-5555-4555-8555-555555555555';f.setJobs([{id:jobId,gameId,eventId:'lifecycle-'+sourceCommandId,sourceCommandId,acceptedAt:'2026-10-14T20:00:00Z',purpose:'opening',lifecycleVerified:true,dependencyEventIds:[],profileVersion:2,status:'ready',caption:'Welcome to your table.'}]);f.session.update({...f.context,room:{...f.context.room,status:'active',game:{id:gameId,events:[]}}});await f.session.allowGreeting({sourceCommandId,gameId});await vi.waitFor(()=>expect(f.player.play).toHaveBeenCalledOnce());expect(f.request.mock.calls.filter(([p])=>p.operation==='profile-read')).toHaveLength(profileReads);await f.session.allowGreeting({sourceCommandId,gameId});expect(f.player.play).toHaveBeenCalledOnce();f.session.dispose();
 });
+
+it('native direct mode has no periodic profile/jobs discovery requests',async()=>{
+ const f=fixture();f.player.playReaction=vi.fn(async()=>{});
+ const profile={version:1,enabled:true,capabilities:{liveProviders:true,directReaction:true}};
+ const original=f.request.getMockImplementation();f.request.mockImplementation(async p=>p.operation==='profile-read'?{result:profile}:original(p));
+ await f.session.refresh({forceProfile:true});f.session.update(f.context);await wait();f.request.mockClear();
+ vi.useFakeTimers();try{f.session.update(f.context);await wait();f.request.mockClear();await vi.advanceTimersByTimeAsync(16000);expect(f.request).not.toHaveBeenCalled();}finally{f.session.dispose();vi.useRealTimers();}
+});
