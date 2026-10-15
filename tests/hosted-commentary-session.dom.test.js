@@ -124,3 +124,29 @@ it('does not arm a welcome from an abandoned session while its profile loads',as
  const session=createHostedCommentarySession({request,player,deviceId:'phone-001',nativeAudioAvailable:true,initialListenerMuted:false,pollMs:0}),gameId='44444444-4444-4444-8444-444444444444';session.update({room:{id:roomId,hostId:host,members:[{userId:host}],game:{id:gameId,events:[]}},userId:host,connected:true,visible:true});
  const opening=session.allowGreeting({jobId:'55555555-5555-4555-8555-555555555555',gameId});session.update({room:null,userId:null});release();expect(await opening).toBe(false);expect(player.playReaction).not.toHaveBeenCalled();session.dispose();
 });
+
+
+it('does not strand an accepted score behind a refresh waiting on the prior speech heartbeat',async()=>{
+ const gameId='44444444-4444-4444-8444-444444444444',jobId='55555555-5555-4555-8555-555555555555';
+ const profile={version:1,enabled:true,capabilities:{liveProviders:true,directReaction:true}};
+ let releaseHeartbeat;
+ const request=vi.fn(async p=>{
+  if(p.operation==='playback-heartbeat')return new Promise(resolve=>{releaseHeartbeat=()=>resolve({result:{owner:host,device:'phone-001',epoch:3,expiresAt:50000,serverNowMs:35000,remainingMs:15000}});});
+  if(p.operation==='playback-event')return {result:{jobId:p.jobId,epoch:p.epoch,sequence:p.sequence,status:p.status,firstExposureAt:1,heardBy:[host],expectedAudience:[host]}};
+  return {result:profile};
+ });
+ const player={play:vi.fn(),playReaction:vi.fn(()=>new Promise(()=>{})),stop:vi.fn(),renew:vi.fn()};
+ const session=createHostedCommentarySession({request,player,deviceId:'phone-001',nativeAudioAvailable:true,initialListenerMuted:false,pollMs:0});
+ const context={room:{id:roomId,hostId:host,members:[{userId:host}],game:{id:gameId,events:[]}},userId:host,visible:true,connected:true,initialProfile:profile};
+ session.update(context);await session.allowGreeting({jobId,gameId,profileVersion:1});
+ const first=player.playReaction.mock.calls[0][0];
+ expect(first.onBind({job:{id:jobId,eventId:'lifecycle-accepted_welcome',sourceCommandId:'accepted_welcome',purpose:'opening',lifecycleVerified:true,acceptedAt:'2026-10-15T01:00:00Z',gameId,profileVersion:1,status:'streaming',caption:'Welcome.',dependencyEventIds:[]},claim:{roomId,jobId,deviceId:'phone-001',epoch:3,token:'claim'},lease:{owner:host,device:'phone-001',epoch:3}})).toBe(true);
+ first.onEvent({jobId,epoch:3,state:'started',sequence:1});await wait();
+ const heartbeat=session.refresh();await wait();expect(releaseHeartbeat).toBeTypeOf('function');
+ first.onEvent({jobId,epoch:3,state:'completed',sequence:2});await wait();
+ session.update({...context,room:{...context.room,game:{id:gameId,events:[{id:'new-score',type:'score'}]}}});await wait();
+ const callsBeforeHeartbeat=player.playReaction.mock.calls.length;
+ releaseHeartbeat();await heartbeat;await wait();
+ expect(callsBeforeHeartbeat).toBe(2);expect(player.playReaction.mock.calls.at(-1)[0].selector.eventId).toBe('new-score');
+ expect(player.renew).not.toHaveBeenCalled();session.dispose();
+});

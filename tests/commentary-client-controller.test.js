@@ -4,7 +4,7 @@ const tick=async()=>{for(let i=0;i<8;i++)await Promise.resolve();};
 function setup(){
  const ctx={roomId:'room',userId:'host',hostId:'host',game:{id:'game',events:[{id:'score',type:'score'}]},profileVersion:1,enabled:true,listenerMuted:false,paused:false,visible:true};
  let jobs=[],playerEvent,monotonicTime=1000;const lease={owner:'host',device:'phone',epoch:3,expiresAt:50000,serverNowMs:35000,remainingMs:15000};
- const request=vi.fn(async payload=>({result:payload.operation==='profile-read'?{version:1,capabilities:{providerMode:'synthetic',liveProviders:false}}:payload.operation==='jobs-read'?jobs:payload.operation==='playback-acquire'||payload.operation==='playback-heartbeat'?lease:payload.operation==='playback-claim'?{claimed:true,token:'claim'}:{accepted:true}}));
+ const request=vi.fn(async payload=>({result:payload.operation==='profile-read'?{version:1,capabilities:{providerMode:'synthetic',liveProviders:false}}:payload.operation==='jobs-read'?jobs:payload.operation==='playback-acquire'||payload.operation==='playback-heartbeat'?lease:payload.operation==='playback-claim'?{claimed:true,token:'claim'}:payload.operation==='playback-event'?{jobId:payload.jobId,epoch:payload.epoch,sequence:payload.sequence,status:payload.status}:{accepted:true}}));
  const player={play:vi.fn(async options=>{playerEvent=options.onEvent;}),stop:vi.fn(),renew:vi.fn()};
  const client=createCommentaryClient({request,player,deviceId:'phone',allowSyntheticPlayback:true,monotonicNow:()=>monotonicTime});
  client.update(ctx);
@@ -222,7 +222,7 @@ it('plays the newest waiting score and refreshes immediately after completion wi
 
 it('waits for the terminal receipt before acquiring the next line',async()=>{
  const f=setup(),original=f.request.getMockImplementation();let release;
- f.request.mockImplementation((payload,...rest)=>payload.operation==='playback-event'&&payload.status==='completed'?new Promise(resolve=>{release=()=>resolve({result:{accepted:true}});}):original(payload,...rest));
+ f.request.mockImplementation((payload,...rest)=>payload.operation==='playback-event'&&payload.status==='completed'?new Promise(resolve=>{release=()=>resolve({result:{jobId:payload.jobId,epoch:payload.epoch,sequence:payload.sequence,status:payload.status}});}):original(payload,...rest));
  await f.client.refresh();f.setJobs([f.job('first')]);await f.client.refresh();await tick();f.setJobs([f.job('first'),f.job('next')]);f.emit({jobId:'first',epoch:3,state:'started',sequence:1});f.emit({jobId:'first',epoch:3,state:'completed',sequence:2});for(let i=0;i<3;i++)await tick();expect(f.player.play).toHaveBeenCalledTimes(1);expect(release).toBeTypeOf('function');await f.client.refresh();expect(f.player.play).toHaveBeenCalledTimes(1);release();for(let i=0;i<4;i++)await tick();expect(f.player.play.mock.calls.at(-1)[0].claim.jobId).toBe('next');f.client.dispose();
 });
 
@@ -255,7 +255,7 @@ describe('write ahead during actual speech',()=>{
  const f=await speaking();let release;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='reaction-prepare'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true}});}):base(p));const game={...f.game,events:[...f.game.events,{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});await tick();f.client.update({...f.ctx,game,...patch});release();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.player.stop).toHaveBeenCalled();f.client.dispose();
  });
  it('updates feedback from the acknowledged real receipt without a competing jobs read',async()=>{
- const f=await speaking();const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='playback-event'?Promise.resolve({result:{jobId:f.job.id,epoch:3,status:p.status,firstExposureAt:1,heardBy:['host'],expectedAudience:['host']}}):base(p));
+ const f=await speaking();const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='playback-event'?Promise.resolve({result:{jobId:f.job.id,epoch:3,sequence:p.sequence,status:p.status,firstExposureAt:1,heardBy:['host'],expectedAudience:['host']}}):base(p));
  f.request.mockClear();f.first.onEvent({jobId:f.job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();expect(f.client.snapshot().captions.find(c=>c.id===f.job.id).feedbackBasis).toBe('playback');expect(f.request.mock.calls.some(([p])=>p.operation==='jobs-read')).toBe(false);f.client.dispose();
  });
  it('replaces a prepared target that is still waiting when an even newer score arrives',async()=>{
@@ -264,4 +264,91 @@ describe('write ahead during actual speech',()=>{
  game={...game,events:[...game.events,{id:'score-three',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();release();for(let i=0;i<6;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-three');f.client.dispose();
  });
 
+});
+
+
+it('drains the newest waiting reaction after a bound native request rejects without replaying the failed target',async()=>{
+ const f=setup();let rejectFirst;
+ f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();
+ const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ expect(first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease})).toBe(true);
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});await f.client.refresh();
+ expect(f.player.playReaction).toHaveBeenCalledOnce();rejectFirst(Error('native playback request failed after binding'));
+ for(let i=0;i<4;i++)await tick();
+ expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');
+ expect(f.player.playReaction.mock.calls.filter(([options])=>options.selector.eventId==='score-one')).toHaveLength(1);f.client.dispose();
+});
+
+
+it('starts preparation once when a score queued during connection reaches actual speech',async()=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ let game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});
+ game={...game,events:[...game.events,{id:'score-two',type:'score'}]};f.client.update({...f.ctx,game});await tick();
+ expect(f.request.mock.calls.some(([p])=>p.operation==='reaction-prepare')).toBe(false);
+ first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:2});await tick();
+ expect(f.request.mock.calls.filter(([p])=>p.operation==='reaction-prepare').map(([p])=>p.eventId)).toEqual(['score-two']);expect(f.player.playReaction).toHaveBeenCalledOnce();
+ first.onEvent({jobId:job.id,epoch:3,state:'completed',sequence:3});for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);f.client.dispose();
+});
+
+it('separates occupied queue time from residual preparation wait and the actual native request',async()=>{
+ const log=vi.spyOn(console,'info').mockImplementation(()=>{}),f=setup();
+ try{
+ f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
+ let release;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='reaction-prepare'?new Promise(resolve=>{release=()=>resolve({result:{prepared:true}});}):base(p));
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});await tick();f.advance(200);
+ first.onEvent({jobId:job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();
+ const records=()=>log.mock.calls.filter(([label])=>label==='[Commentary direct]').map(([,value])=>JSON.parse(value));
+ expect(records().filter(r=>r.stage==='request')).toHaveLength(1);expect(records().at(-1)).toEqual({stage:'dequeued',queueMs:200});
+ f.advance(300);release();for(let i=0;i<4;i++)await tick();expect(records().at(-1)).toEqual({stage:'request',queueMs:200,preparationWaitMs:300,sinceQueuedMs:500});
+ }finally{f.client.dispose();log.mockRestore();}
+});
+
+it('waits for native stop and a terminal failure receipt after a bound request rejects',async()=>{
+ const f=setup();let rejectFirst,releaseStop,releaseReceipt;
+ f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.player.stop.mockImplementation(()=>new Promise(resolve=>{releaseStop=resolve;}));f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});
+ const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='playback-event'&&p.status==='failed'?new Promise(resolve=>{releaseReceipt=()=>resolve({result:{jobId:p.jobId,epoch:p.epoch,sequence:p.sequence,status:p.status}});}):base(p));
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('native rejected'));
+ await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(releaseReceipt).toBeUndefined();releaseStop();await tick();expect(releaseReceipt).toBeTypeOf('function');expect(f.player.playReaction).toHaveBeenCalledOnce();
+ releaseReceipt();for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.request.mock.calls.filter(([p])=>p.operation==='playback-event').map(([p])=>p.status)).toEqual(['failed']);f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+
+it('does not open queued speech if native output cannot be stopped after a rejected bound request',async()=>{
+ const f=setup();let rejectFirst;
+ f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise((resolve,reject)=>{rejectFirst=reject;});});f.player.stop.mockRejectedValue(Error('native stop unavailable'));f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});rejectFirst(Error('native rejected'));
+ for(let i=0;i<4;i++)await tick();expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.client.snapshot()).toMatchObject({status:'caption-only',playing:null,error:'Voice unavailable. Scores are saved normally.'});expect(f.request.mock.calls.some(([p])=>p.operation==='playback-event')).toBe(false);f.player.stop.mockResolvedValue();f.client.dispose();
+});
+
+
+it.each(['rejected','not-accepted','wrong-job','wrong-epoch','wrong-sequence','wrong-status'])('does not authorize the next speech from a %s terminal receipt',async mode=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});first.onEvent({jobId:job.id,epoch:3,state:'started',sequence:1});await tick();
+ const base=f.request.getMockImplementation();f.request.mockImplementation(p=>{
+  if(p.operation!=='playback-event'||p.status!=='completed')return base(p);
+  if(mode==='rejected')return Promise.reject(Error('terminal receipt rejected'));
+  return Promise.resolve({result:{jobId:mode==='wrong-job'?'foreign':p.jobId,epoch:mode==='wrong-epoch'?9:p.epoch,sequence:mode==='wrong-sequence'?99:p.sequence,status:mode==='wrong-status'?'started':p.status,...(mode==='not-accepted'?{accepted:false}:{})}});
+ });
+ f.client.update({...f.ctx,game:{...game,events:[...game.events,{id:'score-two',type:'score'}]}});first.onEvent({jobId:job.id,epoch:3,state:'completed',sequence:2});for(let i=0;i<4;i++)await tick();
+ expect(f.player.playReaction).toHaveBeenCalledOnce();expect(f.client.snapshot()).toMatchObject({status:'caption-only',playing:null,error:'Commentary could not confirm playback. Keep playing; scores are saved.'});
+ // Explicit refresh may recover the untouched newest target; it never retries the consumed first score.
+ await f.client.refresh();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.eventId).toBe('score-two');f.client.dispose();
+});
+
+it('does not let a delayed old-scope terminal receipt block or mutate a new welcome',async()=>{
+ const f=setup();f.player.playReaction=vi.fn(options=>{f.reaction=options;return new Promise(()=>{});});f.ctx.directReaction=true;f.client.update(f.ctx);
+ const game={...f.ctx.game,events:[...f.ctx.game.events,{id:'score-one',type:'score'}]};f.client.update({...f.ctx,game});await f.client.refresh();const first=f.reaction,job={...f.job('bound-job','score-one'),status:'streaming'};
+ first.onBind({job,claim:{roomId:'room',jobId:job.id,deviceId:'phone',epoch:3,token:'claim'},lease:f.lease});
+ let rejectReceipt;const base=f.request.getMockImplementation();f.request.mockImplementation(p=>p.operation==='playback-event'?new Promise((resolve,reject)=>{rejectReceipt=reject;}):base(p));
+ first.onEvent({jobId:job.id,epoch:3,state:'failed',sequence:1});await tick();f.client.update({...f.ctx,game:{id:'new-game',events:[]}});
+ expect(f.client.allowGreeting({jobId:'new-welcome',gameId:'new-game',profileVersion:1})).toBe(true);await f.client.refresh();expect(f.player.playReaction).toHaveBeenCalledTimes(2);expect(f.reaction.selector.jobId).toBe('new-welcome');
+ const before=f.client.snapshot();rejectReceipt(Error('abandoned terminal receipt'));for(let i=0;i<4;i++)await tick();expect(f.client.snapshot()).toEqual(before);f.client.dispose();
 });

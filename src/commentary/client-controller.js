@@ -17,7 +17,7 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(run){run.cancelled=true;run.abort.abort();Promise.resolve(player.stop(reason)).catch(()=>{});run=null;}
   lease=null;publish({playing:null});
  }
- function invalidate(reason){generation++;abort.abort();abort=new AbortController();pending=null;desired=null;stop(reason);}
+ function invalidate(reason){generation++;abort.abort();abort=new AbortController();pending=null;desired=null;completionBarrier=null;stop(reason);}
  function update(next){
   if(disposed)return;
   const switched=scope(next)!==scope(context),profileChanged=next?.profileVersion!==context?.profileVersion;
@@ -40,6 +40,8 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(replaceWaiting)stop('superseded-pending-reaction');
   if(newest&&(run?.started||replaceWaiting)&&desired&&direct())prepareAhead(desired);
   if(desired&&changedTargets.includes(desired.eventId)){desired.superseded=true;desired=null;}
+  // Accepted updates must wake direct playback even when the session refresh has already pumped.
+  if(newest&&direct())void react();
  }
  function greetingAllowed(job){return !playedGreetingCommands.has(job?.sourceCommandId)&&(greetings.has(job?.id)||greetingCommands.has(job?.sourceCommandId));}
  function validCaptionJob(job){
@@ -68,16 +70,21 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
  const direct=()=>typeof player.playReaction==='function'&&context?.directReaction===true;
  async function react(){
   if(disposed||!direct()||!speakable()||run||completionBarrier||!desired)return;
-  const {queuedAt=monotonicNow(),preparation,superseded,...target}=desired;desired=null;const fence=generation;
-  console.info('[Commentary direct]',JSON.stringify({stage:'request',queueMs:Math.max(0,Math.round(monotonicNow()-queuedAt))}));
+  const {queuedAt=monotonicNow(),preparation,superseded,...target}=desired;desired=null;const fence=generation,dequeuedAt=monotonicNow(),queueMs=Math.max(0,Math.round(dequeuedAt-queuedAt));
+  console.info('[Commentary direct]',JSON.stringify({stage:'dequeued',queueMs}));
   const active={job:{id:'connecting',eventId:target.eventId,dependencyEventIds:target.eventId?[target.eventId]:[]},claim:{epoch:0},roomId:context.roomId,sequence:0,started:false,ended:false,cancelled:false,abort:new AbortController(),receipts:Promise.resolve(),awaitingPreparation:!!preparation};
   run=active;publish({status:'connecting',playing:null});
-  try{if(preparation)await preparation;if(fence!==generation||run!==active||active.abort.signal.aborted)return;active.awaitingPreparation=false;await player.playReaction({selector:{roomId:context.roomId,gameId:context.game.id,deviceId,profileVersion:context.profileVersion,...target},signal:active.abort.signal,onBind:binding=>{
+  try{if(preparation)await preparation;if(fence!==generation||run!==active||active.abort.signal.aborted)return;active.awaitingPreparation=false;console.info('[Commentary direct]',JSON.stringify({stage:'request',queueMs,preparationWaitMs:Math.max(0,Math.round(monotonicNow()-dequeuedAt)),sinceQueuedMs:Math.max(0,Math.round(monotonicNow()-queuedAt))}));await player.playReaction({selector:{roomId:context.roomId,gameId:context.game.id,deviceId,profileVersion:context.profileVersion,...target},signal:active.abort.signal,onBind:binding=>{
    if(fence!==generation||run!==active||active.abort.signal.aborted||!validCaptionJob(binding?.job)||target.eventId&&binding.job.eventId!==target.eventId||target.jobId&&binding.job.id!==target.jobId||target.sourceCommandId&&binding.job.sourceCommandId!==target.sourceCommandId||binding.claim?.jobId!==binding.job.id||binding.claim.roomId!==context.roomId||binding.claim.deviceId!==deviceId||binding.lease.owner!==context.userId||binding.lease.device!==deviceId||binding.lease.epoch!==binding.claim.epoch)return false;
    active.job=binding.job;active.claim=binding.claim;lease={...binding.lease,monotonicDeadline:binding.claim.monotonicDeadline};
    publish({playing:{jobId:active.job.id,caption:active.job.caption},status:'playing',captions:[...state.captions.filter(c=>c.id!==active.job.id),{...active.job}].slice(-20)});return true;
   },onEvent:event=>receive(active,event)});
-  }catch{if(fence===generation){if(run===active)stop('player-failed');publish({error:'Voice unavailable. Scores are saved normally.'});}}
+  }catch{if(fence===generation){if(run===active&&active.claim.epoch>0){
+   // A rejected bound request must release native output and settle its terminal receipt before the next claim.
+   try{await player.stop('player-failed');}catch{if(fence===generation){invalidate('player-failed');publish({status:'caption-only',error:'Voice unavailable. Scores are saved normally.'});}return;}
+   if(fence!==generation)return;
+   if(run===active)receive(active,{jobId:active.job.id,epoch:active.claim.epoch,state:'failed',sequence:active.sequence+1,reason:'native-request-failed',measurementBasis:'client-request-failure'});
+  }else if(run===active)stop('player-failed');publish({error:'Voice unavailable. Scores are saved normally.'});}}
   finally{if(run===active&&active.claim.epoch===0){run=null;publish({status:'ready',playing:null});void react();}}
  }
  let completionBarrier=null;
@@ -88,19 +95,21 @@ export function createCommentaryClient({request,player,deviceId,onChange=()=>{},
   if(current.ended||event.status==='started'&&current.started)return;
   if(event.status==='failed'||event.status==='interrupted')console.warn('[Commentary]',event.status,/^[a-zA-Z0-9_-]{1,80}$/.test(event.reason||'')?event.reason:'playback-stopped');
   current.sequence=event.sequence;
-  if(event.status==='started')current.started=true;
+  if(event.status==='started'){current.started=true;if(run===current&&direct()&&desired&&!desired.preparation)prepareAhead(desired);}
   if(terminal.has(event.status))current.ended=true;
+  const receiptGeneration=generation;
   const timing=playbackTiming(current.job,event);
   const payload={...(timing?{timing:{basis:timing.basis,elapsedMs:timing.elapsedMs,nativeStartupMs:timing.nativeStartupMs}}:{}),jobId:current.job.id,device:deviceId,epoch:current.claim.epoch,claimToken:current.claim.token,status:event.status,sequence:event.sequence};
   // Preserve real native evidence only. A host receipt never marks other people as having heard.
   current.receipts=current.receipts.then(()=>invoke('playback-event',payload,undefined,current.roomId)).then(receipt=>{
-   if(direct()&&terminal.has(receipt?.status)&&['completed','interrupted'].includes(receipt.status)&&receipt.jobId===current.job.id&&receipt.epoch===current.claim.epoch&&receipt.firstExposureAt!=null&&receipt.expectedAudience?.includes(context?.userId)&&context?.roomId===current.roomId){
+   if(direct()&&terminal.has(event.status)&&(receipt?.jobId!==current.job.id||receipt.epoch!==current.claim.epoch||receipt.sequence!==event.sequence||receipt.status!==event.status||receipt.accepted===false))throw Error('Terminal receipt was not acknowledged');
+   if(receiptGeneration===generation&&direct()&&terminal.has(receipt?.status)&&['completed','interrupted'].includes(receipt.status)&&receipt.jobId===current.job.id&&receipt.epoch===current.claim.epoch&&receipt.firstExposureAt!=null&&receipt.expectedAudience?.includes(context?.userId)&&context?.roomId===current.roomId){
     current.feedbackReady=true;const basis=receipt.heardBy?.includes(context.userId)?'playback':'caption';
     publish({captions:state.captions.map(c=>c.id===current.job.id?{...c,status:receipt.status,feedbackBasis:basis}:c)});
    }return receipt;
-  }).catch(()=>{});
+  }).catch(()=>{if(terminal.has(event.status))current.terminalReceiptFailed=true;});
   if(!current.cancelled&&run===current)publish({measurement:{jobId:current.job.id,status:event.status,measurementBasis:event.measurementBasis||'unknown',nativeElapsedMs:event.nativeElapsedMs??null}});
-  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;if(direct()){void react();if(!current.feedbackReady)return refresh({readCaptions:true});return;}return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
+  if(current.ended&&run===current){run=null;publish({playing:null,status:speakable()?'ready':'caption-only'});const receipt=current.receipts;completionBarrier=receipt;void Promise.all([receipt,pending]).then(()=>{if(completionBarrier===receipt)completionBarrier=null;if(receiptGeneration!==generation)return;if(current.terminalReceiptFailed){publish({status:'caption-only',error:'Commentary could not confirm playback. Keep playing; scores are saved.'});return;}if(direct()){void react();if(!current.feedbackReady)return refresh({readCaptions:true});return;}return refresh();}).catch(()=>{if(completionBarrier===receipt)completionBarrier=null;});}
  }
  async function refresh({profile:suppliedProfile,readCaptions=false}={}){
   if(direct()){
