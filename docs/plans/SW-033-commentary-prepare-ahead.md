@@ -21,3 +21,7 @@ Implementation and qualification pending.
 ## Development evidence
 
 119 focused endpoint/client/transport/native-adapter tests passed. Synthetic actual endpoint cold hosted first byte uses4conditional snapshots/4atomic batches; prepared handoff uses2/2, with no writer or outbox query during handoff. Historical permission rooms load in one bounded query with all source room revisions carried into the writer-claim SQL fence. No hearing inferred from preparation/download.32actual PostgreSQL checks passed, including write-ahead under an active speaker, no next voice reservation before terminal receipt and ready reuse without a second writer. Receipt-based feedback avoids a competing caption query on successful handoff. Full clean qualification, deployment and new Pixel identity pending.
+
+## Delivered qualification and rollout
+
+Cleanf3cbb59711a609fc015885c190a31d096fd48022:1,037tests passed/13optionalcamera skips/all configured builds/source consistency;32actual PostgreSQL checks; Android compile/38asset matches/private-key-pattern scan. Commentaryv9 deployed/canonical source readback matched/unsigned401; game-roomv9 unchanged, no migration. Pixel hardware verified; APKd193af38b6ebc0148c2380b85bb8f1409f8eb517d2e05d2e792be909579d499e installed-r/readback/launch verified, data preserved. No agent-triggered paid diagnostics. Exact source/hash/evidence and rollback in [release](../releases/SW-033-commentary-prepare-ahead.md). Post-change physical latency/humor acceptance remains owner test; operation-count reductions are not a live timing claim.
