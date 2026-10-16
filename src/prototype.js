@@ -10,13 +10,14 @@ import {queueLocalCommands} from './commentary/local-client.js';
 import {askGameCommentary,showWelcomeGate} from './ui/welcome-gate.js';
 import './ui/hosted-results.css';
 import {renderHostedResults} from './ui/hosted-results.js';
-import {renderTournamentBanner,renderTournamentStandings} from './ui/tournament.js';
+import {renderTournamentBanner,renderTournamentStandings,renderTournamentActions} from './ui/tournament.js';
 import {renderResumeEntry} from './multiplayer/session-cards.js';
 import { Capacitor } from '@capacitor/core';
 import { AutomaticCapture } from './dice/automatic-capture.js';
 import { celebration,celebrationMessage } from './game/celebrations.js';
 import {pulseAccepted,cancelPulse,refreshPulse} from './ui/pulse.js';
 import './ui/phone-scorecard.css';
+import {applyScorecardSize,saveScorecardSize,renderScorecardDisplay} from './ui/scorecard-display.js';
 import {renderPhoneScorecard,bindPhoneScorecard} from './ui/phone-scorecard.js';
 import { getDiceStatus, subscribeDiceStatus, subscribeDiceEvents } from './dice/live-status.js';
 import { BASE_KEYS, META } from './game/categories.js';
@@ -218,6 +219,8 @@ function declareYahtzee(face){
  }
 }
 function render(){
+ applyScorecardSize(root);
+ if(dialog.open&&dialog.dataset.tournamentMenu==='true')dialog.close();
  if(view==='welcome')return;
  if(view==='home'){showHome();return;}
  if(!game){newScreen();return;}
@@ -401,7 +404,7 @@ async function send(action,commandId){
  const acceptedAction={seat:base.activeSeat,...action};await persist(command(base,acceptedAction,{id:scoreCommandId}));
  if(localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes'){const mirrored=[...(base!==beforeLocal?[{commandId:startCommandId,action:{type:'start',seat:beforeLocal.activeSeat}}]:[]),{commandId:scoreCommandId,action:acceptedAction}];queueLocalCommands(game.id,mirrored);if(localVoice&&localVoiceGameId===game.id)void localVoice.flush();}
 }
-function openDialog(html){delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
+function openDialog(html){delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',landing='home'){
  view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
@@ -494,6 +497,9 @@ document.addEventListener('click',async e=>{
  try{
   if(a==='home')await returnHome();
   if(a==='game-menu')openNavigation();
+  if(a==='scorecard-display')openDialog(renderScorecardDisplay());
+  if(a==='bonus-guide')openDialog('<h2>Your upper bonus</h2><p>Reach 63 points across Aces through Sixes to earn +35.</p><p>Three of each makes 63. Bigger scores in one category can make up for smaller scores in another.</p><p>Pace compares filled boxes with three matching dice each. Still possible means the remaining boxes could theoretically reach 63; it is not a prediction of your next rolls.</p><button class="all-scores" data-action="close">Got it</button>');
+  if(a==='tournament-menu'&&onlineRoom?.tournament){openDialog(renderTournamentActions(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));dialog.dataset.tournamentMenu='true';dialog.classList.add('tournament-drawer');root.querySelector('[data-action="tournament-menu"]')?.setAttribute('aria-expanded','true');}
   if(a==='global-commentary')openGlobalCommentary();
   if(a==='timing-log')showTimingLog();
   if(a==='home-solo')newScreen({players:1});
@@ -558,6 +564,7 @@ document.addEventListener('click',async e=>{
   }
   if(a==='close'){cancelBonus();dialog.close();}
   if(a==='analytics')analytics();
+  if(['tournament-standings','tournament-exit','tournament-invitation','tournament-pause','tournament-resume'].includes(a))dialog.close();
   if(a==='tournament-standings'){
    const {onlineStandings}=await import('./multiplayer/ui.js');const standings=await onlineStandings();
    openDialog(`<h2>${esc(onlineRoom.tournament.name)}</h2>${renderTournamentStandings(standings,{final:standings.final})}`);
@@ -612,3 +619,6 @@ initialize();
 
 
 dialog.addEventListener('close',()=>hostedCommentary?.refreshSurface?.());
+
+document.addEventListener('change',event=>{if(event.target.matches('[name="scorecard-size"]')){try{saveScorecardSize(event.target.value);applyScorecardSize(root);}catch{notice('Could not save display size. Check device storage.');}}});
+dialog.addEventListener('close',()=>{dialog.classList.remove('tournament-drawer');if(dialog.dataset.tournamentMenu==='true'){delete dialog.dataset.tournamentMenu;const trigger=root.querySelector('[data-action="tournament-menu"]');trigger?.setAttribute('aria-expanded','false');trigger?.focus();}});

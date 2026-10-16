@@ -70,8 +70,10 @@ var BASE_KEYS = [...UPPER_KEYS, "threeKind", "fourKind", "fullHouse", "smallStra
 function upperSubtotal(values) {
   return UPPER_KEYS.reduce((s, k) => s + (values[k] ?? 0), 0);
 }
+var UPPER_BONUS_THRESHOLD = 63;
+var UPPER_BONUS_POINTS = 35;
 function upperBonus(subtotal) {
-  return subtotal >= 63 ? 35 : 0;
+  return subtotal >= UPPER_BONUS_THRESHOLD ? UPPER_BONUS_POINTS : 0;
 }
 function lowerTotal(values) {
   return LOWER_KEYS.reduce((s, k) => s + (values[k] ?? 0), 0);

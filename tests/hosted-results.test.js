@@ -61,4 +61,13 @@ describe('hosted finished-game results', () => {
   delete room.game.sheets[1].aces;
   expect(hostedResultHighlights(room.game).some(item => item.title === 'Fewest scratches')).toBe(false);
  });
+ it('puts next-game readiness before final scores, highlights and tournament standings',()=>{
+  const room=fixture();room.tournament={status:'active'};
+  const html=renderHostedResults({room,userId:'account-a'});
+  const ready=html.indexOf('data-action="rematch-ready"');
+  expect(ready).toBeGreaterThan(0);
+  expect(ready).toBeLessThan(html.indexOf('hosted-final-scores'));
+  expect(ready).toBeLessThan(html.indexOf('hosted-highlights'));
+  expect(ready).toBeLessThan(html.indexOf('Tournament standings'));
+ });
 });

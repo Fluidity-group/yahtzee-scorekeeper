@@ -19,7 +19,7 @@ vi.mock('qrcode',()=>({default:{toCanvas:vi.fn(async()=>{})}}));
 import QRCode from 'qrcode';
 import {requestRoom} from '../src/multiplayer/client.js';
 import {onlineInvitation,leaveOnline} from '../src/multiplayer/ui.js';
-const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector(selector.includes('tournament-')?'[data-action=tournament-menu]':'[data-action=game-menu]')?.click();const button=document.querySelector(selector);expect(button).not.toBeNull();button.click();};
 const action=name=>{if(!document.querySelector('[data-action="'+name+'"]'))document.querySelector('[data-action=game-menu]')?.click();click('[data-action="'+name+'"]');};
 const mp=name=>click(`[data-mp="${name}"]`);
 beforeAll(async()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());});

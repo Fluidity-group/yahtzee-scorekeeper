@@ -51,7 +51,7 @@ describe('smartphone scorecard adapter',()=>{
   expect(card.style.getPropertyValue('--peer-offset')).toBe('6');
   expect(root.querySelector('[data-phone-peer-position]').textContent).toBe('7/7');
   expect(changed).toHaveBeenCalledTimes(6);
-  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(16);
+  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(19);
   expect([...root.querySelectorAll('.phone-peer-track')].every(track=>!track.hasAttribute('style'))).toBe(true);
   root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');
   cleanup();root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');
@@ -63,7 +63,7 @@ describe('smartphone scorecard adapter',()=>{
   const scoreCell=vi.fn(),bonusCell=vi.fn();mount(game,{viewerSeat:null,scoreCell,bonusCell});
   expect(document.querySelector('.phone-own-heading').dataset.playerSeat).toBe('3');
   expect(scoreCell).not.toHaveBeenCalled();expect(bonusCell).not.toHaveBeenCalled();
-  expect(document.querySelector('[data-action]')).toBeNull();
+  expect(document.querySelector('[data-action=choose],[data-action=edit],[data-action=another-yahtzee]')).toBeNull();
   expect(document.querySelector('.phone-scorecard-caption').textContent).toContain('Watching the table');
  });
  it('hides derived bonus aggregates and requests a quiet actionable own bonus callback',()=>{

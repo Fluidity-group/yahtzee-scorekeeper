@@ -14,13 +14,15 @@ vi.mock('../src/multiplayer/ui.js',()=>({
 }));
 import {openOnline,setOnlineReady,setTournamentPaused,onlineStandings} from '../src/multiplayer/ui.js';
 import {saveCore} from '../src/core-store.js';
-const click=selector=>{if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click();expect(document.querySelector(selector)).not.toBeNull();document.querySelector(selector).click();};
+const click=selector=>{if(!document.querySelector(selector))document.querySelector(selector.includes('tournament-')?'[data-action=tournament-menu]':'[data-action=game-menu]')?.click();expect(document.querySelector(selector)).not.toBeNull();document.querySelector(selector).click();};
 function complete(){
  const time='2026-10-13T18:00:00.000Z';let room=startRoom(joinRoom(createRoom({id:'original-game',code:'ABCDEFGH',userId:'host',name:'Dan',time}),{userId:'guest',name:'Amber',time}),{userId:'host',time});
  for(let n=0;room.game.status!=='finished';n++){const seat=room.game.activeSeat,category=BASE_KEYS.find(k=>room.game.sheets[seat][k]===undefined);room=playRoom(room,{userId:room.members[seat].userId,expectedRevision:room.revision,commandId:`dom-score-${n}`,action:{type:'score',category,value:seat===1&&category==='largeStraight'?40:0},time});}
  return {...room,capabilities:{rematch:true,history:true},nextStarterId:'guest'};
 }
 beforeAll(async()=>{
+ // Readiness/menu tests use an in-memory room; live commentary has its own suite.
+ vi.stubEnv('VITE_COMMENTARY_URL','');
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 beforeEach(async()=>{document.querySelector('#coreDialog')?.close();vi.clearAllMocks();mock.room=complete();mock.userId='host';click('[data-action=online]');await vi.waitFor(()=>{expect(openOnline).toHaveBeenCalledTimes(1);expect(document.querySelector('[data-action=rematch-ready]')).not.toBeNull();});});
@@ -42,9 +44,9 @@ it('prevents readiness while disconnected and communicates capability absence',(
 });
 it('keeps the hosted table when pausing/resuming, locks corrections, and opens accepted standings',async()=>{
  mock.room={...mock.room,tournament:{name:'Weekend',gameCount:3,playerCount:2,status:'playing'},capabilities:{...mock.room.capabilities,tournaments:true}};mock.callbacks.game(mock.room,'host',true,true);
- click('[data-action="tournament-pause"]');await vi.waitFor(()=>expect(document.querySelector('[data-action="tournament-resume"]')).not.toBeNull());
+ click('[data-action="tournament-pause"]');await vi.waitFor(()=>expect(document.querySelector('.turn-indicator').textContent).toBe('Tournament paused'));
  expect(setTournamentPaused).toHaveBeenCalledWith(true);expect(document.querySelector('[data-action="edit"]').disabled).toBe(true);expect(document.querySelector('[data-action="rematch-ready"]').disabled).toBe(true);
- click('[data-action="tournament-resume"]');await vi.waitFor(()=>expect(document.querySelector('[data-action="tournament-pause"]')).not.toBeNull());expect(setTournamentPaused).toHaveBeenCalledWith(false);expect(document.querySelector('[data-action="edit"]').disabled).toBe(false);
+ click('[data-action="tournament-resume"]');await vi.waitFor(()=>expect(document.querySelector('.turn-indicator').textContent).not.toBe('Tournament paused'));expect(setTournamentPaused).toHaveBeenCalledWith(false);expect(document.querySelector('[data-action="edit"]').disabled).toBe(false);
  click('[data-action="tournament-standings"]');await vi.waitFor(()=>expect(onlineStandings).toHaveBeenCalledOnce());await vi.waitFor(()=>expect(document.querySelectorAll('.tournament-ranking')).toHaveLength(2));expect(openOnline).toHaveBeenCalledTimes(1);
 });
 it('exits a paused tournament to the saved list without scoring, restarting or clearing its game',async()=>{

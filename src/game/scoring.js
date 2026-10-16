@@ -17,8 +17,10 @@ export function upperSubtotal(values) {
   return UPPER_KEYS.reduce((s, k) => s + (values[k] ?? 0), 0);
 }
 
+export const UPPER_BONUS_THRESHOLD = 63;
+export const UPPER_BONUS_POINTS = 35;
 export function upperBonus(subtotal) {
-  return subtotal >= 63 ? 35 : 0;
+  return subtotal >= UPPER_BONUS_THRESHOLD ? UPPER_BONUS_POINTS : 0;
 }
 
 export function lowerTotal(values) {

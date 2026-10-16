@@ -1,5 +1,7 @@
 # Yahtzee Scorekeeper — commercial prototype specification
 
+16 October2026 SW039 approved current-app UX: primary tournament continuation before statistics; compact tournament context/actions submenu; device-relative saved text sizes; clear upper/lower sections and per-player factual bonus progress. Implemented review candidate; see release record for build/deployment/device evidence. SW038 clubhouse redesign remains on hold.
+
 Status: draft for review, 16 September 2026. Based on the product decisions in this Codex conversation and inspection of the existing repository.
 
 ## 1. Goal and scope

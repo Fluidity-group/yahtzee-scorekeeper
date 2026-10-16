@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {it,expect} from 'vitest';
-import {renderTournamentBanner,renderTournamentStandings} from '../src/ui/tournament.js';
+import {renderTournamentBanner,renderTournamentStandings,renderTournamentActions} from '../src/ui/tournament.js';
 import {renderHostedResults} from '../src/ui/hosted-results.js';
 import {createCoreGame} from '../src/game/core.js';
 const data={completedGames:3,final:true,standings:[{userId:'a',name:'Dan',points:800,wins:1,games:3},{userId:'b',name:'Amber',points:700,wins:2,games:3}]};
@@ -18,9 +18,9 @@ it('marks all tied leaders and does not award a leader before any completed game
 });
 it('renders pause controls only for the host, and disables them while reconnecting',()=>{
  const room={hostId:'a',gameSequence:2,capabilities:{tournaments:true},tournament:{name:'<Fun>',gameCount:3,playerCount:2,status:'paused'}};
- document.body.innerHTML=renderTournamentBanner(room,'a',{connected:false});
+ document.body.innerHTML=renderTournamentBanner(room,'a',{connected:false})+renderTournamentActions(room,'a',{connected:false});
  expect(document.querySelector('[data-action="tournament-resume"]').disabled).toBe(true);expect(document.body.textContent).toContain('Game 2 of 3');expect(document.body.textContent).toContain('<Fun>');expect(document.querySelector('fun')).toBeNull();
- document.body.innerHTML=renderTournamentBanner(room,'b');expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();expect(document.body.textContent).toContain('progress is saved');
+ document.body.innerHTML=renderTournamentBanner(room,'b')+renderTournamentActions(room,'b');expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();expect(document.body.textContent).toContain('progress is saved');
 });
 it('shows final tournament results with no rematch or next-starter promise',()=>{
  const game=createCoreGame({id:'g',names:['Dan','Amber']});game.status='finished';

@@ -1,5 +1,7 @@
 # Dice Clubhouse project memory
 
+16 October SW039 approved and implemented for review. Device text presets are local display preferences. Upper progress derives from accepted sheets, zero is filled, three-per-face is a benchmark and reachability is only a theoretical ceiling. Suppress all derived aggregates when totals are hidden. No new game authority, rules, provider behavior or SW038 visual direction change. Deployment needs the separate approved-plan gate.
+
 SW036 durable commentary contracts: Undo may revoke an existing completed receipt's factual validity after its lease expires only when all other receipt fields stay identical; new/advanced hearing still needs a live fenced lease. Direct accepted events must wake playback independently of a joining session refresh. A score arriving during connection starts text preparation at actual native speech. Next output waits for confirmed native stop and exact terminal receipt; uncertain native stop interlocks that controller until recreation, without blocking scoring. Text preparation is implemented; true ahead-of-time audio requires separate synthesis authority/private TTL storage, never an early next-speaker claim. Current deployment/device evidence belongs in status/release records, not this intent memory.
 
 Maintained 15 October 2026. Durable context and routing, not live device state. `status.md`, project controls and exact task/release records own evidence. Update this file when intent or contracts change; keep proposed ideas separate from accepted requirements.

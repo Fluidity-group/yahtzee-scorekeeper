@@ -21,6 +21,15 @@ async function newTable(hidden=false){
  await vi.waitFor(()=>expect(document.querySelector('.phone-own-heading .player-name')?.textContent).toBe('Ann'));
 }
 describe('production phone scorecard integration',()=>{
+ it('changes and retains device text size without changing the current game',async()=>{
+  await newTable();const before=JSON.stringify(stored.games);
+  action('scorecard-display');const radio=document.querySelector('input[value="large"][name="scorecard-size"]');
+  radio.checked=true;radio.dispatchEvent(new Event('change',{bubbles:true}));
+  expect(document.querySelector('#coreApp').dataset.scorecardSize).toBe('large');
+  action('close');action('scorecard-display');
+  expect(document.querySelector('input[name="scorecard-size"]:checked').value).toBe('large');
+  expect(JSON.stringify(stored.games)).toBe(before);action('close');
+ });
  it('opens the existing modal and keeps original named peer seat when local turns advance',async()=>{
   await newTable();click('[data-action="choose"][data-key="aces"]');
   expect(document.querySelector('#coreDialog').open).toBe(true);

@@ -1,5 +1,7 @@
 # Software project control
 
+16 October SW039 current-app tournament usability implemented: PT01–04 covered, responsive/browser and functional checks, APK/web candidates prepared. No live deployment; owner review and Android/iPhone acceptance remain. See [release](../releases/SW-039-tournament-scorecard-usability.md).
+
 15 October SW038 visual review: premium standalone home/scoring prototype with original art, fictional Rachel presentation/recorded welcome, centered phone entry, small named opponents, animations/sound/reduced-motion/Undo. Local browser/UI/static checks passed; no production source/runtime/records change or engine migration. Owner visual/physical judgment remains open. [Play](http://127.0.0.1:8482/reviews/sw038/), [record](../plans/SW-038-premium-playable-visual-prototype.md).
 
 15 October SW037 data reset complete: owner explicitly approved17shared tables/19cloud games plus history/commentary. Cloud locked transaction and separate readback verify0game records; accounts/profiles/allsettings/limits/accounting preserved. Pixel19local games/mappings/queues already removed with post-restart0counts and retained sign-in/defaults. Earlier automatic-review rejection resolved by fresh owner approval. Software/APK unchanged. [Record](../plans/SW-037-test-game-reset.md).

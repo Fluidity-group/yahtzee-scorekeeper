@@ -11,12 +11,14 @@ export function renderTournamentStandings(data, { final = false } = {}) {
  return `<div class="tournament-standings"><p class="core-muted">${data.completedGames} completed ${data.completedGames === 1 ? 'game' : 'games'} · ${final ? 'Final standings' : 'Completed games only'}</p><div class="tournament-boards">${table('points','Total points')}${table('wins','Games won')}</div><p class="core-muted">Standings follow your account, even when your player name changes. Tied game winners each earn a win.</p></div>`;
 }
 
-export function renderTournamentBanner(room, userId, { connected = true, busy = false } = {}) {
- const tournament = room?.tournament;
- if (!tournament) return '';
- const paused = tournament.status === 'paused', final = tournament.status === 'completed';
- const supported = room.capabilities?.tournaments === true;
- const host = room.hostId === userId;
- const member=room.members?.some(player=>player.userId===userId);
- return `<section class="tournament-banner" aria-label="Tournament"><div><strong>${esc(tournament.name)}</strong><span>Game ${room.gameSequence ?? 1} of ${tournament.gameCount} · ${tournament.playerCount} players${paused ? ' · Paused' : final ? ' · Complete' : ''}</span></div><div class="tournament-actions"><button class="hbtn" data-action="tournament-standings">Standings</button>${host && !final && supported ? `<button class="hbtn" data-action="tournament-${paused ? 'resume' : 'pause'}"${!connected || busy ? ' disabled' : ''}>${paused ? 'Resume tournament' : 'Pause tournament'}</button>` : ''}${member?'<button class="hbtn" data-action="tournament-invitation">Invitation · QR &amp; link</button>':''}<button class="hbtn" data-action="tournament-exit"${busy?' disabled':''}>Exit to saved games</button></div>${paused ? `<p role="status">Your progress is saved. ${host?'Resume when everyone is back.':'Sign in with the same account and return via Saved games &amp; tournaments or the invitation link. The host resumes; play continues at the current turn.'}</p>` : ''}</section>`;
+export function renderTournamentActions(room, userId, {connected=true,busy=false}={}) {
+ const tournament=room?.tournament;if(!tournament)return '';
+ const paused=tournament.status==='paused',final=tournament.status==='completed';
+ const host=room.hostId===userId,member=room.members?.some(player=>player.userId===userId);
+ return `<h2>Tournament actions</h2><p class="core-muted">${esc(tournament.name)}</p><div class="tournament-actions"><button class="hbtn" data-action="tournament-standings">Standings</button>${host&&!final&&room.capabilities?.tournaments===true?`<button class="hbtn" data-action="tournament-${paused?'resume':'pause'}"${!connected||busy?' disabled':''}>${paused?'Resume tournament':'Pause tournament'}</button>`:''}${member?'<button class="hbtn" data-action="tournament-invitation">Invitation · QR &amp; link</button>':''}<button class="hbtn" data-action="tournament-exit"${busy?' disabled':''}>Exit to saved games</button></div>`;
+}
+export function renderTournamentBanner(room,userId,{connected=true,busy=false}={}) {
+ const tournament=room?.tournament;if(!tournament)return '';
+ const paused=tournament.status==='paused',final=tournament.status==='completed',host=room.hostId===userId;
+ return `<section class="tournament-banner" aria-label="Tournament"><div class="tournament-compact-heading"><div><strong>${esc(tournament.name)}</strong><span>Game ${room.gameSequence??1} of ${tournament.gameCount} · ${tournament.playerCount} players${paused?' · Paused':final?' · Complete':''}</span></div><button class="hbtn" data-action="tournament-menu" aria-label="Tournament actions" aria-haspopup="dialog" aria-expanded="false">⋯</button></div>${paused?`<p role="status">Tournament paused. Your progress is saved. ${host?'Resume from Tournament actions.':'The host resumes when everyone is back.'}</p>`:!connected?'<p role="status">Reconnecting. Wait for the table to sync.</p>':''}</section>`;
 }

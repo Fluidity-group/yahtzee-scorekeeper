@@ -29,3 +29,48 @@
 #coreApp .phone-scorecard .phone-peer-slot.turn-column .player-name{color:var(--club-accent);}
 @media(min-width:600px){.phone-category-col{width:35%;}.phone-own-col{width:100px;}#coreApp.playing .phone-scorecard{--peer-width:80px;}}
 .phone-peer-window{touch-action:pan-y;}
+/* SW039: use the full comparison column rather than a narrow fixed-width tile. */
+#coreApp{--score-label:1rem;--score-number:1.7rem;--peer-number:1.2rem;--score-meta:.75rem;}
+#coreApp[data-scorecard-size=compact]{--score-label:.9rem;--score-number:1.45rem;--peer-number:1.05rem;--score-meta:.7rem;}
+#coreApp[data-scorecard-size=large]{--score-label:1.125rem;--score-number:1.95rem;--peer-number:1.4rem;--score-meta:.85rem;}
+.phone-category-col{width:38%;}.phone-own-col{width:36%;}.phone-comparison-col{width:26%;}
+.phone-peer-track{width:100%;transform:translateX(calc(var(--peer-offset) * -100%));}
+.phone-peer-slot{flex:0 0 100%;width:100%;min-width:0;}
+.phone-peer-slot>span[data-score-seat]{display:block;width:100%;}
+#coreApp .phone-score-table th:first-child{font-size:var(--score-label);line-height:1.25;}
+#coreApp .phone-scorecard .player-name{font-size:var(--score-label);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.2;}
+#coreApp .phone-scorecard .phone-peer-headings strong{font-size:var(--peer-number);}
+#coreApp .phone-scorecard .phone-peer-headings small{font-size:var(--score-meta);white-space:normal;line-height:1.35;}
+#coreApp .phone-scorecard .phone-own-heading strong{font-size:calc(var(--score-number) * 1.15);}
+#coreApp .phone-scorecard .phone-own-heading small{font-size:var(--score-meta);line-height:1.35;}
+#coreApp .phone-scorecard .phone-peer-score{font-size:var(--peer-number);min-height:44px;line-height:44px;}
+#coreApp .phone-scorecard .phone-peer-score.score-placeholder{font-size:var(--peer-number);}
+#coreApp .phone-score-table td>button,#coreApp .phone-score-table td>.recorded-score{font-size:var(--score-number);min-height:48px;}
+#coreApp .phone-score-table th,#coreApp .phone-score-table td{height:auto;min-height:52px;}
+#coreApp .phone-score-table thead th{height:auto;padding-top:10px;padding-bottom:10px;vertical-align:top;}
+.phone-peer-headings .phone-peer-slot{min-height:0;padding-top:0;}
+.phone-scorecard-caption{font-size:.9rem;min-height:48px;flex-wrap:wrap;}
+.scorecard-display-button,.bonus-guide{min-width:44px;min-height:44px;background:transparent;color:var(--club-accent);border:1px solid var(--club-line);border-radius:10px;font:inherit;cursor:pointer;}
+.scorecard-display-button{margin-left:auto;}
+#coreApp .phone-score-table .score-section th{font-size:.85rem;letter-spacing:.03em;color:var(--club-accent);font-weight:650;background:var(--club-panel);}
+.score-section td{background:var(--club-panel)!important;box-shadow:none!important;}
+#coreApp .phone-score-table .score-section th{padding:6px 8px;}
+.bonus-guide{vertical-align:middle;}
+.upper-progress{display:grid;gap:4px;text-align:center;padding:6px 2px;font-variant-numeric:tabular-nums;min-width:0;}
+.upper-progress strong{font-size:var(--peer-number);}.upper-progress strong small{font-size:.75rem;color:var(--club-muted);}
+.upper-progress progress{display:block;width:100%;height:8px;accent-color:var(--club-accent);}
+.upper-progress span,.upper-progress b,.upper-progress>small,.bonus-hidden{font-size:var(--score-meta);line-height:1.3;overflow-wrap:anywhere;}
+.upper-progress b{font-weight:650;color:var(--club-accent);}.upper-progress.unreachable b{color:var(--club-warm);}
+.upper-progress>small{color:var(--club-muted);}
+.bonus-progress-row .phone-peer-slot{align-items:stretch;}
+#coreApp .phone-score-table .summary-row td{font-size:var(--peer-number);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+#coreApp .phone-score-table .summary-row th{font-size:var(--score-meta);}
+.grand-total-row{font-weight:700;border-top:2px solid var(--club-accent);}
+#coreApp .phone-score-table .score-section th{white-space:normal;}
+#coreApp .phone-score-table .score-section .bonus-guide{display:inline-block;width:44px;min-width:44px;min-height:44px;margin-left:10px;padding:0;background:transparent;vertical-align:middle;}
+#coreApp.playing .compact-game>.phone-scorecard{flex:1 1 0;min-height:240px;}
+.scorecard-size-options{border:1px solid var(--club-line);border-radius:12px;padding:12px;}
+.core-dialog .scorecard-size-options label{display:flex;align-items:center;gap:12px;min-height:48px;font-size:1rem;}
+.core-dialog .scorecard-size-options input{width:22px;min-height:22px;margin:0;}
+body:has(dialog[open]){overflow:hidden;}
+@media(min-width:600px){.phone-category-col{width:38%;}.phone-own-col{width:36%;}}
