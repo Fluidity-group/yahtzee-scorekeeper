@@ -85,6 +85,6 @@ describe('rematch HTTP concurrency and persistence',()=>{
   expect((await h.call(host,{operation:'command',code:h.initial.code,gameId:h.initial.game.id,commandId:'protected-history',expectedRevision:h.initial.revision,action:{type:'correct-score',target:h.initial.game.events.find(e=>e.type==='score').id,value:0}})).status).toBe(503);
  });
  it('history exposes full snapshots only to the existing roster',async()=>{
-  const h=harness();await h.call(host,h.body(host));await h.call(guest,h.body(guest));const response=await h.call(guest,{operation:'history',code:h.initial.code});expect(response.games).toEqual([h.initial.game]);expect((await h.call('outsider',{operation:'history',code:h.initial.code})).status).toBe(403);
+  const h=harness();await h.call(host,h.body(host));await h.call(guest,h.body(guest));const response=await h.call(guest,{operation:'history',code:h.initial.code});expect(response.games).toEqual([{...h.initial.game,sequence:1}]);expect((await h.call('outsider',{operation:'history',code:h.initial.code})).status).toBe(403);
  });
 });

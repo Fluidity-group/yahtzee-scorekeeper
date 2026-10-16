@@ -9,6 +9,9 @@ import {markScoreSubmitted,readPlaybackTimings} from './commentary/latency.js';
 import {queueLocalCommands} from './commentary/local-client.js';
 import {askGameCommentary,showWelcomeGate} from './ui/welcome-gate.js';
 import './ui/hosted-results.css';
+import './ui/tournament-insights.css';
+import {renderTournamentInsights,bindTournamentInsights} from './ui/tournament-insights.js';
+let insightsCleanup=()=>{};
 import {renderHostedResults} from './ui/hosted-results.js';
 import {renderTournamentBanner,renderTournamentStandings,renderTournamentActions} from './ui/tournament.js';
 import {renderResumeEntry} from './multiplayer/session-cards.js';
@@ -87,11 +90,11 @@ function ownUndoCandidate(){
 }
 function undoPanel(){
  const candidate=ownUndoCandidate();if(!candidate)return '';
- return `<section class="game-bottom-actions" aria-label="Score actions"><button class="all-scores" data-action="undo-last-score"${busy||tournamentPaused()||onlineRoom&&!onlineConnected?' disabled':''}>Undo last score</button></section>`;
+ return `<section class="game-bottom-actions" aria-label="Score actions"><button class="all-scores" data-action="undo-last-score"${busy||tournamentPaused()||onlineRoom&&!onlineConnected?' disabled':''}>Undo last turn</button></section>`;
 }
 function confirmUndoScore(){
  const candidate=ownUndoCandidate();if(!candidate||tournamentPaused()||onlineRoom&&!onlineConnected)throw Error('This score cannot be undone now.');
- openDialog(`<h2>Undo last score?</h2><p class="core-muted">Remove ${game.sheets[candidate.seat][candidate.category]} points from ${esc(game.players[candidate.seat].name)}’s ${esc(META[candidate.category].name)}. This reopens the category and returns the turn to ${esc(game.players[candidate.seat].name)} so they can choose their score again.</p><button class="bigbtn score core-primary" data-action="confirm-undo-score" data-target="${esc(candidate.id)}" data-seat="${candidate.seat}" data-game="${esc(game.id)}" data-revision="${game.revision}">Undo score · return turn</button><button class="all-scores" data-action="close">Keep the score</button>`);
+ openDialog(`<h2>Undo last turn?</h2><p class="core-muted">${candidate.type==='score'?`Reopen ${esc(META[candidate.category].name)} and remove its score and attached bonus.`:candidate.type==='bonus'?`Remove the ${candidate.value}-point bonus and restart this turn.`:'Restart the last final Yahtzee attempt and reverse its bonus, if any.'} Return the turn to ${esc(game.players[candidate.seat].name)}. Any following unscored dice readings are cancelled; history is retained. A fresh roll is needed for connected dice.</p><button class="bigbtn score core-primary" data-action="confirm-undo-score" data-target="${esc(candidate.id)}" data-seat="${candidate.seat}" data-game="${esc(game.id)}" data-revision="${game.revision}">Undo turn · return turn</button><button class="all-scores" data-action="close">Keep the score</button>`);
 }
 let theme='dark';try{theme=localStorage.getItem('yz_theme')==='light'?'light':'dark';}catch{}
 const descriptions={
@@ -173,7 +176,7 @@ function scoreCell(key, seat) {
  const attrs=`data-score-key="${key}" data-score-seat="${seat}"`;
  if(value!==undefined){
   const label=`${name} ${category}: ${value===0?'scratched, zero points':`${value} points`}`;
-  const content=value===0?'<span aria-hidden="true">×</span>':value;
+  const content=value===0?'<span class="scratch-value" aria-hidden="true">0<small>SCRATCH</small></span>':value;
   const classes=`recorded-score ${value===0?'scratched-score':''}`;
   return `<td ${attrs}>${onlineRoom&&!ownsSeat(seat)?`<span class="${classes}" aria-label="${label}">${content}</span>`:`<button class="${classes}" data-action="edit" data-key="${key}" data-seat="${seat}" aria-label="Edit ${label}">${content}</button>`}</td>`;
  }
@@ -404,7 +407,7 @@ async function send(action,commandId){
  const acceptedAction={seat:base.activeSeat,...action};await persist(command(base,acceptedAction,{id:scoreCommandId}));
  if(localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes'){const mirrored=[...(base!==beforeLocal?[{commandId:startCommandId,action:{type:'start',seat:beforeLocal.activeSeat}}]:[]),{commandId:scoreCommandId,action:acceptedAction}];queueLocalCommands(game.id,mirrored);if(localVoice&&localVoiceGameId===game.id)void localVoice.flush();}
 }
-function openDialog(html){delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
+function openDialog(html){insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',landing='home'){
  view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
@@ -478,7 +481,20 @@ async function showHistory(){
  if(onlineRoom){const {onlineHistory}=await import('./multiplayer/ui.js');const all=await onlineHistory();openDialog(`<h2>This table’s games</h2><p class="core-muted">Each game keeps its players, scores and scoring order. Export includes their complete accepted histories.</p>${all.map(g=>`<article class="history-row"><strong>${esc(g.rules.name)} · ${esc(g.status)}</strong><span>${esc(g.players.map(p=>p.name).join(' · '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${g.hideTotals&&g.status!=='finished'?'Totals hidden':results(g).totals.join(' / ')}</small></article>`).join('')}`);return;}
  const all=await listCore();openDialog(`<h2>Game history</h2><p class="core-muted">Modes and solo results are kept separate. Select a game to view or resume.</p>${all.length?all.map(g=>`<button class="history-row" data-action="load" data-id="${esc(g.id)}"><strong>${esc(g.rules.name)} · ${g.players.length===1?'Solo':`${g.players.length} players`}</strong><span>${esc(g.players.map(p=>p.name).join(', '))}</span><small>${esc(g.startedAt.slice(0,10))} · ${g.status} · ${g.hideTotals&&g.status!=='finished'?'Totals hidden':results(g).totals.join(' / ')}</small></button>`).join(''):'<p>No new-mode games saved yet.</p>'}`);
 }
-function analytics(){openDialog(`<h2>Roll insights</h2><p class="core-muted">${esc(game.rules.name)} · This game only. Camera, GoDice, simulated and corrected rolls retain their source in the exported history. Missing manual rolls are not counted as failed combinations.</p>${game.players.map((p,i)=>{const a=rollAnalytics(game,i);return `<h3>${esc(p.name)}</h3><p>${a.recordedRolls} recorded rolls · ${a.corrected} corrected</p>${a.recordedRolls?`<table><thead><tr><th>Combination</th><th>Rolls</th><th>Turns</th></tr></thead><tbody>${Object.keys({threeKind:0,fourKind:0,fullHouse:0,smallStraight:0,largeStraight:0,yahtzee:0}).map(k=>`<tr><td>${META[k].name}</td><td>${a.counts[k]||0}</td><td>${a.turns[k]||0}</td></tr>`).join('')}</tbody></table>`:'<p class="core-muted">No dice-level data recorded.</p>'}`;}).join('')}<p class="core-muted">Natural full houses are exactly 3 + 2. Kind and straight counts are inclusive; a Yahtzee also counts as three/four of a kind.</p>`);}
+async function analytics(){
+ if(!game)return;
+ const roomId=onlineRoom?.id,revision=onlineRoom?.revision,request=id();
+ openDialog('<h2>Loading insights…</h2><p class="core-muted">Reading accepted game history.</p>');dialog.dataset.insightRequest=request;
+ try{
+  const games=onlineRoom?await (await import('./multiplayer/ui.js')).onlineHistory():[game];
+  if(!dialog.open||dialog.dataset.insightRequest!==request)return;
+  if(roomId!==onlineRoom?.id||revision!==onlineRoom?.revision){notice('The table changed. Open insights again for a fresh view.');dialog.close();return;}
+  const title=onlineRoom?.tournament?onlineRoom.tournament.name+' · insights':'Game insights';
+  openDialog(renderTournamentInsights(games,{title,ceiling:onlineRoom?.tournament?.gameCount})+'<button class="all-scores" data-action="roll-insights">Dice-level roll insights</button>');
+  insightsCleanup=bindTournamentInsights(dialog,games);
+ }catch(error){if(dialog.open&&dialog.dataset.insightRequest===request)openDialog('<h2>Insights unavailable</h2><p>Reconnect and try again. Your game remains saved.</p>');}
+}
+function rollInsights(){openDialog(`<h2>Roll insights</h2><p class="core-muted">${esc(game.rules.name)} · This game only. Camera, GoDice, simulated and corrected rolls retain their source in the exported history. Missing manual rolls are not counted as failed combinations.</p>${game.players.map((p,i)=>{const a=rollAnalytics(game,i);return `<h3>${esc(p.name)}</h3><p>${a.recordedRolls} recorded rolls · ${a.corrected} corrected</p>${a.recordedRolls?`<table><thead><tr><th>Combination</th><th>Rolls</th><th>Turns</th></tr></thead><tbody>${Object.keys({threeKind:0,fourKind:0,fullHouse:0,smallStraight:0,largeStraight:0,yahtzee:0}).map(k=>`<tr><td>${META[k].name}</td><td>${a.counts[k]||0}</td><td>${a.turns[k]||0}</td></tr>`).join('')}</tbody></table>`:'<p class="core-muted">No dice-level data recorded.</p>'}`;}).join('')}<p class="core-muted">Natural full houses are exactly 3 + 2. Kind and straight counts are inclusive; a Yahtzee also counts as three/four of a kind.</p>`);}
 document.addEventListener('change',e=>{
  if(e.target.id==='playerCount')nameInputs(Number(e.target.value));
  if(e.target.id==='modeSelect'||e.target.matches('#createCore [name="source"]'))root.querySelector('#modeDescription').textContent=setupDescription(root.querySelector('#modeSelect').value,root.querySelector('#createCore [name="source"]').value);
@@ -560,10 +576,11 @@ document.addEventListener('click',async e=>{
   if(a==='confirm-undo-score'){
    const candidate=ownUndoCandidate();
    if(!candidate||candidate.id!==b.dataset.target||candidate.seat!==Number(b.dataset.seat)||game.id!==b.dataset.game||game.revision!==Number(b.dataset.revision))throw Error('The game changed. Review the latest score again.');
-   await send({type:'undo-score',target:candidate.id,seat:candidate.seat});dialog.close();notice('Score undone. Choose your category again.');
+   await send({type:'undo-score',target:candidate.id,seat:candidate.seat});dialog.close();notice('Turn undone. Start a fresh turn.');
   }
   if(a==='close'){cancelBonus();dialog.close();}
-  if(a==='analytics')analytics();
+  if(a==='analytics')await analytics();
+  if(a==='roll-insights')rollInsights();
   if(['tournament-standings','tournament-exit','tournament-invitation','tournament-pause','tournament-resume'].includes(a))dialog.close();
   if(a==='tournament-standings'){
    const {onlineStandings}=await import('./multiplayer/ui.js');const standings=await onlineStandings();
@@ -622,3 +639,5 @@ dialog.addEventListener('close',()=>hostedCommentary?.refreshSurface?.());
 
 document.addEventListener('change',event=>{if(event.target.matches('[name="scorecard-size"]')){try{saveScorecardSize(event.target.value);applyScorecardSize(root);}catch{notice('Could not save display size. Check device storage.');}}});
 dialog.addEventListener('close',()=>{dialog.classList.remove('tournament-drawer');if(dialog.dataset.tournamentMenu==='true'){delete dialog.dataset.tournamentMenu;const trigger=root.querySelector('[data-action="tournament-menu"]');trigger?.setAttribute('aria-expanded','false');trigger?.focus();}});
+
+dialog.addEventListener('close',()=>{if(!dialog.open){insightsCleanup();delete dialog.dataset.insightRequest;}});

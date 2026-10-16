@@ -1,5 +1,7 @@
 # Software project control
 
+16 October SW039/SW040 implemented review candidate: compact current-app tournament scorecard/bonus strategy and animated accepted-score analytics; universal latest-own-turn Undo with next-score cutoff. Isolated branch and evidence in [release](../releases/SW-040-tournament-insights-and-undo.md); no live deployment or Pixel installation, owner two-phone acceptance remains. Earlier proposal-only entries are historical.
+
 16 October SW039 current-app tournament usability implemented: PT01–04 covered, responsive/browser and functional checks, APK/web candidates prepared. No live deployment; owner review and Android/iPhone acceptance remain. See [release](../releases/SW-039-tournament-scorecard-usability.md).
 
 15 October SW038 visual review: premium standalone home/scoring prototype with original art, fictional Rachel presentation/recorded welcome, centered phone entry, small named opponents, animations/sound/reduced-motion/Undo. Local browser/UI/static checks passed; no production source/runtime/records change or engine migration. Owner visual/physical judgment remains open. [Play](http://127.0.0.1:8482/reviews/sw038/), [record](../plans/SW-038-premium-playable-visual-prototype.md).

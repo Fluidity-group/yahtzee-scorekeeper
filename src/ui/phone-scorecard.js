@@ -9,7 +9,7 @@ const seatStyle = seat => `--player-hue:${hues[seat % hues.length]}`;
 function readonlyScore(game, key, seat) {
  const value = game.sheets[seat][key], name = game.players[seat].name;
  const label = `${name} (seat ${seat + 1}), ${META[key].name}: ${value === undefined ? 'open' : value === 0 ? 'scratched, zero points' : `${value} points`}`;
- return `<span class="phone-peer-score ${value === undefined ? 'score-placeholder' : `recorded-score ${value === 0 ? 'scratched-score' : ''}`}" aria-label="${esc(label)}">${value === undefined ? '—' : value === 0 ? '<span aria-hidden="true">×</span>' : esc(value)}</span>`;
+ return `<span class="phone-peer-score ${value === undefined ? 'score-placeholder' : `recorded-score ${value === 0 ? 'scratched-score' : ''}`}" aria-label="${esc(label)}">${value === undefined ? '—' : value === 0 ? '<span class="scratch-value" aria-hidden="true">0<small>SCRATCH</small></span>' : esc(value)}</span>`;
 }
 function heading(game, seat, totals, winners, own) {
  const name = esc(game.players[seat].name), active = game.status === 'active';

@@ -196,7 +196,7 @@ export async function onlineHistory(){
   if(data.nextBefore!==null&&(before!==undefined&&data.nextBefore>=before))throw new Error('History could not advance. Try again.');
   before=data.nextBefore;
  }while(before);
- games.set(room.game.id,room.game);return [...games.values()];
+ games.set(room.game.id,{...room.game,sequence:room.gameSequence??1});return [...games.values()];
 }
 export async function sendHostState(action){
  if(!connected||working||room?.hostId!==user?.id)return false;

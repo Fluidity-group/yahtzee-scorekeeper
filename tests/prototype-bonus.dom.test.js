@@ -36,7 +36,8 @@ describe('additional Yahtzee scorecard entry',()=>{
   await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="twos"]').textContent).toBe('8'));
   click('[data-action="choose"][data-key="threes"]');
   click('[data-action="confirm-score"][data-value="0"]');
-  await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="threes"]').textContent).toBe('×'));
+  await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="threes"]').textContent).toBe('0SCRATCH'));
+  expect(document.querySelector('[data-action="edit"][data-key="threes"]').getAttribute('aria-label')).toMatch(/scratched, zero points/i);
  });
  it('keeps totals hidden through scoring and reveals them at game completion',async()=>{
   await newGame('standard',true);

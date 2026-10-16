@@ -73,7 +73,7 @@ export function playRoom(room,{userId,action,commandId,expectedRevision,gameId,t
  const seat=delegated?room.game.activeSeat:member;
  if(!['correct-score','undo-score'].includes(action.type)&&room.game.activeSeat!==seat)fail('It is another player’s turn.',403);
  if(['score','bonus','correct-roll'].includes(action.type)&&hardware&&room.game.turn?.source==='godice'&&['rolling','paused'].includes(room.liveDice?.phase))fail('Wait for the host dice to settle.');
- if(['correct-score','undo-score'].includes(action.type)&&!room.game.events.some(e=>e.id===action.target&&e.type==='score'&&e.seat===seat))fail('You can only change your own scores.',403);
+ if(['correct-score','undo-score'].includes(action.type)&&!room.game.events.some(e=>e.id===action.target&&(e.type==='score'||action.type==='undo-score'&&['bonus','final-chain-roll'].includes(e.type))&&e.seat===seat))fail('You can only change your own scores.',403);
  let game=room.game;
  try{
   if(!game.turn&&['score','bonus','final-chain-roll'].includes(action.type))game=command(game,{type:'start',seat},{id:`room:${commandId}:start`,time});

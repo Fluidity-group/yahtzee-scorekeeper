@@ -208,19 +208,14 @@ function finishTurn(g, extra, time) {
   }
 }
 function undoableScore(game, seat) {
-  if (game.mode !== "standard" || game.source !== "manual" || game.finalChain) return null;
-  const undone = new Set(game.events.filter((e) => e.type === "score-undo").map((e) => e.target));
-  const score = game.events.findLast((e) => e.type === "score" && !undone.has(e.id));
-  if (!score || score.source !== "manual" || seat !== void 0 && score.seat !== seat) return null;
-  if (game.sheets[score.seat][score.category] === void 0) return null;
-  const later = game.events.slice(game.events.indexOf(score) + 1);
-  if (later.some((e) => !["turn-start", "score-correction"].includes(e.type))) return null;
-  for (const e of later.filter((e2) => e2.type === "turn-start")) {
-    const turn = game.turn?.id === e.turnId ? game.turn : game.turns.find((t) => t.id === e.turnId);
-    if (!turn || turn.source !== "manual" || turn.rolls.length || turn.manualRolls?.length || turn.undone) return null;
-  }
-  if (game.turn && (game.turn.source !== "manual" || game.turn.rolls.length || game.turn.manualRolls?.length)) return null;
-  return score;
+  const turn = game.turns.findLast((t) => !t.undone && !t.excluded);
+  if (!turn) return null;
+  const result = game.events.findLast((e) => e.turnId === turn.id && ["score", "bonus", "final-chain-roll"].includes(e.type));
+  if (!result || seat !== void 0 && result.seat !== seat) return null;
+  const later = game.events.slice(game.events.indexOf(result) + 1);
+  if (later.some((e) => ["score", "bonus", "score-undo"].includes(e.type))) return null;
+  if (result.type === "score" && game.sheets[result.seat][result.category] === void 0) return null;
+  return result;
 }
 function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
   if (!id2) fail("Command ID required.");
@@ -233,9 +228,11 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
   };
   if (action.type === "undo-score") {
     const original = undoableScore(g, action.seat);
-    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest manual Standard score can be undone before another gameplay action.");
-    const before = g.sheets[original.seat][original.category], reversedBonus = original.bonus || 0;
-    delete g.sheets[original.seat][original.category];
+    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest completed turn can be undone before the next completed turn.");
+    const category = original.type === "score" ? original.category : null;
+    const before = category ? g.sheets[original.seat][category] : original.value || 0;
+    const reversedBonus = category ? original.bonus || 0 : original.value || 0;
+    if (category) delete g.sheets[original.seat][category];
     if (reversedBonus) {
       const remaining = (g.sheets[original.seat].yahtzeeBonus || 0) - reversedBonus;
       if (remaining < 0) fail("The attached Yahtzee bonus cannot be reversed.");
@@ -248,7 +245,8 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
     g.activeSeat = original.seat;
     g.status = "active";
     g.endedAt = null;
-    event("score-undo", { target: original.id, seat: original.seat, category: original.category, before, reversedBonus });
+    g.finalChain = original.type === "final-chain-roll" ? { seat: original.seat, attempt: original.attempt } : null;
+    event("score-undo", { target: original.id, seat: original.seat, category, before, reversedBonus, undoneTurnId: original.turnId });
   } else if (action.type === "correct-score") {
     const original = g.events.find((e) => e.id === action.target && e.type === "score");
     if (!original || original.seat !== action.seat) fail("Choose one of this player\u2019s recorded scores.");

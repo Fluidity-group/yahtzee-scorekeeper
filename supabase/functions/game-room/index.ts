@@ -195,19 +195,14 @@ function finishTurn(g, extra, time) {
   }
 }
 function undoableScore(game, seat) {
-  if (game.mode !== "standard" || game.source !== "manual" || game.finalChain) return null;
-  const undone = new Set(game.events.filter((e) => e.type === "score-undo").map((e) => e.target));
-  const score = game.events.findLast((e) => e.type === "score" && !undone.has(e.id));
-  if (!score || score.source !== "manual" || seat !== void 0 && score.seat !== seat) return null;
-  if (game.sheets[score.seat][score.category] === void 0) return null;
-  const later = game.events.slice(game.events.indexOf(score) + 1);
-  if (later.some((e) => !["turn-start", "score-correction"].includes(e.type))) return null;
-  for (const e of later.filter((e2) => e2.type === "turn-start")) {
-    const turn = game.turn?.id === e.turnId ? game.turn : game.turns.find((t) => t.id === e.turnId);
-    if (!turn || turn.source !== "manual" || turn.rolls.length || turn.manualRolls?.length || turn.undone) return null;
-  }
-  if (game.turn && (game.turn.source !== "manual" || game.turn.rolls.length || game.turn.manualRolls?.length)) return null;
-  return score;
+  const turn = game.turns.findLast((t) => !t.undone && !t.excluded);
+  if (!turn) return null;
+  const result = game.events.findLast((e) => e.turnId === turn.id && ["score", "bonus", "final-chain-roll"].includes(e.type));
+  if (!result || seat !== void 0 && result.seat !== seat) return null;
+  const later = game.events.slice(game.events.indexOf(result) + 1);
+  if (later.some((e) => ["score", "bonus", "score-undo"].includes(e.type))) return null;
+  if (result.type === "score" && game.sheets[result.seat][result.category] === void 0) return null;
+  return result;
 }
 function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
   if (!id) fail("Command ID required.");
@@ -220,9 +215,11 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
   };
   if (action.type === "undo-score") {
     const original = undoableScore(g, action.seat);
-    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest manual Standard score can be undone before another gameplay action.");
-    const before = g.sheets[original.seat][original.category], reversedBonus = original.bonus || 0;
-    delete g.sheets[original.seat][original.category];
+    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest completed turn can be undone before the next completed turn.");
+    const category = original.type === "score" ? original.category : null;
+    const before = category ? g.sheets[original.seat][category] : original.value || 0;
+    const reversedBonus = category ? original.bonus || 0 : original.value || 0;
+    if (category) delete g.sheets[original.seat][category];
     if (reversedBonus) {
       const remaining = (g.sheets[original.seat].yahtzeeBonus || 0) - reversedBonus;
       if (remaining < 0) fail("The attached Yahtzee bonus cannot be reversed.");
@@ -235,7 +232,8 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
     g.activeSeat = original.seat;
     g.status = "active";
     g.endedAt = null;
-    event("score-undo", { target: original.id, seat: original.seat, category: original.category, before, reversedBonus });
+    g.finalChain = original.type === "final-chain-roll" ? { seat: original.seat, attempt: original.attempt } : null;
+    event("score-undo", { target: original.id, seat: original.seat, category, before, reversedBonus, undoneTurnId: original.turnId });
   } else if (action.type === "correct-score") {
     const original = g.events.find((e) => e.id === action.target && e.type === "score");
     if (!original || original.seat !== action.seat) fail("Choose one of this player\u2019s recorded scores.");
@@ -542,7 +540,7 @@ function playRoom(room, { userId, action, commandId: commandId2, expectedRevisio
   const seat = delegated ? room.game.activeSeat : member;
   if (!["correct-score", "undo-score"].includes(action.type) && room.game.activeSeat !== seat) fail2("It is another player\u2019s turn.", 403);
   if (["score", "bonus", "correct-roll"].includes(action.type) && hardware && room.game.turn?.source === "godice" && ["rolling", "paused"].includes(room.liveDice?.phase)) fail2("Wait for the host dice to settle.");
-  if (["correct-score", "undo-score"].includes(action.type) && !room.game.events.some((e) => e.id === action.target && e.type === "score" && e.seat === seat)) fail2("You can only change your own scores.", 403);
+  if (["correct-score", "undo-score"].includes(action.type) && !room.game.events.some((e) => e.id === action.target && (e.type === "score" || action.type === "undo-score" && ["bonus", "final-chain-roll"].includes(e.type)) && e.seat === seat)) fail2("You can only change your own scores.", 403);
   let game = room.game;
   try {
     if (!game.turn && ["score", "bonus", "final-chain-roll"].includes(action.type)) game = command(game, { type: "start", seat }, { id: `room:${commandId2}:start`, time });
@@ -696,7 +694,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const supportsTournaments = supportsRematch && await store2.tournamentsAvailable?.() === true;
       const supportsCompetition = supportsRematch && await store2.competitionAvailable?.() === true;
       const supportsCommentary = !!commentary && supportsRematch && await store2.commentaryAvailable?.() === true;
-      const present = (room) => ({ ...room, capabilities: { commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, undoScore: supportsRematch && room.mode === "standard" && (room.source ?? room.game?.source) === "manual" }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
+      const present = (room) => ({ ...room, capabilities: { commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, undoScore: supportsRematch }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
       if (body.operation === "list") return reply({ rooms: (await store2.list(userId)).map(present) });
       if (["tournaments", "sessions"].includes(body.operation)) {
         if (body.operation === "tournaments" ? !supportsTournaments : !supportsRematch) throw new RoomError("Saved sessions need the current server.", 503);
@@ -760,7 +758,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
             if (!supportsRematch) throw new RoomError("Hosted history needs a server update.", 503);
             if (body.before !== void 0 && (!Number.isInteger(body.before) || body.before < 1)) throw new RoomError("Invalid history cursor.");
             const rows = await store2.history(room.id, body.before);
-            return reply({ games: rows.map((r) => r.state), nextBefore: rows.length === 20 ? rows.at(-1).sequence_number : null });
+            return reply({ games: rows.map((r) => ({ ...r.state, sequence: r.sequence_number })), nextBefore: rows.length === 20 ? rows.at(-1).sequence_number : null });
           }
           if (durable) {
             if (!supportsRematch) throw new RoomError("Play again needs a server update. Your finished game is saved.", 503);

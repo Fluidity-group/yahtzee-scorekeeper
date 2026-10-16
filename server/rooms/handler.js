@@ -19,7 +19,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
    const supportsTournaments=supportsRematch&&await store.tournamentsAvailable?.()===true;
    const supportsCompetition=supportsRematch&&await store.competitionAvailable?.()===true;
    const supportsCommentary=!!commentary && supportsRematch && await store.commentaryAvailable?.()===true;
-   const present=room=>({...room,capabilities:{commentaryAtomicCommit:supportsCommentary,rematch:supportsRematch&&room.source!=='godice',history:supportsRematch,tournaments:supportsTournaments,competitionFinalChain:supportsCompetition,undoScore:supportsRematch&&room.mode==='standard'&&(room.source??room.game?.source)==='manual'},...(room.game?.status==='finished'?{nextStarterId:room.members[nextStarter(room)].userId}:{})});
+   const present=room=>({...room,capabilities:{commentaryAtomicCommit:supportsCommentary,rematch:supportsRematch&&room.source!=='godice',history:supportsRematch,tournaments:supportsTournaments,competitionFinalChain:supportsCompetition,undoScore:supportsRematch},...(room.game?.status==='finished'?{nextStarterId:room.members[nextStarter(room)].userId}:{})});
    if(body.operation==='list')return reply({rooms:(await store.list(userId)).map(present)});
    if(['tournaments','sessions'].includes(body.operation)){
     if(body.operation==='tournaments'?!supportsTournaments:!supportsRematch)throw new RoomError('Saved sessions need the current server.',503);
@@ -78,7 +78,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
       if(!supportsRematch)throw new RoomError('Hosted history needs a server update.',503);
       if(body.before!==undefined&&(!Number.isInteger(body.before)||body.before<1))throw new RoomError('Invalid history cursor.');
       const rows=await store.history(room.id,body.before);
-      return reply({games:rows.map(r=>r.state),nextBefore:rows.length===20?rows.at(-1).sequence_number:null});
+      return reply({games:rows.map(r=>({...r.state,sequence:r.sequence_number})),nextBefore:rows.length===20?rows.at(-1).sequence_number:null});
      }
      if(durable){
       if(!supportsRematch)throw new RoomError('Play again needs a server update. Your finished game is saved.',503);

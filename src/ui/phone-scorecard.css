@@ -69,6 +69,11 @@
 #coreApp .phone-score-table .score-section th{white-space:normal;}
 #coreApp .phone-score-table .score-section .bonus-guide{display:inline-block;width:44px;min-width:44px;min-height:44px;margin-left:10px;padding:0;background:transparent;vertical-align:middle;}
 #coreApp.playing .compact-game>.phone-scorecard{flex:1 1 0;min-height:240px;}
+/* A committed zero is never drawn as a cross resembling an open plus. */
+#coreApp .phone-score-table .recorded-score.scratched-score{border:2px solid var(--club-warm,#e6b46a);background:color-mix(in srgb,var(--club-warm,#e6b46a) 18%,var(--club-panel));color:var(--club-text);font-weight:750;}
+.scratch-value{display:grid;place-items:center;gap:1px;line-height:1;}
+.scratch-value small{display:block;font-size:.55rem;line-height:1.15;letter-spacing:.04em;font-weight:750;}
+#coreApp .phone-score-table .phone-peer-score.scratched-score{display:flex;align-items:center;justify-content:center;line-height:1;}
 .scorecard-size-options{border:1px solid var(--club-line);border-radius:12px;padding:12px;}
 .core-dialog .scorecard-size-options label{display:flex;align-items:center;gap:12px;min-height:48px;font-size:1rem;}
 .core-dialog .scorecard-size-options input{width:22px;min-height:22px;margin:0;}
