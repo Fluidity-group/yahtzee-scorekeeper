@@ -47,11 +47,11 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
  function mountSurface({root,scoreDialog:dialog=null}={}){surfaceRoot=root;scoreDialog=dialog;refreshSurface();}
  function close(){captionCleanup();settingsCleanup();captionCleanup=settingsCleanup=()=>{};if(drawer?.open)drawer.close();drawer?.remove();drawer=null;}
  function reset({keepProfile=false}={}){epoch++;abort.abort();abort=new AbortController();refreshing=null;if(!keepProfile){profile=personal=null;profileReadAt=0;}close();}
- async function refresh({forceProfile=false}={}){
-  if(!authorized()||current.connected===false||current.visible===false&&!forceProfile)return;
+ async function refresh({forceProfile=false,automatic=false}={}){
+  if(!authorized()||current.connected===false||current.visible===false&&!forceProfile||automatic&&profile?.enabled===false&&!drawer?.open)return;
   if(refreshing)return refreshing;
   const fence=epoch;
-  const task=(async()=>{try{const next=profile&&!forceProfile&&performance.now()-profileReadAt<15000?profile:await invoke('profile-read');if(fence!==epoch)return;if(next!==profile)profileReadAt=performance.now();profile=next;sync();if(current.room.game)await controller.refresh({profile:next});if(fence===epoch)await controller.heartbeat();}catch{if(fence===epoch)onNotice('Commentary is unavailable. Keep playing.');}})();
+  const task=(async()=>{try{const next=profile&&!forceProfile&&performance.now()-profileReadAt<15000?profile:await invoke('profile-read');if(fence!==epoch)return;if(next!==profile)profileReadAt=performance.now();profile=next;sync();if(!next.enabled){clearInterval(timer);timer=null;if(automatic&&!drawer?.open)return;}if(current.room.game)await controller.refresh({profile:next});if(fence===epoch)await controller.heartbeat();}catch{if(fence===epoch&&(profile?.enabled===true||drawer?.open))onNotice('Commentary is unavailable. Keep playing.');}})();
   refreshing=task;try{await task;}finally{if(refreshing===task)refreshing=null;}
  }
  function update(next){
@@ -62,7 +62,7 @@ export function createHostedCommentarySession({request,player,deviceId,onNotice=
   if(before!==after||current?.room?.hostId!==next?.room?.hostId){const sameTable=current?.room?.id===next?.room?.id&&current?.userId===next?.userId;reset({keepProfile:sameTable});if(!sameTable&&next?.room?.status==='lobby'&&nativeAudioAvailable&&initialListenerMuted===undefined)listenerMuted=false;}
   current=next;if(next?.initialProfile&&!profile){profile=next.initialProfile;profileReadAt=performance.now();}if(typeof next?.listenerMuted==='boolean')listenerMuted=next.listenerMuted;sync();refreshSurface();
   clearInterval(timer);timer=null;
-  if(authorized()&&current.connected!==false&&current.visible!==false){void refresh();if(typeof player.playReaction==='function')timer=setInterval(()=>{void controller.heartbeat();},5000);else if(pollMs>0)timer=setInterval(()=>{void refresh();},pollMs);}
+  if(authorized()&&current.connected!==false&&current.visible!==false&&profile?.enabled!==false){void refresh({automatic:true});if(typeof player.playReaction==='function')timer=setInterval(()=>{void controller.heartbeat();},5000);else if(pollMs>0)timer=setInterval(()=>{void refresh({automatic:true});},pollMs);}
  }
  function personalForm(){
   const p=personal||{version:0,gender:'',blurb:'',displayName:'',shareWithRoom:false};

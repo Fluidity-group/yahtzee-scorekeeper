@@ -60,7 +60,7 @@ async function ensureHostedCommentary(){
   const transport=createAuthenticatedCommentaryTransport({auth,serviceBase:commentaryServiceBase,directReaction:Capacitor.getPlatform()==='android',anonymousKey:import.meta.env.VITE_SUPABASE_ANON_KEY||''});
   const android=Capacitor.getPlatform()==='android';
   const player=android?(await import('./commentary/native-player.js')).createNativeCommentaryPlayer({serviceBase:commentaryServiceBase,getAccessToken:transport.getAccessToken}):{play:async()=>false,stop:()=>{},dispose:async()=>{}};
-  const session=createHostedCommentarySession({request:transport.request,player,deviceId:id(),onNotice:notice,nativeAudioAvailable:android,initialListenerMuted:readCommentaryPreferences().listenerMuted,onPreferencesSaved:persistCommentaryPatch});
+  const session=createHostedCommentarySession({request:transport.request,player,deviceId:id(),onNotice:commentaryNotice,nativeAudioAvailable:android,initialListenerMuted:readCommentaryPreferences().listenerMuted,onPreferencesSaved:persistCommentaryPatch});
   if(ticket!==hostedCommentaryGeneration){session.dispose();await player.dispose?.();return null;}
   hostedCommentary=session;hostedCommentaryPlayer=player;session.update(commentaryContext());session.mountSurface?.({root,scoreDialog:dialog});return session;
  })();hostedCommentarySetup=task;
@@ -68,8 +68,9 @@ async function ensureHostedCommentary(){
 }
 function syncHostedCommentary(){
  if(hostedCommentary){hostedCommentary.update(commentaryContext());return;}
- if(hostedCommentaryActive&&onlineRoom&&commentaryServiceBase)void ensureHostedCommentary().catch(()=>notice('Commentary is unavailable. Keep playing.'));
+ if(hostedCommentaryActive&&onlineRoom&&commentaryServiceBase)void ensureHostedCommentary().catch(()=>commentaryNotice('Commentary is unavailable. Keep playing.'));
 }
+function commentaryNotice(text){if(!dialog.open)notice(text);}
 async function openCommentary(){
  if(!onlineRoom){if(localVoice)return localVoice.open({scoreDialog:dialog});return openGlobalCommentary();}
  if(dialog.open){notice('Finish or close score entry before opening commentary.');return;}
@@ -609,7 +610,15 @@ document.addEventListener('click',async e=>{
    let value=Number(b.dataset.value);
    if(a==='confirm-total'){const field=dialog.querySelector('#manualTotal');value=Number(field.value);if(field.value===''||!Number.isInteger(value)||value<0||value>30)throw new Error('Enter a whole number from 0 to 30.');}
    const action=pending.target?{type:'correct-score',target:pending.target,seat:pending.seat,value}:{type:'score',category:pending.category,value,yahtzeeFace:Number(b.dataset.face)||reportedFace};
-   await send(action);dialog.close();
+   const serialized=JSON.stringify(action);
+   if(pending.submission&&pending.submission.action!==serialized)throw Error('Retry the same score, or close this panel and check the shared scorecard before changing it.');
+   pending.submission??={action:serialized,id:id()};
+   const buttons=[...dialog.querySelectorAll('button')].map(button=>[button,button.disabled]);
+   let status=dialog.querySelector('[data-score-save-status]');if(!status){status=document.createElement('p');status.dataset.scoreSaveStatus='';status.setAttribute('role','status');dialog.append(status);}
+   status.textContent='Saving score…';dialog.setAttribute('aria-busy','true');for(const[button]of buttons)button.disabled=true;
+   try{await send(action,pending.submission.id);dialog.close();}
+   catch(error){status.textContent='Save not confirmed. Reconnect and check the shared scorecard, or retry the same score.';throw error;}
+   finally{dialog.removeAttribute('aria-busy');for(const[button,disabled]of buttons)if(button.isConnected)button.disabled=disabled;}
   }
   if(a==='export'){
    const all=onlineRoom?(onlineRoom.capabilities?.history?(await import('./multiplayer/ui.js')).onlineHistory():[onlineRoom.game]):await listCore();

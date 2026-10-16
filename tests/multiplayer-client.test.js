@@ -26,10 +26,17 @@ it('bounds a stalled session lookup and never sends an unauthenticated request',
  mock.getSession.mockImplementation(()=>new Promise(()=>{}));const outcome=requestRoom({operation:'list'}).catch(error=>error);
  await vi.advanceTimersByTimeAsync(15000);expect((await outcome).message).toContain('internet connection');expect(fetch).not.toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);
 });
-it('bounds two ignored fetch deadlines and reports a clear network recovery message',async()=>{
+it('shares one fifteen-second budget across retries and reports a clear network recovery message',async()=>{
  fetch.mockImplementation(()=>new Promise(()=>{}));const outcome=requestRoom({operation:'list'}).catch(error=>error);
  await vi.advanceTimersByTimeAsync(12000);expect(fetch).toHaveBeenCalledTimes(2);
- await vi.advanceTimersByTimeAsync(12000);expect((await outcome).message).toContain('Local games');expect(vi.getTimerCount()).toBe(0);
+ await vi.advanceTimersByTimeAsync(3000);expect((await outcome).message).toContain('Local games');expect(vi.getTimerCount()).toBe(0);
+});
+it('includes authentication and a stalled response body in the same deadline',async()=>{
+ let lookup;mock.getSession.mockImplementation(()=>new Promise(resolve=>lookup=resolve));
+ fetch.mockResolvedValue({ok:true,json:()=>new Promise(()=>{})});
+ const outcome=requestRoom({operation:'list'}).catch(error=>error);await vi.advanceTimersByTimeAsync(10000);
+ lookup({data:{session:{access_token:'test-token'}}});await vi.advanceTimersByTimeAsync(5000);
+ expect((await outcome).message).toContain('internet connection');expect(vi.getTimerCount()).toBe(0);
 });
 it('does not retry caller cancellation reported by fetch',async()=>{
  fetch.mockRejectedValue(Object.assign(Error('private transport detail'),{name:'AbortError'}));

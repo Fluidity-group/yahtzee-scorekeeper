@@ -16,9 +16,15 @@ export function watchRoom(code,onRoom){
  return ()=>{client.removeChannel(channel);};
 }
 export async function requestRoom(payload){
+ const start=Date.now(),controller=new AbortController();let phase='auth',outcome='failed';
+ const within=promise=>waitForOnline(promise,{timeoutMs:Math.max(1,15000-(Date.now()-start)),onTimeout:()=>controller.abort()});
+ try{const result=await requestRoomWithin(payload,{within,signal:controller.signal,mark:value=>{phase=value;}});outcome='accepted';return result;}
+ finally{controller.abort();if(payload.operation==='command'&&(outcome!=='accepted'||Date.now()-start>1500))console.warn('Clubhouse room request',JSON.stringify({phase,outcome,elapsedMs:Date.now()-start}));}
+}
+async function requestRoomWithin(payload,{within,signal,mark}){
  if(!auth)throw new Error('Online games are not configured. Use Local games.');
  let lookup;
- try{lookup=await waitForOnline(auth.getSession());}catch(error){throw new Error(onlineErrorMessage(error));}
+ try{lookup=await within(auth.getSession());}catch(error){throw new Error(onlineErrorMessage(error));}
  if(lookup?.error)throw new Error(onlineErrorMessage(lookup.error));
  const session=lookup?.data?.session;
  if(!session)throw new Error('Please sign in again.');
@@ -26,12 +32,12 @@ export async function requestRoom(payload){
  // Reuse the exact command ID on an uncertain network retry.
  for(let attempt=0;attempt<2;attempt++){
   try{
-   response=await fetchWithTimeout(`${url}/functions/v1/game-room`,{method:'POST',headers:{'Content-Type':'application/json',apikey:key,Authorization:`Bearer ${session.access_token}`},body});
+   mark('transport');response=await within(fetchWithTimeout(`${url}/functions/v1/game-room`,{method:'POST',signal,headers:{'Content-Type':'application/json',apikey:key,Authorization:`Bearer ${session.access_token}`},body}));
    break;
   }catch(error){if(error?.name==='AbortError'||attempt===1)throw new Error(onlineErrorMessage(error));}
  }
  let data;
- try{data=await waitForOnline(response.json());}catch(error){
+ try{mark('response');data=await within(response.json());}catch(error){
   if(['TypeError','AbortError','TimeoutError','AuthRetryableFetchError'].includes(error?.name))throw new Error(onlineErrorMessage(error));
   throw new Error('The multiplayer server returned an unreadable response. Try again, or use Local games.');
  }

@@ -3,6 +3,13 @@ import {beforeAll,describe,it,expect,vi} from 'vitest';
 import {createHostedCommentarySession} from '../src/ui/hosted-commentary-session.js';
 const host='11111111-1111-4111-8111-111111111111',guest='22222222-2222-4222-8222-222222222222',roomId='33333333-3333-4333-8333-333333333333';
 const wait=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+it('stops disabled commentary work and does not surface unknown background failures as scoring errors',async()=>{
+ const request=vi.fn(async()=>({result:{version:1,enabled:false}})),onNotice=vi.fn();
+ const session=createHostedCommentarySession({request,onNotice,player:{play:vi.fn(),stop:vi.fn()},deviceId:'quiet',pollMs:0});
+ const context={room:{id:roomId,hostId:host,members:[{userId:host}],game:{id:roomId,events:[]}},userId:host,connected:true,visible:true};
+ session.update(context);await wait();request.mockClear();session.update(context);await wait();expect(request).not.toHaveBeenCalled();expect(onNotice).not.toHaveBeenCalled();session.dispose();
+ const failed=createHostedCommentarySession({request:async()=>{throw Error('offline');},onNotice,player:{play:vi.fn(),stop:vi.fn()},deviceId:'offline',pollMs:0});failed.update(context);await wait();expect(onNotice).not.toHaveBeenCalled();failed.dispose();
+});
 beforeAll(()=>{HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};});
 function fixture(userId=host,{lobby=false}={}){
  let profile={schemaVersion:1,version:1,enabled:false,humorIntensity:'dark',profanityAllowed:true,frequency:'balanced',voiceOption:'rachel',capabilities:{liveProviders:false,providerMode:'synthetic'}},personal={accountId:userId,version:0,displayName:'',gender:'',blurb:'',shareWithRoom:false},jobs=[];

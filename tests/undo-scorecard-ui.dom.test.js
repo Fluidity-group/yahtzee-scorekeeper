@@ -18,6 +18,17 @@ beforeEach(async()=>{
  vi.clearAllMocks();mock.userId='host';const time='2026-10-14T12:00:00Z';mock.room={...startRoom(joinRoom(createRoom({id:'r',code:'ABCDEFGH',userId:'host',name:'Dan',time}),{userId:'guest',name:'Amber',time}),{userId:'host',time}),capabilities:{undoScore:true}};
  action('online');await vi.waitFor(()=>expect(openOnline).toHaveBeenCalledOnce());
 });
+it('shows pending save, restores controls after failure and retries the same draft command ID',async()=>{
+ let reject;sendOnline.mockImplementationOnce(()=>new Promise((_,no)=>{reject=no;}));
+ click('[data-action="choose"][data-key="fives"]');click('[data-action="confirm-score"][data-value="15"]');
+ await vi.waitFor(()=>expect(reject).toBeTypeOf('function'));
+ const first=sendOnline.mock.calls.at(-1);expect(document.querySelector('#coreDialog').getAttribute('aria-busy')).toBe('true');expect(document.querySelector('[data-score-save-status]').textContent).toContain('Saving score');
+ reject(Error('Could not reach the multiplayer server.'));
+ await vi.waitFor(()=>expect(document.querySelector('#coreDialog').hasAttribute('aria-busy')).toBe(false));
+ expect(document.querySelector('#coreApp').hasAttribute('inert')).toBe(false);expect(document.querySelector('[data-action="confirm-score"][data-value="15"]').disabled).toBe(false);
+ click('[data-action="confirm-score"][data-value="15"]');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));
+ expect(sendOnline.mock.calls.at(-1)[2]).toBe(first[2]);expect(mock.room.game.sheets[0].fives).toBe(15);
+});
 it('lets the score owner undo a scratch after turn handoff, reopen the category, and choose another score',async()=>{
  await score('smallStraight',0);expect(document.querySelector('main').lastElementChild.classList.contains('game-bottom-actions')).toBe(true);expect(document.querySelector('.game-bottom-actions button').textContent).toBe('Undo last turn');expect(document.querySelector('.game-bottom-actions').textContent).not.toContain('available before the next score');expect(mock.room.game.activeSeat).toBe(1);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();
  await undo();expect(mock.room.game.activeSeat).toBe(0);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.events.some(event=>event.type==='score-undo')).toBe(true);expect(document.querySelector('[data-action="choose"][data-key="smallStraight"]')).not.toBeNull();

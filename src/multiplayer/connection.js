@@ -9,9 +9,9 @@ const deadlineError=name=>Object.assign(new Error(networkMessage),{name});
 
 // Racing attaches rejection handlers to the original operation, so a late
 // rejection after timeout is consumed rather than becoming unhandled.
-export function waitForOnline(promise){
+export function waitForOnline(promise,{timeoutMs=15000,onTimeout=()=>{}}={}){
  let timer;
- return Promise.race([Promise.resolve(promise),new Promise((resolve,reject)=>{timer=setTimeout(()=>reject(deadlineError('TimeoutError')),15000);})])
+ return Promise.race([Promise.resolve(promise),new Promise((resolve,reject)=>{timer=setTimeout(()=>{onTimeout();reject(deadlineError('TimeoutError'));},timeoutMs);})])
   .finally(()=>clearTimeout(timer));
 }
 
