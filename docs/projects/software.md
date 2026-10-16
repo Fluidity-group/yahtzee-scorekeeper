@@ -1,5 +1,7 @@
 # Software project control
 
+16 October SW039/SW040 deployed for owner two-phone test under explicit authorization. Qualified code1d4eb34/Node24:1,103tests passed,13optionalcamera skips/all builds. Supabase room/commentary v10 ACTIVE, canonical source matched and unsigned401; web revision8adc8eaa with42byte-matched files and cached close/reopen activation checked. Pixel install-r/readback/launch verified, APK26f07641…;38assets matched. Before/after room/game/profile/settings fingerprints and4accounts preserved; existing tournament remains paused at game7of12/revision205. Actual Android/iPhone Safari gameplay/audio acceptance open. [Rollout](../releases/SW-040-2026-10-16-rollout.md). This supersedes earlier candidate/not-deployed entries.
+
 16 October SW039/SW040 implemented review candidate: compact current-app tournament scorecard/bonus strategy and animated accepted-score analytics; universal latest-own-turn Undo with next-score cutoff. Isolated branch and evidence in [release](../releases/SW-040-tournament-insights-and-undo.md); no live deployment or Pixel installation, owner two-phone acceptance remains. Earlier proposal-only entries are historical.
 
 16 October SW039 current-app tournament usability implemented: PT01–04 covered, responsive/browser and functional checks, APK/web candidates prepared. No live deployment; owner review and Android/iPhone acceptance remain. See [release](../releases/SW-039-tournament-scorecard-usability.md).

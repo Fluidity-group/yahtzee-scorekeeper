@@ -1,5 +1,7 @@
 # SW-039 / SW-040 combined review candidate
 
+Deployed16October2026 under subsequent owner authorization; see [rollout and preservation evidence](SW-040-2026-10-16-rollout.md). Candidate-stage gates below are historical; physical owner acceptance remains open.
+
 16 October 2026. Isolated branch `codex/sw039-tournament-usability`, checkout `C:/Codex/Yahtzee Game/artifacts/sw039/source`. SW-039 layout checkpoint56fc5e3 is retained; SW-040 extends it with owner-authorized real-data analytics, explicit scratches and universal latest-turn Undo. New premium clubhouse prototype direction remains on hold. Existing root changes and live records preserved.
 
 ## Behavior and contracts
