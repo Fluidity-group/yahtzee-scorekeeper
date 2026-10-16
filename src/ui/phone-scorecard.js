@@ -1,5 +1,5 @@
 import { BASE_KEYS, META } from '../game/categories.js';
-import { upperProgress } from '../game/upper-progress.js';
+import {renderBonusGraphic} from './bonus-graphic.js';
 import { computeTotals } from '../game/scoring.js';
 const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const hues = [162,267,205,24,48,332,185,232];
@@ -29,14 +29,7 @@ export function renderPhoneScorecard(game, { viewerSeat = null, scoreCell, bonus
  const featuredCell = key => own && scoreCell ? scoreCell(key, featuredSeat) : `<td data-score-key="${key}" data-score-seat="${featuredSeat}">${readonlyScore(game, key, featuredSeat)}</td>`;
  const featuredBonus = own && bonusCell ? bonusCell(featuredSeat, {hideTotals:hidden}) : `<td>${hidden ? 'Hidden' : esc(game.sheets[featuredSeat].yahtzeeBonus || '—')}</td>`;
 
- const bonusProgress = seat => {
-  if(hidden)return '<span class="bonus-hidden">Hidden until finish</span>';
-  const p=upperProgress(game.sheets[seat]);
-  const status=p.state==='secured'?'Bonus secured +'+p.award:p.state==='unreachable'?'Out of reach':'Still possible';
-  const pace=p.remaining===6?'Three-of-each pace':p.pace===0?'On pace':Math.abs(p.pace)+(p.pace>0?' ahead of pace':' behind pace');
-  if(seat!==featuredSeat)return `<div class="upper-progress ${p.state}" data-bonus-seat="${seat}" aria-label="${esc(game.players[seat].name)}: ${p.subtotal} of ${p.threshold}. ${esc(status)}. ${esc(pace)}"><strong>${p.subtotal}<small> / ${p.threshold}</small></strong><progress max="${p.threshold}" value="${Math.min(p.threshold,p.subtotal)}" aria-label="${esc(game.players[seat].name)} upper points toward ${p.threshold}"></progress><span>${p.state==='secured'?'+'+p.award+' bonus':p.state==='unreachable'?'Out of reach':p.needed+' needed'}</span></div>`;
-  return `<div class="upper-progress ${p.state}" data-bonus-seat="${seat}"><strong>${p.subtotal}<small> / ${p.threshold}</small></strong><progress max="${p.threshold}" value="${Math.min(p.threshold,p.subtotal)}" aria-label="${esc(game.players[seat].name)} upper points toward ${p.threshold}"></progress><span>${p.needed?p.needed+' needed':'+ '+p.award+' bonus'}</span><b>${status}</b><small>${pace}</small></div>`;
- };
+ const bonusProgress=seat=>hidden?'<span class="bonus-hidden">Hidden until finish</span>':`<div class="bonus-projection" data-bonus-seat="${seat}">${renderBonusGraphic(game.sheets[seat],{name:game.players[seat].name,compact:seat!==featuredSeat})}</div>`;
  const upperTotal = seat => hidden?'Hidden':computeTotals(game.sheets[seat]).upperTotal;
  const lowerTotal = seat => hidden?'Hidden':computeTotals(game.sheets[seat]).lower;
  const grandTotal = seat => hidden?'Hidden':computeTotals(game.sheets[seat]).grand;

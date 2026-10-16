@@ -29,6 +29,11 @@ it('shows pending save, restores controls after failure and retries the same dra
  click('[data-action="confirm-score"][data-value="15"]');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));
  expect(sendOnline.mock.calls.at(-1)[2]).toBe(first[2]);expect(mock.room.game.sheets[0].fives).toBe(15);
 });
+it('opens precise bonus facts from the graphical meter without changing a score',()=>{
+ const before=JSON.stringify(mock.room.game);document.querySelector('.bonus-graphic:not(.compact) .bonus-ring-track').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+ expect(document.querySelector('#coreDialog').textContent).toContain('Fill the ring to63');expect(document.querySelector('#coreDialog').textContent).toContain('Dan');expect(document.querySelector('#coreDialog').textContent).toContain('Amber');
+ expect(JSON.stringify(mock.room.game)).toBe(before);expect(sendOnline).not.toHaveBeenCalled();document.querySelector('#coreDialog').close();
+});
 it('lets the score owner undo a scratch after turn handoff, reopen the category, and choose another score',async()=>{
  await score('smallStraight',0);expect(document.querySelector('main').lastElementChild.classList.contains('game-bottom-actions')).toBe(true);expect(document.querySelector('.game-bottom-actions button').textContent).toBe('Undo last turn');expect(document.querySelector('.game-bottom-actions').textContent).not.toContain('available before the next score');expect(mock.room.game.activeSeat).toBe(1);expect(document.querySelector('[data-action="undo-last-score"]')).not.toBeNull();
  await undo();expect(mock.room.game.activeSeat).toBe(0);expect(mock.room.game.sheets[0].smallStraight).toBeUndefined();expect(mock.room.game.events.some(event=>event.type==='score-undo')).toBe(true);expect(document.querySelector('[data-action="choose"][data-key="smallStraight"]')).not.toBeNull();

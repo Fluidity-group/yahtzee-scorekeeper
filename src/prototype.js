@@ -11,6 +11,7 @@ import {askGameCommentary,showWelcomeGate} from './ui/welcome-gate.js';
 import './ui/hosted-results.css';
 import './ui/tournament-insights.css';
 import {renderTournamentInsights,bindTournamentInsights} from './ui/tournament-insights.js';
+import {upperProgress} from './game/upper-progress.js';
 let insightsCleanup=()=>{};
 import {renderHostedResults} from './ui/hosted-results.js';
 import {renderTournamentBanner,renderTournamentStandings,renderTournamentActions} from './ui/tournament.js';
@@ -515,7 +516,7 @@ document.addEventListener('click',async e=>{
   if(a==='home')await returnHome();
   if(a==='game-menu')openNavigation();
   if(a==='scorecard-display')openDialog(renderScorecardDisplay());
-  if(a==='bonus-guide')openDialog('<h2>Your upper bonus</h2><p>Reach 63 points across Aces through Sixes to earn +35.</p><p>Three of each makes 63. Bigger scores in one category can make up for smaller scores in another.</p><p>Pace compares filled boxes with three matching dice each. Still possible means the remaining boxes could theoretically reach 63; it is not a prediction of your next rolls.</p><button class="all-scores" data-action="close">Got it</button>');
+  if(a==='bonus-guide')openDialog(`<h2>Your upper bonus</h2><p>Fill the ring to63 for +35. Each dice face has five levels: filled levels show how many matching dice you scored. The dotted line marks three. Empty outlines mean an open category; an amber cross means scratched.</p><p>Mint stacks meet the three-of-each benchmark; amber stacks are below it. Bigger scores can compensate for smaller ones. ◇ still chasing · ✓ secured · ! mathematically out of reach. None predicts your next roll.</p>${game.players.map((player,seat)=>{const p=upperProgress(game.sheets[seat]);return game.hideTotals&&game.status==='active'?'':`<h3>${esc(player.name)}</h3><p>${p.subtotal}/${p.threshold} · ${p.needed} needed · ${p.state==='secured'?'Bonus secured +'+p.award:p.state==='unreachable'?'Out of reach':'Still possible'} · ${p.pace===0?'On pace':Math.abs(p.pace)+(p.pace>0?' ahead of pace':' behind pace')}</p>`;}).join('')}<button class="all-scores" data-action="close">Got it</button>`);
   if(a==='tournament-menu'&&onlineRoom?.tournament){openDialog(renderTournamentActions(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));dialog.dataset.tournamentMenu='true';dialog.classList.add('tournament-drawer');root.querySelector('[data-action="tournament-menu"]')?.setAttribute('aria-expanded','true');}
   if(a==='global-commentary')openGlobalCommentary();
   if(a==='timing-log')showTimingLog();
