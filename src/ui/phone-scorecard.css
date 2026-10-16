@@ -126,3 +126,16 @@ body:has(dialog[open]){overflow:hidden;}
 .bonus-graphic:focus-visible{outline:2px solid var(--club-accent);outline-offset:2px;border-radius:8px;}
 @keyframes bonus-level-pop{from{transform:scaleY(.2);opacity:.3}to{transform:scaleY(1);opacity:1}}@keyframes bonus-ring-show{from{opacity:.3}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.bonus-graphic *{animation:none!important;transition:none!important;}}
+.upper-category-label{display:flex;align-items:center;justify-content:space-between;gap:3px 5px;flex-wrap:wrap;}
+.upper-category-indicator{display:block;flex:0 0 44px;width:44px;height:14px;overflow:visible;}
+.upper-category-indicator .filled{fill:var(--club-accent);}.upper-category-indicator.behind .filled{fill:var(--club-warm,#e6b46a);}
+.upper-category-indicator .empty{fill:transparent;stroke:var(--club-muted);stroke-width:.6;opacity:.4;}
+.upper-category-indicator .bonus-three-line{stroke:var(--club-muted);stroke-width:1;stroke-dasharray:2 1;}
+.upper-category-indicator .bonus-scratch{stroke:var(--club-warm,#e6b46a);stroke-width:1.5;stroke-linecap:round;}
+.upper-category-indicator rect.filled{transform-box:fill-box;transform-origin:left;animation:upper-level-fill .3s ease-out both;}
+.upper-category-indicator.behind rect.filled{fill:var(--club-accent);}.upper-category-indicator rect.surplus{fill:#91c8f0;}.upper-category-indicator rect.deficit{stroke:var(--club-warm,#e6b46a);opacity:.9;}
+.upper-category-indicator text{font:750 9px sans-serif;text-anchor:middle;dominant-baseline:middle;fill:var(--club-muted);}.upper-category-indicator .positive,.bonus-graphic .bonus-net-pace.positive{fill:#91c8f0;}.upper-category-indicator .negative,.bonus-graphic .bonus-net-pace.negative{fill:var(--club-warm,#e6b46a);}.upper-category-indicator .upper-yahtzee-star{fill:#edc66b;font-size:11px;}.bonus-graphic .bonus-net-pace{font-size:11px;font-weight:750;}
+#coreApp .phone-score-table .bonus-graphic:not(.compact){width:96px;height:44px;max-width:100%;}
+#coreApp .phone-score-table .bonus-graphic.compact{width:36px;height:36px;min-height:0;}
+@keyframes upper-level-fill{from{transform:scaleX(.1);opacity:.4}to{transform:scaleX(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.upper-category-indicator *{animation:none!important;}}
