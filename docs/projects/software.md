@@ -1,5 +1,7 @@
 # Software project control
 
+SW046 proposed next multiplayer capability: account-targeted tournament invitations and explicit play requests/readiness, native notification/link routing, with persistent UUID membership and no automatic resume. Source/official-platform review completed; execution, signing/provider setup and physical push acceptance pending. See ../plans/SW-046-account-invitations-and-play-requests.md.
+
 17 October SW045 iOS foundation compiled, installed and launched on the Mac iPhone17/iOS27.0 simulator using Xcode27.1/macOS26.6.2/Apple Silicon and isolated Node24.19.0. Qualified code0a76c6f:1,114tests passed/13optional camera skips/all configured builds; clean stable gate. Public-only config, local voice bypass, safe-area repair and38byte-matched installed assets verified. Physical iPhone signing/install and Android–iOS two-player acceptance remain open; approved Rally/race-lane/bonus redesign is not yet integrated. No cloud writes, AI calls, Android/web deployment or game/settings reset.
 
 17 October SW044 created three animated two-player concepts and shortened the test roadmap. Owner confirms Mac availability; AI voice and commercial-release work deferred. Fictional standalone lab, centred scoring/bonus/lead/Undo, exact tournament scenarios and reduced motion checked in browser. No production changes, provider calls, native build or deployment. Existing SW042 tournament/settings unaffected. [Plan](../plans/SW-044-two-player-design-lab.md).
