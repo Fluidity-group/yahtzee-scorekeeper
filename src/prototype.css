@@ -223,4 +223,5 @@ html[data-native] #coreApp.playing{height:100dvh;}
 .game-bottom-actions{display:flex;justify-content:center;margin:20px 0 0;padding:12px 0 max(18px,env(safe-area-inset-bottom));}.game-bottom-actions button{min-height:48px;min-width:160px;width:auto;padding:12px 24px;}
 
 /* SW045: capability scope of the first manual iOS build; saved preferences stay intact. */
+html[data-ios-test] #coreApp{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;}
 html[data-ios-test] .home-commentary,html[data-ios-test] .mp-commentary-setup,html[data-ios-test] [data-action="global-commentary"],html[data-ios-test] [data-action="commentary-settings"],html[data-ios-test] [data-mp="commentary"],html[data-ios-test] [data-action="timing-log"],html[data-ios-test] [data-action="connect-dice"],html[data-ios-test] [data-action="camera-settings"],html[data-ios-test] [data-action="camera-test"]{display:none!important}

@@ -16,6 +16,7 @@ beforeAll(async()=>{
 });
 it('starts manual scoring despite enabled saved voice and preserves that preference',async()=>{
  expect(document.documentElement.dataset.iosTest).toBe('true');
+ expect(document.querySelector('.home-footer').textContent).not.toContain('commentary');
  document.querySelector('[data-action=home-solo]').click();
  document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
  await vi.waitFor(()=>expect(document.querySelector('.core-score-table')).not.toBeNull());
