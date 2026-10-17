@@ -39,7 +39,7 @@ describe('production phone scorecard integration',()=>{
   await vi.waitFor(()=>expect(document.querySelector('.phone-own-heading .player-name')?.textContent).toBe('Bo'));
   expect(document.querySelector('.phone-own-heading').dataset.playerSeat).toBe('1');
   const peer=document.querySelector('[data-score-key="aces"][data-score-seat="0"]');
-  expect(peer.textContent).toBe('3');expect(peer.querySelector('button')).toBeNull();
+  expect(peer.textContent).toBe('3');expect(peer.querySelector('[data-action="edit"]')).not.toBeNull();
   expect(document.querySelector('.phone-peer-headings [data-player-seat="0"] .player-name').textContent).toBe('Ann');
   expect(document.querySelector('#coreDialog').open).toBe(false);
  });

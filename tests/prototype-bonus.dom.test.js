@@ -60,6 +60,8 @@ describe('additional Yahtzee scorecard entry',()=>{
   for(const expected of [100,200]){
    action('another-yahtzee');click('[data-action="repeat-face"][data-face="2"]');action('confirm-another');
    await waitFor(()=>expect(bonusRow().querySelector('.bonus-total').textContent).toBe(String(expected)));
+   expect(bonusRow().querySelector('[data-action="undo-last-score"]')).not.toBeNull();
+   expect(bonusRow().querySelector('[data-action="another-yahtzee"]')).not.toBeNull();
   }
   expect(document.querySelector('[data-action="edit"][data-key="yahtzee"]').textContent).toBe('50');
   expect(document.querySelector('[data-action="choose"][data-key="chance"]').disabled).toBe(false);

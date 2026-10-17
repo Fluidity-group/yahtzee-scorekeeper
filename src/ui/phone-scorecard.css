@@ -139,3 +139,5 @@ body:has(dialog[open]){overflow:hidden;}
 #coreApp .phone-score-table .bonus-graphic.compact{width:36px;height:36px;min-height:0;}
 @keyframes upper-level-fill{from{transform:scaleX(.1);opacity:.4}to{transform:scaleX(1);opacity:1}}
 @media(prefers-reduced-motion:reduce){.upper-category-indicator *{animation:none!important;}}
+
+#coreApp .phone-scorecard button.phone-peer-score{min-height:44px;line-height:1.2;border:1px solid var(--club-line);border-radius:10px;touch-action:manipulation;}

@@ -15,4 +15,4 @@ CSS/SVG suffices; no engine/library required. Existing corrections and game auth
 
 ## Verification and completion
 
-Focused scoring/Undo/tournament/adapter/graphics regressions:32 passed before additional menu/cutoff assertions. Browser synthetic390px: columns161/126/63px, indicator70px, no page overflow. Full gate and package/deployment state to be recorded separately. Physical two-phone acceptance remains open.
+Focused scoring/Undo/tournament/adapter/graphics regressions:32 passed before additional menu/cutoff assertions; further bonus/phone/Undo/menu run22 passed. First full gate caught a bonus-row regression (Undo replaced repeat-bonus entry), repaired by retaining both controls; shared-phone expectation updated for the explicit latest-frame exception. Browser synthetic320/390/402/440px: no page overflow;390px columns161/126/63px, indicator70px. Full gate and package/deployment state to be recorded separately. Physical two-phone acceptance remains open.
