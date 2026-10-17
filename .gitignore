@@ -28,5 +28,6 @@ ios/**/DerivedData/
 ios/**/Package.resolved
 dist-ios-test/
 android/app/google-services.json
+android/.kotlin/
 .private/
 *.p8
