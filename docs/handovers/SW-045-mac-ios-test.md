@@ -1,3 +1,9 @@
+## Current Mac setup — 17 October 2026
+
+The native simulator build is complete. Open the local folder `/Users/ambercavanaugh/Developer/yahtzee-sw045-0102fd2` as a Codex project. Final code is0a76c6f (Mac snapshot9c35bcc); the folder name is the initial baseline. Xcode project is `ios/App/App.xcodeproj`. Xcode27 uses **Device Hub**; open Xcode → Open Developer Tool → Device Hub. No physical iPhone is connected/signed/installed yet.
+
+Node is portable at `~/Developer/yahtzee-tools/node-v24.19.0-darwin-arm64/bin`; prepend that directory to PATH for this project shell before npm commands. No global system runtime or shell startup files were changed.
+
 # Mac handoff — SW045 manual iOS test
 
 The approved visual mix is Rally layout, Night Match race lanes, Playform bonus animation. First prove the working manual game natively on iOS. Keep all cloud games/accounts/settings; no backend deployment or voice work is required.
@@ -12,7 +18,7 @@ The approved visual mix is Rally layout, Night Match race lanes, Playform bonus 
 
 ## First build
 
-Unzip the supplied SW045 handoff into its own folder. It contains source, the generated Xcode project, prebuilt web assets and ignored public-only .env.ios-test.local. It contains no account sessions, game database, private AI/server keys or signing certificates.
+Unzip the supplied SW045 handoff into its own folder. The source archive contains the generated Xcode project. Public-only .env.ios-test.local was transferred separately; npm run ios:sync generates the native assets. It contains no account sessions, game database, private AI/server keys or signing certificates.
 
 From that folder:
 
