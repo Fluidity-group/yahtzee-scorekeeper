@@ -80,7 +80,7 @@
 body:has(dialog[open]){overflow:hidden;}
 @media(min-width:600px){.phone-category-col{width:38%;}.phone-own-col{width:36%;}}
 /* SW041: the owner's actionable scores lead; opponents remain a narrow reference. */
-#coreApp .phone-category-col{width:34%;}#coreApp .phone-own-col{width:48%;}#coreApp .phone-comparison-col{width:18%;}
+#coreApp .phone-category-col{width:46%;}#coreApp .phone-own-col{width:36%;}#coreApp .phone-comparison-col{width:18%;}
 #coreApp .phone-score-table thead th{height:68px;padding:6px 4px;vertical-align:middle;}
 #coreApp .phone-own-heading .player-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 6px;text-align:left;}
 #coreApp .phone-own-heading .player-summary strong{grid-column:2;grid-row:1/3;font-size:var(--score-number);}
@@ -127,7 +127,7 @@ body:has(dialog[open]){overflow:hidden;}
 @keyframes bonus-level-pop{from{transform:scaleY(.2);opacity:.3}to{transform:scaleY(1);opacity:1}}@keyframes bonus-ring-show{from{opacity:.3}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.bonus-graphic *{animation:none!important;transition:none!important;}}
 .upper-category-label{display:flex;align-items:center;justify-content:space-between;gap:3px 5px;flex-wrap:wrap;}
-.upper-category-indicator{display:block;flex:0 0 44px;width:44px;height:14px;overflow:visible;}
+.upper-category-indicator{display:block;flex:0 0 70px;width:70px;height:22px;overflow:visible;}
 .upper-category-indicator .filled{fill:var(--club-accent);}.upper-category-indicator.behind .filled{fill:var(--club-warm,#e6b46a);}
 .upper-category-indicator .empty{fill:transparent;stroke:var(--club-muted);stroke-width:.6;opacity:.4;}
 .upper-category-indicator .bonus-three-line{stroke:var(--club-muted);stroke-width:1;stroke-dasharray:2 1;}

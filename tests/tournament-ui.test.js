@@ -3,6 +3,13 @@ import {it,expect} from 'vitest';
 import {renderTournamentBanner,renderTournamentStandings,renderTournamentActions} from '../src/ui/tournament.js';
 import {renderHostedResults} from '../src/ui/hosted-results.js';
 import {createCoreGame} from '../src/game/core.js';
+import {renderGameMenu} from '../src/ui/clubhouse-home.js';
+it('puts an obvious resume action first in the clubhouse menu only when the caller permits it',()=>{
+ document.body.innerHTML=renderGameMenu({hasGame:true,resumeTournament:true,resumeDisabled:true});
+ expect(document.querySelector('.club-menu-grid').firstElementChild.dataset.action).toBe('tournament-resume');
+ expect(document.querySelector('.tournament-resume-primary').disabled).toBe(true);
+ document.body.innerHTML=renderGameMenu({hasGame:true});expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();
+});
 const data={completedGames:3,final:true,standings:[{userId:'a',name:'Dan',points:800,wins:1,games:3},{userId:'b',name:'Amber',points:700,wins:2,games:3}]};
 it('shows independent points and wins champions without publishing account identities',()=>{
  document.body.innerHTML=renderTournamentStandings(data,{final:true});
@@ -19,8 +26,8 @@ it('marks all tied leaders and does not award a leader before any completed game
 it('renders pause controls only for the host, and disables them while reconnecting',()=>{
  const room={hostId:'a',gameSequence:2,capabilities:{tournaments:true},tournament:{name:'<Fun>',gameCount:3,playerCount:2,status:'paused'}};
  document.body.innerHTML=renderTournamentBanner(room,'a',{connected:false})+renderTournamentActions(room,'a',{connected:false});
- expect(document.querySelector('[data-action="tournament-resume"]').disabled).toBe(true);expect(document.body.textContent).toContain('Game 2 of 3');expect(document.body.textContent).toContain('<Fun>');expect(document.querySelector('fun')).toBeNull();
- document.body.innerHTML=renderTournamentBanner(room,'b')+renderTournamentActions(room,'b');expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();expect(document.body.textContent).toContain('progress is saved');
+ expect(document.querySelector('[data-action="tournament-resume"]').disabled).toBe(true);expect(document.querySelector('.tournament-actions').firstElementChild.dataset.action).toBe('tournament-resume');expect(document.querySelector('.tournament-resume-primary')).not.toBeNull();expect(document.body.textContent).toContain('Game 2 of 3');expect(document.body.textContent).toContain('<Fun>');expect(document.querySelector('fun')).toBeNull();
+ document.body.innerHTML=renderTournamentBanner(room,'b')+renderTournamentActions(room,'b');expect(document.querySelector('[data-action="tournament-resume"]')).toBeNull();expect(document.querySelector('.tournament-banner p')).toBeNull();expect(document.querySelector('.tournament-banner').textContent).not.toContain('Paused');
 });
 it('shows final tournament results with no rematch or next-starter promise',()=>{
  const game=createCoreGame({id:'g',names:['Dan','Amber']});game.status='finished';
