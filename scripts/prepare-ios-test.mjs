@@ -11,7 +11,7 @@ if(!existsSync(path))throw Error('Missing .env.ios-test.local. Use the public co
 const fields=validateIosTestConfig(readFileSync(path,'utf8'));
 for(const pkg of['core','cli','ios']){const version=JSON.parse(readFileSync(resolve(root,'node_modules/@capacitor/'+pkg+'/package.json'),'utf8')).version;if(version!=='8.5.2')throw Error('Expected Capacitor '+pkg+' 8.5.2, found '+version);}
 const ios=JSON.parse(readFileSync(resolve(root,'capacitor.config.json'),'utf8'));
-if(ios.ios?.includePlugins?.length!==0)throw Error('The first iOS manual test must not include unqualified native plugins.');
+if(JSON.stringify(ios.ios?.includePlugins)!==JSON.stringify(['@capacitor/app','@capacitor/push-notifications','@capacitor/status-bar']))throw Error('Only qualified App, Push and StatusBar adapters belong in the manual iOS target.');
 console.log('Node '+process.versions.node+'; Capacitor 8.5.2; public app config valid; voice disabled.');
 console.log('Multiplayer backend: '+new URL(fields.VITE_SUPABASE_URL).hostname+' (no keys printed).');
 if(mac){const r=spawnSync('xcodebuild',['-version'],{encoding:'utf8'});if(r.status!==0)throw Error('Open Xcode once to finish its setup, then select Xcode in Settings > Locations > Command Line Tools.');const match=r.stdout.match(/Xcode\s+(\d+)/);if(!match||Number(match[1])<26)throw Error('Xcode 26 or later is required by this Capacitor target.');console.log(r.stdout.trim());}

@@ -1,0 +1,82 @@
+/* Playform: warm paper, ink, tactile geometry. The scorecard remains the authority surface. */
+html[data-design="playform"]{--club-font:ui-rounded,'SF Pro Display','Segoe UI Variable',system-ui,sans-serif;--club-accent:#c4b4ff;--club-on-accent:#241c41;--club-second:#ffaf8f;--club-second-soft:#3c2b2d;--club-warm:#f1cc6b;--club-bg:#171620;--club-surface:#1c1a27;--club-panel:#252231;--club-raised:#302c40;--club-soft:#332d48;--club-line:#494151;--club-text:#f7f1e9;--club-muted:#c0b8c8;--club-danger:#ffb1a0;--club-shadow:0 16px 45px #08051125}
+html[data-design="playform"][data-theme="light"]{color-scheme:light;--club-bg:#ece7e0;--club-surface:#fffaf3;--club-panel:#fffdf8;--club-raised:#f2ece3;--club-soft:#ece7f8;--club-line:#ded5df;--club-text:#302b42;--club-muted:#625d73;--club-accent:#6152b4;--club-on-accent:#fffaf3;--club-second:#a4492b;--club-second-soft:#f9e7dc;--club-warm:#79591d;--club-danger:#a3342c;--club-shadow:0 16px 45px #302b4210}
+html[data-design="playform"] body{background-image:none}
+html[data-design="playform"] .device{border-radius:28px 28px 8px 28px}
+html[data-design="playform"] .clubhouse-home{padding-top:18px;padding-bottom:22px;max-width:640px}
+html[data-design="playform"] .clubhouse-brand{font-size:23px;letter-spacing:-1.5px;font-weight:850}
+html[data-design="playform"] .clubhouse-brand span{font-weight:650;letter-spacing:1.5px;font-size:10px}
+html[data-design="playform"] .clubhouse-brand i{display:none}
+html[data-design="playform"] .home-menu-button{margin-left:auto;background:var(--club-raised);color:var(--club-text);border:1px solid var(--club-line);border-radius:50% 50% 10px 50%;min-height:46px;min-width:46px;font-size:23px;box-shadow:none}
+html[data-design="playform"] .clubhouse-home h1{font-size:clamp(39px,11vw,66px);line-height:1;letter-spacing:-.06em;max-width:440px;margin-top:16px}
+html[data-design="playform"] .clubhouse-home h1 em{color:var(--club-accent)}
+html[data-design="playform"] .intro-kicker{color:var(--club-muted);letter-spacing:.12em}
+html[data-design="playform"] .home-lead{font-size:15px;margin-bottom:0}
+.playform-home-art{height:70px;position:relative;margin:18px 0 3px;display:flex;align-items:end;gap:12px;overflow:hidden;border-bottom:1px solid var(--club-line);pointer-events:none}
+.playform-home-art i{display:block;font-style:normal;flex:0 0 auto}
+.playform-home-art .pf-arch{height:56px;width:80px;border-radius:50px 50px 0 0;background:var(--club-accent);opacity:.9;transform:rotate(-6deg);transform-origin:bottom;animation:pf-arch-land .6s cubic-bezier(.2,.8,.2,1) both}
+.playform-home-art .pf-tile{height:48px;width:48px;border:8px solid var(--club-second);border-radius:9px 9px 3px 9px;transform:rotate(12deg);animation:pf-tile-land .7s cubic-bezier(.2,.8,.2,1) both}
+.playform-home-art .pf-disc{height:37px;width:37px;border-radius:50%;background:#dfad45;animation:pf-disc-land .8s cubic-bezier(.2,.8,.2,1) both}
+.playform-home-art .pf-dash{height:12px;width:61px;align-self:center;margin-left:auto;border-radius:20px;background:var(--club-accent);opacity:.35;transform:rotate(-30deg)}
+html[data-design="playform"] .home-game-grid{gap:10px;margin:20px 0}
+html[data-design="playform"] .home-game-card{background:var(--club-panel);color:var(--club-text);border:1px solid var(--club-line);border-radius:22px 22px 7px 22px;min-height:146px;padding:16px;gap:10px;box-shadow:0 3px 0 color-mix(in srgb,var(--club-text) 10%,transparent);transition:transform .18s,box-shadow .18s}
+html[data-design="playform"] .home-game-card:active{transform:translateY(3px) scale(.985);box-shadow:none}
+html[data-design="playform"] .home-game-card.mint{background:var(--club-soft)}
+html[data-design="playform"] .home-game-card.blue{background:var(--club-second-soft)}
+html[data-design="playform"] .home-game-card strong{font-size:18px;max-width:150px;letter-spacing:-.025em}
+html[data-design="playform"] .home-game-card small{color:var(--club-muted);font-size:12px;line-height:1.4}
+html[data-design="playform"] .home-card-number{font-weight:750;color:var(--club-accent);opacity:1}
+html[data-design="playform"] .home-card-arrow{color:var(--club-accent)}
+html[data-design="playform"] .home-footer{font-size:11px;color:var(--club-muted)}
+html[data-design="playform"] .home-resume{background:var(--club-soft);color:var(--club-text);border-color:var(--club-line);border-radius:20px 20px 6px 20px}
+html[data-design="playform"] .home-resume small,html[data-design="playform"] .home-resume>span{color:var(--club-muted)}
+html[data-design="playform"] .club-menu-grid button{background:var(--club-panel);color:var(--club-text);border-color:var(--club-line);border-radius:16px 16px 5px 16px}
+html[data-design="playform"] .social-banner{background:var(--club-soft);color:var(--club-text);border-color:var(--club-accent)}
+.playform-people{display:flex;align-items:center;gap:12px;width:100%;min-height:62px;text-align:left;background:var(--club-panel);border:1px solid var(--club-line);color:var(--club-text);padding:13px 16px;border-radius:16px 16px 5px 16px}
+.playform-people>span:first-child{display:block;width:28px;height:28px;border:7px solid var(--club-second);border-radius:50%}
+.playform-people strong,.playform-people small{display:block}.playform-people small{font-size:11px;color:var(--club-muted);margin-top:4px}.playform-people>span:last-child{margin-left:auto;font-size:23px;color:var(--club-accent)}
+html[data-design="playform"] .core-dialog,html[data-design="playform"] .social-dialog{background:var(--club-surface);border-color:var(--club-line);color:var(--club-text);border-radius:26px 26px 8px 26px;box-shadow:var(--club-shadow)}
+html[data-design="playform"] .social-dialog button{background:var(--club-soft);color:var(--club-accent);border-color:var(--club-line)}
+html[data-design="playform"] .social-dialog input{background:var(--club-panel);color:var(--club-text);border-color:var(--club-line)}
+html[data-design="playform"] .social-dialog small,html[data-design="playform"] .social-members>div span{color:var(--club-muted)}
+html[data-design="playform"] .social-dialog [data-social-status]{color:var(--club-accent)}
+html[data-design="playform"] .core-score-table .player-heading,html[data-design="playform"] .phone-peer-slot{--player-color:var(--club-accent);--player-tile:var(--club-soft);--player-border:var(--club-line)}
+html[data-design="playform"] .phone-peer-slot{--player-color:var(--club-second);--player-tile:var(--club-second-soft)}
+html[data-design="playform"] #coreApp .phone-score-table tr>:nth-child(2){--player-color:var(--club-accent);--player-tile:var(--club-soft);--player-border:var(--club-line)}
+html[data-design="playform"] #coreApp .phone-score-table .active-score{background:var(--club-soft);color:var(--club-accent)}
+html[data-design="playform"] #coreApp .phone-score-table .active-score .empty-score-button{color:var(--club-accent)}
+html[data-design="playform"] #coreApp .phone-scorecard .player-summary strong,html[data-design="playform"] #coreApp .phone-scorecard .player-name{color:var(--club-text)}
+html[data-ios-test] #nameInputs>details{display:none}
+html[data-design="playform"] #coreApp .compact-header{padding-top:4px;padding-bottom:4px;min-height:42px}
+html[data-design="playform"] .compact-logo{font-weight:850;letter-spacing:-1px}
+html[data-design="playform"] .compact-logo span{color:var(--club-second)}
+html[data-design="playform"] .core-score-table th,html[data-design="playform"] .core-score-table td{border-color:var(--club-line)}
+html[data-design="playform"] .core-score-table .player-heading.current-player{background:var(--club-soft);box-shadow:inset 0 4px var(--club-accent)}
+html[data-design="playform"] .phone-peer-slot.current-player{background:var(--club-second-soft);box-shadow:inset 0 4px var(--club-second)}
+html[data-design="playform"] .recorded-score{border-radius:12px 12px 4px 12px;background:var(--club-soft);color:var(--club-text);box-shadow:none}
+html[data-design="playform"] .empty-score-button{border-radius:12px 12px 4px 12px;color:var(--club-accent);border-color:var(--club-line);background:var(--club-panel)}
+html[data-design="playform"] .scratched-score{color:var(--club-danger)!important;background:color-mix(in srgb,var(--club-danger) 8%,var(--club-panel))!important;border-style:solid!important}
+html[data-design="playform"] .phone-comparison-cell .recorded-score{background:transparent;color:var(--club-second);font-weight:650}
+html[data-design="playform"] .section-divider th{background:var(--club-raised);color:var(--club-accent)}
+html[data-design="playform"] .core-score-table .score-choice,html[data-design="playform"] .manual-score-choice{background:var(--club-panel);color:var(--club-text);border-color:var(--club-line);border-radius:16px 16px 5px 16px}
+.playform-bonus-tiles{display:none}
+html[data-design="playform"] .playform-bonus-tiles{display:block;fill:var(--club-line)}
+html[data-design="playform"] .playform-bonus-tiles .earned{fill:var(--club-accent)}
+html[data-design="playform"] .bonus-graphic.secured .playform-bonus-tiles .earned{fill:var(--club-second)}
+html[data-design="playform"] .bonus-ring-track,html[data-design="playform"] .bonus-ring-fill{opacity:0}
+html[data-design="playform"] .bonus-meter-number{fill:var(--club-text)}
+html[data-design="playform"] .bonus-meter-target{fill:var(--club-muted)}
+html[data-design="playform"] .playform-bonus-awarded .playform-bonus-tiles rect{transform-box:fill-box;transform-origin:center;animation:pf-bonus-assemble .65s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--tile-index)*55ms)}
+html[data-design="playform"] .playform-score-total strong{animation:pf-total-land .6s cubic-bezier(.2,.8,.2,1)}
+html[data-design="playform"] .accepted-score>.recorded-score{animation:pf-total-land .55s cubic-bezier(.2,.8,.2,1)}
+html[data-design="playform"] .pulse-emblem{text-shadow:none;color:var(--club-accent)}
+html[data-design="playform"] .pulse-emblem-full-house{background:var(--club-second-soft);border-color:var(--club-second);color:var(--club-second)}
+html[data-design="playform"] .insight-player-grid article,html[data-design="playform"] .hosted-results{background:var(--club-panel);border-color:var(--club-line);border-radius:22px 22px 7px 22px}
+html[data-design="playform"] #gameCelebration{background:var(--club-soft);color:var(--club-text);border-color:var(--club-accent);border-radius:24px 24px 6px 24px;box-shadow:var(--club-shadow)}
+@keyframes pf-arch-land{from{transform:translateY(40px) rotate(-15deg)}to{transform:translateY(0) rotate(-6deg)}}
+@keyframes pf-tile-land{from{transform:translateY(40px) rotate(50deg)}to{transform:translateY(0) rotate(12deg)}}
+@keyframes pf-disc-land{0%{transform:translateY(40px) scale(.6)}65%{transform:translateY(-7px) scale(1.05)}100%{transform:translateY(0) scale(1)}}
+@keyframes pf-bonus-assemble{0%{transform:translateY(12px) rotate(-30deg) scale(.5)}65%{transform:translateY(-3px) rotate(7deg) scale(1.08)}100%{transform:translateY(0) rotate(0) scale(1)}}
+@keyframes pf-total-land{0%{transform:translateY(5px) scale(.88)}55%{transform:translateY(-2px) scale(1.06)}100%{transform:translateY(0) scale(1)}}
+@media(max-width:759px){html[data-design="playform"] .device{border-radius:0}html[data-design="playform"] .clubhouse-home{padding-left:18px;padding-right:18px}html[data-design="playform"] .home-game-card{min-height:142px}}
+@media(prefers-reduced-motion:reduce){html[data-design="playform"] .playform-home-art i,html[data-design="playform"] .playform-bonus-tiles rect,html[data-design="playform"] .playform-score-total strong,html[data-design="playform"] .accepted-score>.recorded-score{animation:none!important;transition:none!important}}

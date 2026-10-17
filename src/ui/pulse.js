@@ -59,6 +59,8 @@ function drawPulse(root, previous, next, effect, action, intensity) {
  }
  if (effect.bonusSeat !== null) mark(heading(effect.bonusSeat), 'accepted-bonus');
  const moment = celebration(previous, next);
+ if(effect.score)mark(heading(effect.score.seat),'playform-score-total');
+ if(moment?.upperBonus)mark(root.querySelector(`[data-bonus-seat="${action.seat}"]`),'playform-bonus-awarded');
  const kind = moment?.kind === 'finish' ? (action?.category === 'yahtzee' || moment.bonus > 0 ? 'yahtzee' : moment.upperBonus ? 'upper-bonus' : action?.category === 'fullHouse' ? 'full-house' : ['smallStraight', 'largeStraight'].includes(action?.category) ? 'straight' : 'score') : moment?.kind;
  const anchor = cell || (effect.bonusSeat !== null ? heading(effect.bonusSeat) : null);
  if (anchor && kind && kind !== 'score' && intensity !== 'subdued' && anchor.ownerDocument) {

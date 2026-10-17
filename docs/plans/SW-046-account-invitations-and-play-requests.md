@@ -1,6 +1,6 @@
-# SW046 proposal: account invitations and tournament play requests
+# SW046 implementation: account invitations and tournament play requests
 
-17 October 2026. Research/design proposal, not implemented, deployed or owner-approved for execution. SW045 native test and approved shared visual direction remain separate. No account, tournament, notification or provider mutation during this review.
+17 October 2026. Owner authorised implementation for Android/iOS and preservation of the current tournament/both memberships. Implementation and qualification in progress; no live deployment. SW045 native test and approved shared visual direction remain separate. No account, tournament, notification or provider mutation during this review.
 
 ## Experience
 
@@ -42,3 +42,11 @@ Existing `src/multiplayer/room.js` stores UUID members, permits new joins only i
 - [FCM Android setup](https://firebase.google.com/docs/cloud-messaging/android/get-started)
 
 Accessed 17 October 2026. Proposed design is distinct from existing deployed capability.
+
+## Implemented candidate
+
+- Additive SQL RPC/inbox/RLS for verified-email invitations, atomic UUID membership acceptance in lobby, play requests and explicit readiness without changing scores/pause state. Existing members have no new invitation gate. Per-account cooldown, expired/revoked/stale checks and transactional push outbox with leases/invalid-token cleanup.
+- Shared invitations/players UI, authenticated cold/warm destination routing and native App/Push adapters. Server-only Node24 APNs HTTP2 + FCM HTTPv1 worker; provider configuration, supervised operation and real alert delivery pending. HTTPS app associations are not configured; existing web share fallback and native custom-scheme routing are prepared.
+- Owner changed primary UI direction to Playform during implementation; see SW047 for actual shared home/score/bonus surface. Saved explicit theme preferences preserved; new installs default light.
+- Disposable PostgreSQL checks22passed including concurrent last-seat acceptance, unchanged existing paused snapshots, original two members, recipient ownership, retries, readiness, expired/revoked/stale requests and worker leases. Evidence artifacts/sw046-db/report.json. Focused JS/DOM pulse/bonus/social checks40passed. Full gate and native builds pending at this checkpoint.
+- Phone setup: docs/handovers/SW-046-phone-notifications.md. Mac signing identity count0, physical iPhone unavailable; owner unsure whether an Apple Developer membership exists. No purchases, private key transfer, real notifications, cloud mutation, account/profile replacement, Pixel update or web publication.

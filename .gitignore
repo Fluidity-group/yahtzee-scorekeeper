@@ -27,3 +27,6 @@ ios/**/xcuserdata/
 ios/**/DerivedData/
 ios/**/Package.resolved
 dist-ios-test/
+android/app/google-services.json
+.private/
+*.p8

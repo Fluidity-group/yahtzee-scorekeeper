@@ -2,6 +2,8 @@ import './styles.css';
 import './clubhouse.css';
 import './prototype.css';
 import './ui/clubhouse-home.css';
+import './ui/playform.css';
+document.documentElement.dataset.design='playform';
 import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';
 import {renderCommentarySettings,bindCommentarySettings} from './ui/commentary-settings.js';
 import {readCommentaryPreferences,persistCommentaryPatch,readLocalPlayerDefaults,saveLocalPlayerDefaults} from './commentary/preferences.js';
@@ -96,7 +98,7 @@ function confirmUndoScore(){
  const candidate=ownUndoCandidate();if(!candidate||tournamentPaused()||onlineRoom&&!onlineConnected)throw Error('This score cannot be undone now.');
  openDialog(`<h2>Undo last turn?</h2><p class="core-muted">${candidate.type==='score'?`Reopen ${esc(META[candidate.category].name)} and remove its score and attached bonus.`:candidate.type==='bonus'?`Remove the ${candidate.value}-point bonus and restart this turn.`:'Restart the last final Yahtzee attempt and reverse its bonus, if any.'} Return the turn to ${esc(game.players[candidate.seat].name)}. Any following unscored dice readings are cancelled; history is retained. A fresh roll is needed for connected dice.</p><button class="bigbtn score core-primary" data-action="confirm-undo-score" data-target="${esc(candidate.id)}" data-seat="${candidate.seat}" data-game="${esc(game.id)}" data-revision="${game.revision}">Undo turn · return turn</button><button class="all-scores" data-action="close">Keep the score</button>`);
 }
-let theme='dark';try{theme=localStorage.getItem('yz_theme')==='light'?'light':'dark';}catch{}
+let theme='light';try{theme=localStorage.getItem('yz_theme')==='dark'?'dark':'light';}catch{}
 const descriptions={
   standard:'Three rolls. Extra Yahtzees add 100 and fill a category on the same turn using Joker placement.',
   competition:'Three rolls, or four while your final category is open. Extra Yahtzees add 100 and grant a fresh turn. One category ends a bonus chain.',
@@ -107,7 +109,7 @@ const rulesDescription=()=>game.mode==='competition'&&game.rules.version===2?com
 const setupDescription=(mode,source)=>mode==='competition'&&source==='manual'?competitionV2Description:descriptions[mode];
 document.body.innerHTML='<div id="coreApp" class="device"></div><dialog id="coreDialog" class="core-dialog"></dialog><div id="gameCelebration" role="status" aria-live="polite"></div><div id="coreNotice" role="status" aria-live="polite"></div>';
 const root=document.getElementById('coreApp'),dialog=document.getElementById('coreDialog');
-function applyTheme(){document.documentElement.dataset.theme=theme;document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0b141c':'#f3f6f5');}
+function applyTheme(){document.documentElement.dataset.theme=theme;import('./ui/playform-native.js').then(m=>m.syncPlayformBars(theme)).catch(()=>{});document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0b141c':'#f3f6f5');}
 applyTheme();
 function notice(text){clearTimeout(noticeTimer);const box=document.getElementById('coreNotice');box.textContent=text;if(text==='Saved on this device.'||text==='Saved to the shared game.')noticeTimer=setTimeout(()=>{box.textContent='';},2500);if(dialog.open){let alert=dialog.querySelector('[role="alert"]');if(!alert){alert=document.createElement('p');alert.setAttribute('role','alert');dialog.append(alert);}alert.textContent=text;}}
 function header(){return '<header class="compact-header"><button class="compact-logo hbtn" data-action="home">yahtzee<span>.</span></button><button class="hbtn" data-action="game-menu" aria-label="Open clubhouse menu">Menu <span aria-hidden="true">☰</span></button></header>';}
@@ -420,7 +422,7 @@ async function openMultiplayer(joinCode='',landing='home'){
   greeting:startHostedWelcome,
   commentary(){return openCommentary();},
   table(room,userId,connected){if(!room){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;}else{hostedCommentaryActive=true;onlineRoom=room;onlineUserId=userId;onlineConnected=connected;syncHostedCommentary();}},
-  account(user){if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
+  account(user){import('./multiplayer/social-ui.js').then(m=>m.connectSocial(user)).catch(()=>{});if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
   exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;showHome();},
   game(room,userId,connected,changed){
    hostedCommentaryActive=true;if(!pendingWelcome&&!welcomeGate)view='game';
@@ -514,6 +516,8 @@ document.addEventListener('click',async e=>{
  try{
   if(a==='home')await returnHome();
   if(a==='game-menu')openNavigation();
+  if(a==='social-inbox'){dialog.close();await openMultiplayer('','invitations');}
+  if(a==='tournament-players'){dialog.close();await (await import('./multiplayer/social-ui.js')).openSocial(onlineRoom);}
   if(a==='scorecard-display')openDialog(renderScorecardDisplay());
   if(a==='bonus-guide')openDialog(`<h2>Your upper bonus</h2><p>Fill the ring to63 for +35. Beside each upper-category label, three baseline segments and a fourth surplus segment fill left to right for matching dice scored. The dotted marker after the third segment is the usual pace. A star marks a five-dice Yahtzee result if it was legally placed in an upper box. Empty outlines mean an open category; an amber cross means scratched.</p><p>Mint indicators meet the three-of-each benchmark; amber indicators are below it. Point badges show the real surplus or deficit: four Sixes gives +6, covering the −5 from two Fives. The number beside the ring is your net pace across filled upper boxes. ◇ still chasing · ✓ secured · ! mathematically out of reach. None predicts your next roll.</p>${game.players.map((player,seat)=>{const p=upperProgress(game.sheets[seat]);return game.hideTotals&&game.status==='active'?'':`<h3>${esc(player.name)}</h3><p>${p.subtotal}/${p.threshold} · ${p.needed} needed · ${p.state==='secured'?'Bonus secured +'+p.award:p.state==='unreachable'?'Out of reach':'Still possible'} · ${p.pace===0?'On pace':Math.abs(p.pace)+(p.pace>0?' ahead of pace':' behind pace')}</p>`;}).join('')}<button class="all-scores" data-action="close">Got it</button>`);
   if(a==='tournament-menu'&&onlineRoom?.tournament){openDialog(renderTournamentActions(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));dialog.dataset.tournamentMenu='true';dialog.classList.add('tournament-drawer');root.querySelector('[data-action="tournament-menu"]')?.setAttribute('aria-expanded','true');}
@@ -627,8 +631,18 @@ document.addEventListener('click',async e=>{
   }
  }catch(e){notice(e.message);}
 });
-async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join');if(join)await openMultiplayer(join);else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
-initialize();
+async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join'),saved=(await import('./multiplayer/social-links.js')).readSocialDestination();if(join)await openMultiplayer(join);else if(saved)await openMultiplayer(saved.code,saved.kind==='invite'?'invitations':'return-table');else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
+initialize().then(async()=>{
+ try{await(await import('./multiplayer/social-native.js')).initialiseNativeSocial();}catch{ /* Native setup remains optional for manual play. */ }
+ try{const {auth}=await import('./multiplayer/client.js'),session=await auth?.getSession();await(await import('./multiplayer/social-ui.js')).connectSocial(session?.data?.session?.user);}catch{}
+});
+document.addEventListener('clubhouse-open-tournament',async event=>{
+ const {rememberSocialDestination,clearSocialDestination}=await import('./multiplayer/social-links.js');
+ const destination=event.detail;if(!/^[A-Z2-9]{8}$/.test(destination?.code||''))return;
+ rememberSocialDestination(destination);
+ if(dialog.open||busy){notice('Finish your score entry first, then open Invitations from the menu.');return;}
+ try{await openMultiplayer(destination.code,destination.kind==='invite'?'invitations':'return-table');}catch(error){notice(error.message);}
+});
 
 
 

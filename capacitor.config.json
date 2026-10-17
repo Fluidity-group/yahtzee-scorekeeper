@@ -12,7 +12,11 @@
   },
   "ios": {
     "backgroundColor": "#0b141c",
-    "includePlugins": [],
+    "includePlugins": [
+      "@capacitor/app",
+      "@capacitor/push-notifications",
+      "@capacitor/status-bar"
+    ],
     "contentInset": "never"
   }
 }

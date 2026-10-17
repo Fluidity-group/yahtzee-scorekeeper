@@ -1,5 +1,7 @@
 # Yahtzee architecture map
 
+SW046 additive boundary: account-addressed invitations/readiness use the authenticated clubhouse_social RPC and separate social tables/RLS. A locked explicit lobby accept adds a UUID seat; existing membership and score authority remain in clubhouse_rooms. Transient play requests never resume/advance games. Server-only APNs/FCM worker owns notification delivery; notification data is an untrusted navigation hint, never a game command. SW047 is the Playform shared UI layer; it derives bonus geometry from accepted scores.
+
 This is a routing map to existing contracts, not a replacement specification.
 
 | Boundary | Code / contract | Ownership |

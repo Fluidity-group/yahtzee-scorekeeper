@@ -8,6 +8,18 @@ export const emailOtpEnabled=import.meta.env.VITE_EMAIL_OTP_ENABLED==='true';
 export const configured=!!(url&&key&&webUrl);
 const client=configured?createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'clubhouse-account'},global:{fetch:fetchWithTimeout}}):null;
 export const auth=client?.auth;
+export async function requestSocial(action,payload={}){
+ if(!client)throw Error('Sign in to online games first.');
+ const {data,error}=await waitForOnline(client.rpc('clubhouse_social',{p_action:action,p_payload:payload}));
+ if(error){if(['PGRST202','42883'].includes(error.code))throw Error('Tournament invitations need the server update. Your existing games are available.');throw Error(error.code==='42501'?'Sign in to the invited account or open your own tournament.':error.message||'Could not update the invitation.');}
+ if(!data||typeof data!=='object'||Array.isArray(data)||action==='inbox'&&(!Array.isArray(data.invitations)||!Array.isArray(data.requests)))throw Error('Unreadable tournament invitation response.');
+ return data;
+}
+export function watchSocial(onChange){
+ if(!client)return()=>{};
+ const channel=client.channel('tournament-inbox').on('postgres_changes',{event:'*',schema:'public',table:'clubhouse_invitations'},onChange).on('postgres_changes',{event:'*',schema:'public',table:'clubhouse_play_requests'},onChange).subscribe();
+ return()=>{client.removeChannel(channel);};
+}
 const validRoom=value=>value&&typeof value==='object'&&!Array.isArray(value)
  &&typeof value.id==='string'&&value.id.length>0&&typeof value.code==='string'&&/^[A-Z2-9]{8}$/.test(value.code)
  &&Number.isInteger(value.revision)&&value.revision>=0;

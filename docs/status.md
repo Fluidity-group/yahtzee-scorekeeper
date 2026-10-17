@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+17 October SW046/SW047 implementation candidate: Playform primary UI, UUID-preserving invitations/play requests/readiness and optional native push/link adapters. PostgreSQL22 and focused pulse/bonus/social40 checks passed; final full gate/native compilation pending. Existing live tournament/both memberships untouched; no cloud migration, production deployment or real notifications. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
+
 17 October SW046 proposal: reviewed UUID membership/current invite return and official native push/link capabilities. Proposed email-addressed invitation acceptance, persistent tournament membership, member play requests/readiness and APNs/FCM notification routing into the existing seat. Research/design only; no runtime/cloud/notification changes. See docs/plans/SW-046-account-invitations-and-play-requests.md.
 
 17 October SW045 iOS foundation compiled, installed and launched on the Mac iPhone17/iOS27.0 simulator using Xcode27.1/macOS26.6.2/Apple Silicon and isolated Node24.19.0. Qualified code0a76c6f:1,114tests passed/13optional camera skips/all configured builds; clean stable gate. Public-only config, local voice bypass, safe-area repair and38byte-matched installed assets verified. Physical iPhone signing/install and Android–iOS two-player acceptance remain open; approved Rally/race-lane/bonus redesign is not yet integrated. No cloud writes, AI calls, Android/web deployment or game/settings reset.
