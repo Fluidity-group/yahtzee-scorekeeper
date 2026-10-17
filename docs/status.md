@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+17 October SW046/SW047 verified candidate: Playform actual home/score/bonus UI; account invitations, persistent existing UUID membership, play requests/readiness and native push/link adapters. Clean01e7a55/runtimeb9ed275 gate1,122passed/13optional skips/all builds; PostgreSQL22passed; Android APK built/49assets matched; iOS simulator built/installed/launched/47assets matched. Live backend/web/Pixel/physical iPhone unchanged and real phone alerts await signing, APNs/FCM configuration and a running worker. Current tournament/both memberships preserved by no live mutation. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
+
 17 October SW046/SW047 implementation candidate: Playform primary UI, UUID-preserving invitations/play requests/readiness and optional native push/link adapters. PostgreSQL22 and focused pulse/bonus/social40 checks passed; final full gate/native compilation pending. Existing live tournament/both memberships untouched; no cloud migration, production deployment or real notifications. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
 
 17 October SW046 proposal: reviewed UUID membership/current invite return and official native push/link capabilities. Proposed email-addressed invitation acceptance, persistent tournament membership, member play requests/readiness and APNs/FCM notification routing into the existing seat. Research/design only; no runtime/cloud/notification changes. See docs/plans/SW-046-account-invitations-and-play-requests.md.

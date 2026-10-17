@@ -1,5 +1,7 @@
 # Software project control
 
+17 October SW046/SW047 verified candidate: Playform actual home/score/bonus UI; account invitations, persistent existing UUID membership, play requests/readiness and native push/link adapters. Clean01e7a55/runtimeb9ed275 gate1,122passed/13optional skips/all builds; PostgreSQL22passed; Android APK built/49assets matched; iOS simulator built/installed/launched/47assets matched. Live backend/web/Pixel/physical iPhone unchanged and real phone alerts await signing, APNs/FCM configuration and a running worker. Current tournament/both memberships preserved by no live mutation. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
+
 17 October SW046/SW047 implementation candidate: Playform primary UI, UUID-preserving invitations/play requests/readiness and optional native push/link adapters. PostgreSQL22 and focused pulse/bonus/social40 checks passed; final full gate/native compilation pending. Existing live tournament/both memberships untouched; no cloud migration, production deployment or real notifications. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
 
 SW046 proposed next multiplayer capability: account-targeted tournament invitations and explicit play requests/readiness, native notification/link routing, with persistent UUID membership and no automatic resume. Source/official-platform review completed; execution, signing/provider setup and physical push acceptance pending. See ../plans/SW-046-account-invitations-and-play-requests.md.
