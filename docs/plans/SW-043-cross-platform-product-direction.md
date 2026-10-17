@@ -4,6 +4,10 @@
 State: researched proposal and interactive design study; no production UI replacement, iOS build or deployment.
 Baseline: SW042, qualified code 9b4f19a, documentation acd6db7. Owner reports last build worked well. That report is user acceptance evidence for that playtest, not exhaustive platform qualification.
 
+## Scope update — 17 October 2026
+
+Owner likes the design territory and requests livelier concepts. AI voice and commercial-release work are deferred; optimise for two-player Android/iOS testing on an available Mac. The narrower current plan is [SW044](SW-044-two-player-design-lab.md); the voice/commercial scope and broad estimates below are historical proposal material, not the current delivery target.
+
 ## Product direction
 
 Create an installed iOS and Android game with web participation, equal manual-game hosting, one authoritative multiplayer service, and a professional, lively interface. Preserve existing tournaments, accounts, frozen aliases, settings and scoring rules. Remove illustrated commentators, AI branding, character references and avatars from the new presentation. No casino decoration, felt, gold trim, neon glow, loot/reward currency or slot-machine motion. Voice commentary remains optional audio, without a character-led UI; this is not authorization to delete profiles/history or rewrite provider behaviour.

@@ -1,5 +1,7 @@
 # Software project control
 
+17 October SW044 created three animated two-player concepts and shortened the test roadmap. Owner confirms Mac availability; AI voice and commercial-release work deferred. Fictional standalone lab, centred scoring/bonus/lead/Undo, exact tournament scenarios and reduced motion checked in browser. No production changes, provider calls, native build or deployment. Existing SW042 tournament/settings unaffected. [Plan](../plans/SW-044-two-player-design-lab.md).
+
 17 October SW043 researched cross-platform architecture and created a separate interactive design study: professional sports-scorebook direction, no avatars/casino branding, exact6–3 comeback/draw/clinch examples; proposed Capacitor iOS/Android + React/TS + SVG/Motion, optional PixiJS. No production changes/deployment/iOS build; SW042 owner reports worked well, broader physical gates remain scoped. Roadmap/effort and platform prerequisites are proposals. [Plan](../plans/SW-043-cross-platform-product-direction.md).
 
 16 October SW042 deployed for owner retest:70px horizontal indicators,46/36/18 column balance, bottom Undo replaced by latest-score popup/shared-phone handoff/bonus-row entry; duplicate pause text removed and host Resume first in both menus. Clean 9b4f19a,1,112 tests/13 optional skips/all builds; Pixel install-r/hash and web bytes verified, backendv10 unchanged. Tournament/settings fingerprints preserved; physical acceptance open. [Release](../releases/SW-042-in-card-undo-and-indicator-space.md).
