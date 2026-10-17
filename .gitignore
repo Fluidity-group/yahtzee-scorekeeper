@@ -18,3 +18,12 @@ supabase/.temp/
 local-evaluation/
 public/camera-assets/
 android/app/src/main/assets/public/
+
+# iOS generated web assets and machine-local Xcode state
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/Package.resolved
+dist-ios-test/

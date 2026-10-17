@@ -14,7 +14,10 @@
     "android:sync": "npm run build:native && cap sync android",
     "build:rooms": "node scripts/build-room-function.mjs",
     "build:native:evaluation": "vite build --mode native-evaluation --outDir dist-native",
-    "android:sync:evaluation": "npm run build:native:evaluation && cap sync android"
+    "android:sync:evaluation": "npm run build:native:evaluation && cap sync android",
+    "ios:check": "node scripts/prepare-ios-test.mjs --check",
+    "ios:sync": "node scripts/prepare-ios-test.mjs",
+    "ios:open": "cap open ios"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.2",
@@ -29,6 +32,7 @@
     "@capacitor-community/bluetooth-le": "8.3.0",
     "@capacitor/android": "8.5.2",
     "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
     "@supabase/supabase-js": "^2.116.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",

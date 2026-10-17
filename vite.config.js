@@ -7,7 +7,7 @@ import { ttsProxyPlugin } from './server/ttsProxy.js';
 // (keeps ELEVENLABS_API_KEY server-side, read from .env).
 export default defineConfig(({ mode }) => {
   const evaluation = mode === 'native-evaluation';
-  const native = mode === 'native' || evaluation;
+  const native = mode === 'native' || mode === 'ios-test' || evaluation;
   const env = loadEnv(mode, process.cwd(), ''); // load all vars (incl. unprefixed ELEVENLABS_API_KEY)
   const getElevenKey = () => process.env.ELEVENLABS_API_KEY || env.ELEVENLABS_API_KEY || '';
   return {

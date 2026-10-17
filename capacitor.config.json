@@ -9,5 +9,10 @@
     "SystemBars": {
       "insetsHandling": "disable"
     }
+  },
+  "ios": {
+    "backgroundColor": "#0b141c",
+    "includePlugins": [],
+    "contentInset": "automatic"
   }
 }
