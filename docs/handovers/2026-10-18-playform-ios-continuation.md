@@ -1,5 +1,7 @@
 # Playform continuation handover
 
+**18 October owner update: iOS installation is on hold. Do not continue Mac/phone installation until the owner resumes it. Phone notifications remain deferred. SW048 tournament celebrations/rule correction is the current software task.**
+
 Prepared for the next chat on 18 October 2026. Deployment and device observations below were collected on 17 October; inspect targets freshly before further action. This document does not establish current live device state.
 
 ## Immediate objective and authorization

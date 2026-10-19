@@ -346,7 +346,7 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
           g.sheets[g.activeSeat][action.category] = action.value;
           if (bonus) g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + bonus;
           event("score", { category: action.category, value: action.value, bonus, face: dice?.[0] ?? null, source: g.turn.source, rollId: last?.id ?? null });
-          const finalYahtzee = finalChainRules(g) && filled(g.sheets[g.activeSeat]) === 13 && (action.category === "yahtzee" && action.value > 0 || options?.bonus > 0);
+          const finalYahtzee = finalChainRules(g) && filled(g.sheets[g.activeSeat]) === 13 && options?.bonus > 0;
           if (finalYahtzee) {
             g.finalChain = { seat: g.activeSeat, attempt: 1 };
             event("final-chain-start", { attempt: 1 });

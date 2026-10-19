@@ -32,7 +32,7 @@ export function celebrationMessage(effect, game) {
  const name = game.players[effect.seat]?.name || 'Player';
  if (effect.kind === 'finish') {
   const result = results(game);
-  return { title: result.solo ? 'Game complete!' : result.winners.length > 1 ? 'A shared victory!' : `${game.players[result.winners[0]].name} wins!`, subtitle: 'What a game. Well played!' };
+  return { title: result.solo ? 'Game complete!' : result.winners.length > 1 ? 'A shared victory!' : `${game.players[result.winners[0]].name} wins!`, subtitle: result.solo ? `${result.totals[0]} points. Well played!` : result.winners.length > 1 ? `${result.winners.map(seat=>game.players[seat].name).join(' & ')} tied on ${result.totals[result.winners[0]]} points.` : `${result.totals[result.winners[0]]} points · ${result.totals[result.winners[0]]-Math.max(...result.totals.filter((_,seat)=>seat!==result.winners[0]))} ahead. Well played!` };
  }
  if (effect.kind === 'yahtzee') return { title: effect.bonus > 0 ? `YAHTZEE · +${effect.bonus}!` : 'YAHTZEE!', subtitle: `${name} · ${effect.bonus > 0 ? 'Bonus secured. Keep it rolling!' : 'Yahtzee scored. What a moment!'}` };
  if (effect.kind === 'upper-bonus') return { title: 'Upper bonus · +35!', subtitle: `${name} · 63 reached. Bonus secured!` };

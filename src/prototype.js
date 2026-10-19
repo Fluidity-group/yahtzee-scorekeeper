@@ -104,7 +104,7 @@ const descriptions={
   competition:'Three rolls, or four while your final category is open. Extra Yahtzees add 100 and grant a fresh turn. One category ends a bonus chain.',
   accumulative:'Three rolls. Yahtzees of 1–6 score 100, 90, 80, 70, 60, 50. Each additional Yahtzee adds its face value and grants a fresh turn. A scored first Yahtzee is required.',
 };
-const competitionV2Description='Three rolls, or four while your final category is open. A qualifying Yahtzee on that final turn grants a bonus attempt of three rolls. Score the final category first; a qualifying repeat also adds 100 with that score. Each Yahtzee in an attempt adds 100 points and starts a fresh three-roll attempt. Three rolls without a Yahtzee end your bonus chain; other players still finish their turns.';
+const competitionV2Description='Three rolls, or four while your final category is open. Your first Yahtzee scores 50 normally, including on your final turn; it does not grant extra rolls. Only a repeat after an already-scored 50 grants a three-roll attempt on that final turn. Score the final category first and add the repeat’s 100-point bonus. Each Yahtzee in an attempt adds 100 points and starts a fresh three-roll attempt. Three rolls without a Yahtzee end your bonus chain; other players still finish their turns.';
 const rulesDescription=()=>game.mode==='competition'&&game.rules.version===2?competitionV2Description:descriptions[game.mode];
 const setupDescription=(mode,source)=>mode==='competition'&&source==='manual'?competitionV2Description:descriptions[mode];
 document.body.innerHTML='<div id="coreApp" class="device"></div><dialog id="coreDialog" class="core-dialog"></dialog><div id="gameCelebration" role="status" aria-live="polite"></div><div id="coreNotice" role="status" aria-live="polite"></div>';
@@ -178,7 +178,7 @@ function scoreCell(key, seat) {
  const attrs=`data-score-key="${key}" data-score-seat="${seat}"`;
  if(value!==undefined){
   const label=`${name} ${category}: ${value===0?'scratched, zero points':`${value} points`}`;
-  const content=value===0?'<span class="scratch-value" aria-hidden="true">0<small>SCRATCH</small></span>':value;
+  const content=value===0?'<svg class="scratch-value" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M0 0L100 100M100 0L0 100"/></svg>':value;
   const classes=`recorded-score ${value===0?'scratched-score':''}`;
   return `<td ${attrs}>${onlineRoom&&!ownsSeat(seat)?`<span class="${classes}" aria-label="${label}">${content}</span>`:`<button class="${classes}" data-action="edit" data-key="${key}" data-seat="${seat}" aria-label="Edit ${label}">${content}</button>`}</td>`;
  }
@@ -378,9 +378,10 @@ function celebrate(previous,next){
  const effect=celebration(previous,next);if(!effect||effect.kind!=='finish')return;
  clearCelebration();activeEffect={...effect,gameId:next.id};
  const box=document.getElementById('gameCelebration'),message=celebrationMessage(effect,next);
- box.className='celebration celebration-finish';const title=document.createElement('strong');title.textContent=message.title;box.append(title);
- const detail=document.createElement('span');detail.textContent=message.subtitle;box.append(detail);
- effectTimer=setTimeout(clearCelebration,2200);
+ box.className='celebration celebration-finish';const title=document.createElement('strong');title.textContent=onlineRoom?.tournament?.status==='completed'?'Tournament complete!':message.title;box.append(title);
+ const detail=document.createElement('span');detail.textContent=onlineRoom?.tournament?.status==='completed'?`${message.title} ${message.subtitle} Tournament complete — see the final awards below.`:message.subtitle;box.append(detail);
+ const particles=document.createElement('div');particles.className='celebration-particles';particles.setAttribute('aria-hidden','true');for(let i=0;i<12;i++){const particle=document.createElement('i');particle.style.setProperty('--i',i);particle.textContent='◆';particles.append(particle);}box.append(particles);
+ effectTimer=setTimeout(clearCelebration,5000);
 }
 document.addEventListener('visibilitychange',()=>{localVoice?.setVisible(!document.hidden&&view!=='home');syncHostedCommentary();if(document.hidden){cancelPulse(root);clearCelebration();}});
 window.addEventListener('pagehide',()=>{localVoice?.dispose();localVoice=null;resetHostedCommentary();cancelPulse(root);clearCelebration();});

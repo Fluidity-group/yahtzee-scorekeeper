@@ -1,6 +1,8 @@
 # Dice Clubhouse project memory
 
-Continuation handover: docs/handovers/2026-10-18-playform-ios-continuation.md. Next action is the authorized physical iPhone Playform install; last check saw simulators only and zero signing identities. Pixel/web rollout is complete; notifications deferred. Reinspect live targets before action.
+18 October owner clarification: a first Yahtzee on a final turn scores normally. Only a repeat after a recorded Yahtzee50 earns another three-roll series, renewed by each further Yahtzee. Do not rewrite completed history. Show tournament progress and completion prominently, with independent points and games-won awards and reasons. iOS install is on hold; phone notifications remain deferred. SW048 implements the review candidate; live rollout is separate.
+
+Continuation handover: docs/handovers/2026-10-18-playform-ios-continuation.md. Owner placed physical iPhone installation on hold on 18 October. Resume only when requested; last device/signing evidence is historical. Pixel/web rollout is complete; notifications deferred. Reinspect live targets before action.
 
 17 October SW046/SW047 deployed for owner playtest under explicit authorisation: Playform Pixel install-r/read-back hash/launch verified with app storage byte-preserved before launch; web revision 4c0162cf / 51 files matched, cached reload/close-reopen retained saved fixture. Additive social migration/RLS verified; room/commentary v10 unchanged. Cloud rooms/games/profile-settings/account fingerprints preserved; tournament paused after game 9 of 12, revision 265, both memberships intact. Phone push/worker off; native iPhone signing and physical two-player acceptance pending. See docs/releases/SW-046-047-playform-and-tournament-invites.md.
 

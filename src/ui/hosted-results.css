@@ -40,3 +40,10 @@
 .tournament-ranking span{min-width:0;overflow-wrap:anywhere;}.tournament-ranking strong{font-size:20px;white-space:nowrap;}.tournament-ranking small{display:block;font-size:11px;color:var(--club-muted);}
 @media(min-width:700px){.tournament-boards{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(prefers-reduced-motion:reduce){.hosted-results,.hosted-results *{animation:none!important;transition:none!important;}}
+.tournament-finish{position:relative;isolation:isolate;overflow:hidden;margin:0 0 16px;padding:24px 20px;border:2px solid var(--club-accent);border-radius:24px 24px 7px 24px;background:var(--club-soft);color:var(--club-text);}
+.tournament-finish h2{font-size:clamp(26px,7vw,38px);line-height:1.1;margin:8px 0 12px;overflow-wrap:anywhere;}
+.tournament-finish p{line-height:1.6;overflow-wrap:anywhere;margin:8px 0;}.tournament-finish small{display:block;color:var(--club-muted);line-height:1.5;}
+.tournament-finish article{border-top:1px solid var(--club-line);padding:12px 0;}.tournament-finish h3{font-size:16px;margin:0;}
+.tournament-finish-mark{display:block;font-size:42px;color:var(--club-accent);line-height:1;}
+.tournament-final-game{border-color:var(--club-accent);background:var(--club-soft);}.tournament-banner .tournament-milestone{font-weight:700;color:var(--club-text);margin:8px 0 0;}
+html[data-design="playform"] #gameCelebration strong{color:var(--club-text);text-shadow:none;}

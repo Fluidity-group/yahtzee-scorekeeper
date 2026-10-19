@@ -238,3 +238,8 @@ Shared opening/online UI surfaces account-owned Resume saved games & tournaments
 
 The fresh POC supersedes legacy-save/system compatibility requirements in this document: see [owner decision](decisions/2026-10-14-fresh-poc-baseline.md) and [six-sprint scope](plans/SW-023-six-sprint-poc-proposal.md). Reuse current rules/authority where sound, qualify new games/fixtures, and require no import of historical scores. The remaining document records the existing design baseline.
 
+
+
+## SW048 owner clarification — 18 October 2026
+
+Supersedes the historical first-final-Yahtzee trigger: the first Yahtzee50 scores the final category normally and passes play/finishes. Only a qualifying repeat after an already-scored50 earns the final three-roll series, with +100/category scoring before the series; each further success adds100 and renews it. Preserve v1, existing rule snapshots, completed scores/history and already-active stored attempts. UI announces the final scheduled game and tournament completion; independent cumulative-points and games-won champions must be explained without an invented overall tie-break. Implemented candidate, not a deployment claim.

@@ -55,8 +55,9 @@ describe('trusted accepted-transition outbox preparation',()=>{
  });
  it('selects final-chain closure rather than the simultaneous failed roll',()=>{
   let before=startRoom(createRoom({id,code:'ABCDEFGH',userId:a,name:'Alex',mode:'competition',rulesVersion:2,time}),{userId:a,time}),n=0;
-  for(const category of ['aces','twos','threes','fours','fives','sixes','threeKind','fourKind','fullHouse','smallStraight','largeStraight','chance'])before=play(before,{type:'score',category,value:0},'fill_'+String(++n).padStart(8,'0'));
-  before=play(before,{type:'score',category:'yahtzee',value:50},'chain_start');
+  before=play(before,{type:'score',category:'yahtzee',value:50},'first_yahtzee');
+  for(const category of ['aces','twos','threes','fours','fives','sixes','threeKind','fourKind','fullHouse','smallStraight','largeStraight'])before=play(before,{type:'score',category,value:0},'fill_'+String(++n).padStart(8,'0'));
+  before=play(before,{type:'score',category:'chance',value:30,yahtzeeFace:6},'chain_start');
   before=play(before,{type:'final-chain-roll',face:null},'chain_roll1');before=play(before,{type:'final-chain-roll',face:null},'chain_roll2');
   const after=play(before,{type:'final-chain-roll',face:null},'chain_roll3');
   const rows=map(before,after,{commandId:'chain_roll3'});expect(rows).toHaveLength(1);expect(rows[0].facts).toMatchObject({eventType:'final-chain-end',complete:true,value:0});

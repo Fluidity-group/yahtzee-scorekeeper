@@ -2,6 +2,12 @@ import { describe,it,expect } from 'vitest';
 import { celebration, celebrationMessage } from '../src/game/celebrations.js';
 const before={id:'game',status:'active',events:[]};
 const after=event=>({...before,events:[{id:'event',seat:1,...event}]});
+
+it('explains the accepted game winner, margin, and shared victories',()=>{
+ const game={players:[{name:'Keith'},{name:'Amber'}],sheets:[{chance:25},{chance:20}]};
+ expect(celebrationMessage({kind:'finish',seat:0},game)).toEqual({title:'Keith wins!',subtitle:'25 points · 5 ahead. Well played!'});
+ game.sheets[1].chance=25;expect(celebrationMessage({kind:'finish',seat:1},game).subtitle).toBe('Keith & Amber tied on 25 points.');
+});
 describe('confirmed game celebrations',()=>{
  it('celebrates accepted final-chain bonuses, not failed rolls, retries or corrections',()=>{
   const next=after({type:'final-chain-roll',value:100,face:6});

@@ -55,7 +55,7 @@ html[data-design="playform"] .core-score-table .player-heading.current-player{ba
 html[data-design="playform"] .phone-peer-slot.current-player{background:var(--club-second-soft);box-shadow:inset 0 4px var(--club-second)}
 html[data-design="playform"] .recorded-score{border-radius:12px 12px 4px 12px;background:var(--club-soft);color:var(--club-text);box-shadow:none}
 html[data-design="playform"] .empty-score-button{border-radius:12px 12px 4px 12px;color:var(--club-accent);border-color:var(--club-line);background:var(--club-panel)}
-html[data-design="playform"] .scratched-score{color:var(--club-danger)!important;background:color-mix(in srgb,var(--club-danger) 8%,var(--club-panel))!important;border-style:solid!important}
+html[data-design="playform"] .scratched-score{color:var(--club-text)!important}
 html[data-design="playform"] .phone-comparison-cell .recorded-score{background:transparent;color:var(--club-second);font-weight:650}
 html[data-design="playform"] .section-divider th{background:var(--club-raised);color:var(--club-accent)}
 html[data-design="playform"] .core-score-table .score-choice,html[data-design="playform"] .manual-score-choice{background:var(--club-panel);color:var(--club-text);border-color:var(--club-line);border-radius:16px 16px 5px 16px}

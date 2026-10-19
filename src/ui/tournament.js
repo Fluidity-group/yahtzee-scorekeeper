@@ -1,5 +1,25 @@
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+// Independent awards: the tournament has no overall tie-break between these boards.
+export function tournamentAwards(data) {
+ if (!data?.final || !data.completedGames || !data.standings?.length) return [];
+ return ['points','wins'].map(key => {
+  const rows=[...data.standings].sort((a,b)=>b[key]-a[key]),best=rows[0][key];
+  const leaders=rows.filter(row=>row[key]===best),others=rows.filter(row=>row[key]!==best);
+  const unit=key==='points'?'points':best===1?'win':'wins';
+  return {title:`${key==='points'?'Total points':'Games won'} · ${leaders.length>1?'Shared winners':'Winner'}`,
+   detail:`${leaders.map(row=>row.name).join(' & ')} ${leaders.length>1?'tie with':'wins with'} ${best} ${unit}${others.length?` · ${best-others[0][key]} ${key==='points'?'points':best-others[0][key]===1?'win':'wins'} ahead`:''}.`};
+ });
+}
+
+export function renderTournamentFinish(room) {
+ if (room?.tournament?.status!=='completed') return '';
+ const data=room.tournamentStandings;
+ // A completed room is insufficient for declaring champions until all history is loaded.
+ const awards=data?.completedGames===room.tournament.gameCount?tournamentAwards(data):[];
+ return `<section class="tournament-finish" aria-labelledby="tournamentFinishTitle"><span class="tournament-finish-mark" aria-hidden="true">✦</span><h2 id="tournamentFinishTitle">Tournament complete!</h2><p>${esc(room.tournament.name)} · All ${room.tournament.gameCount} games played.</p>${awards.length?awards.map(award=>`<article><h3>${esc(award.title)}</h3><p>${esc(award.detail)}</p></article>`).join('')+'<small>Two separate honours. Tied game winners each earn a win.</small>':'<p role="status">Checking the final standings before announcing the winners…</p>'}</section>`;
+}
+
 export function renderTournamentStandings(data, { final = false } = {}) {
  if (!data) return '<p class="core-muted" role="status">Loading tournament standings…</p>';
  const rows = data.standings;
@@ -20,5 +40,7 @@ export function renderTournamentActions(room, userId, {connected=true,busy=false
 export function renderTournamentBanner(room,userId,{connected=true,busy=false}={}) {
  const tournament=room?.tournament;if(!tournament)return '';
  const paused=tournament.status==='paused',final=tournament.status==='completed',host=room.hostId===userId;
- return `<section class="tournament-banner" aria-label="Tournament"><div class="tournament-compact-heading"><div><strong>${esc(tournament.name)}</strong><span>Game ${room.gameSequence??1} of ${tournament.gameCount} · ${tournament.playerCount} players${final?' · Complete':''}</span></div><button class="hbtn" data-action="tournament-menu" aria-label="Tournament actions" aria-haspopup="dialog" aria-expanded="false">⋯</button></div>${!connected?'<p role="status">Reconnecting. Wait for the table to sync.</p>':''}</section>`;
+ const sequence=room.gameSequence??1,last=sequence===tournament.gameCount;
+ const milestone=final?'Tournament complete · All games saved':last?'Final game · This game completes the tournament':sequence===tournament.gameCount-1?'One more game after this one':'';
+ return `<section class="tournament-banner${last&&!final?' tournament-final-game':''}" aria-label="Tournament"><div class="tournament-compact-heading"><div><strong>${esc(tournament.name)}</strong><span>Game ${sequence} of ${tournament.gameCount} · ${tournament.playerCount} players${final?' · Complete':''}</span></div><button class="hbtn" data-action="tournament-menu" aria-label="Tournament actions" aria-haspopup="dialog" aria-expanded="false">⋯</button></div>${milestone?`<p class="tournament-milestone" role="status">${milestone}</p>`:''}${!connected?'<p role="status">Reconnecting. Wait for the table to sync.</p>':''}</section>`;
 }

@@ -51,8 +51,8 @@ export function runReplay() {
         if (success) report.finalChainSuccesses++;
         process(); continue;
       }
-      const category = [...BASE_KEYS.filter(k => k !== 'yahtzee'), 'yahtzee'].find(k => game.sheets[game.activeSeat][k] === undefined);
-      game = act(act(game, 'start'), 'score', { category, value: category === 'yahtzee' ? 50 : 0 }); process();
+      const category = (competition?['yahtzee',...BASE_KEYS.filter(k=>!['chance','yahtzee'].includes(k)),'chance']:[...BASE_KEYS.filter(k => k !== 'yahtzee'), 'yahtzee']).find(k => game.sheets[game.activeSeat][k] === undefined);
+      game = act(act(game, 'start'), 'score', { category, value: category === 'yahtzee' ? 50 : competition && category==='chance' ? 30 : 0, ...(competition && category==='chance'?{yahtzeeFace:6}:{}) }); process();
       if (category === 'aces' && report.corrections === 0) {
         const target = game.events.at(-1), scoreSeat = target.seat;
         game = act(game, 'correct-score', { seat: scoreSeat, target: target.id, value: 1 }); report.corrections++;
