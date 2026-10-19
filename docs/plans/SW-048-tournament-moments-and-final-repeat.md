@@ -44,3 +44,9 @@ Completion: stable Node24 development gate passed (1,129 tests/13 optional camer
 
 
 18 October SW048 follow-up: saved scratched scores now show one large diagonal cross across the frame, with no visible 0/SCRATCH label or warning tint; own and opponent scorecards retain accessible zero-point labels and existing edit behavior. Existing scorecard checks:20 passed. Display-only source change after the prior full gate; not deployed, release gate/phone visual acceptance pending.
+
+
+## Authorized rollout — 19 October
+
+19 October SW048 installed/deployed under explicit owner authorization: clean9424614/Node24 gate1,129passed/13optional skips/all builds; Android49assets matched. Pixel install-r/readback hash/launch verified; app-private storage byte-preserved before launch. game-room ACTIVEv11/readback canonical match/unsigned401; commentary remainsv10. Full room/game/profile-settings/account fingerprints preserved4rooms/15games/4accounts; completed tournament12/12/revision359/bothmemberships intact. Web unchanged, iOS on hold, push/worker off. Physical phone acceptance open (black screenshot). See docs/releases/SW-048-2026-10-19-pixel-and-room.md.
+Implementation, clean qualification, Pixel install and backend deployment are now verified. Earlier not-deployed/development-candidate entries are historical. Physical acceptance remains open; see the exact release record.
