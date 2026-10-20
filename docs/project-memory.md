@@ -1,5 +1,7 @@
 # Dice Clubhouse project memory
 
+20 October SW049 test candidate qualified: compact header/sections, merged upper bonus and no duplicated totals; first/repeat final Yahtzee attempts plus aggregate failed-attempt finish/Undo. New manual Competition snapshots use no Joker; existing frozen rules preserved. Clean d50ad05 /1,136 passed/13optional skips/all builds; Android APK built/49assets matched. Local Chrome320/393px and bonus demo passed. Pixel absent/connection requested; no install, public web/backend deployment or live data change. See docs/releases/SW-049-compact-scorecard-test-candidate.md.
+
 18 October owner clarification: a first Yahtzee on a final turn scores normally. Only a repeat after a recorded Yahtzee50 earns another three-roll series, renewed by each further Yahtzee. Do not rewrite completed history. Show tournament progress and completion prominently, with independent points and games-won awards and reasons. iOS install is on hold; phone notifications remain deferred. SW048 implements the review candidate; live rollout is separate.
 
 Continuation handover: docs/handovers/2026-10-18-playform-ios-continuation.md. Owner placed physical iPhone installation on hold on 18 October. Resume only when requested; last device/signing evidence is historical. Pixel/web rollout is complete; notifications deferred. Reinspect live targets before action.
