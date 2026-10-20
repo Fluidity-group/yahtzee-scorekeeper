@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index-yLcxTsZs.js","assets/index-KJmKwPlF.js","assets/index-8P4Hul7s.css"])))=>i.map(i=>d[i]);
+import{C as a,_ as o}from"./index-KJmKwPlF.js";async function s(r){if(!a.isNativePlatform()||a.getPlatform()!=="ios")return;const{StatusBar:i,Style:t}=await o(()=>import("./index-yLcxTsZs.js"),__vite__mapDeps([0,1,2]));await i.setStyle({style:r==="dark"?t.Dark:t.Light})}export{s as syncPlayformBars};
