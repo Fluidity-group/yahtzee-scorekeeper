@@ -27,14 +27,14 @@ function finalCategory({names=['Dan'],version=2}={}){
  }
  return game;
 }
-function table(game){return {id:'room',code:'ABCDEFGH',revision:30,hostId:'host',members:game.players.map((player,seat)=>({userId:seat?'guest':'host',name:player.name})),game,capabilities:{rematch:true,tournaments:true},source:'manual'};}
+function table(game){return {id:'room',code:'ABCDEFGH',revision:30,hostId:'host',members:game.players.map((player,seat)=>({userId:seat?'guest':'host',name:player.name})),game,capabilities:{rematch:true,tournaments:true,manualAttemptFinish:true},source:'manual'};}
 async function scoreFinal(){const game=mock.room.game;delete game.sheets[0].chance;game.sheets[0].yahtzee=50;mock.callbacks.game(mock.room,mock.userId,true,true);action('another-yahtzee');click('[data-action="repeat-face"][data-face="6"]');click('[data-action="confirm-score"][data-value="30"]');await vi.waitFor(()=>{expect(document.querySelector('.final-chain-panel')).not.toBeNull();expect(document.querySelector('[data-action="final-chain-outcome"]').disabled).toBe(false);expect(document.querySelector('#coreDialog').open).toBe(false);});}
 beforeAll(async()=>{
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();await vi.waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
 beforeEach(async()=>{vi.clearAllMocks();mock.saved=null;mock.userId='host';mock.room=table(finalCategory());action('online');await vi.waitFor(()=>{expect(openOnline).toHaveBeenCalledOnce();expect(document.querySelector('[data-action="choose"][data-key="yahtzee"]')).not.toBeNull();});});
-it('scores a first final-category Yahtzee and finishes without requesting another',async()=>{
- click('[data-action="choose"][data-key="yahtzee"]');click('[data-action="confirm-score"][data-value="50"]');await vi.waitFor(()=>expect(mock.room.game.status).toBe('finished'));expect(mock.room.game.sheets[0].yahtzee).toBe(50);expect(document.querySelector('.final-chain-panel')).toBeNull();expect(document.querySelector('.hosted-results')).not.toBeNull();
+it('scores a first final-category Yahtzee and offers the newly requested bonus attempt',async()=>{
+ click('[data-action="choose"][data-key="yahtzee"]');click('[data-action="confirm-score"][data-value="50"]');await vi.waitFor(()=>expect(mock.room.game.finalChain).toEqual({seat:0,attempt:1}));expect(mock.room.game.sheets[0].yahtzee).toBe(50);expect(document.querySelector('.final-chain-panel')).not.toBeNull();expect(document.querySelector('.hosted-results')).toBeNull();
 });
 it('keeps a repeat final-category Yahtzee active until a full failed bonus attempt',async()=>{
  await scoreFinal();expect(mock.room.game.status).toBe('active');expect(mock.room.game.sheets[0].yahtzee).toBe(50);expect(document.querySelector('.hosted-results')).toBeNull();expect(document.querySelector('[data-action="another-yahtzee"]')).toBeNull();
@@ -73,4 +73,12 @@ it('creates new local manual Competition under version two and explains its rule
 it('retains a saved version-one final turn and its original result behavior',async()=>{
  mock.callbacks.exit();const old=finalCategory({version:1});listCore.mockResolvedValue([old]);action('history');await vi.waitFor(()=>expect(document.querySelector('[data-action="load"]')).not.toBeNull());action('load');await vi.waitFor(()=>expect(document.querySelector('#coreDialog').open).toBe(false));action('rules');expect(document.querySelector('#coreDialog').textContent).toContain('version 1');expect(document.querySelector('#coreDialog').textContent).not.toContain('three-roll attempt');action('close');
  click('[data-action="choose"][data-key="yahtzee"]');click('[data-action="confirm-score"][data-value="50"]');await vi.waitFor(()=>expect(document.querySelector('.compact-result')).not.toBeNull());expect(mock.saved.rules.version).toBe(1);expect(mock.saved.status).toBe('finished');expect(document.querySelector('.final-chain-panel')).toBeNull();
+});
+
+it('confirms a whole failed bonus attempt once, returns control to the other player and preserves the original bonus',async()=>{
+ mock.room=table(finalCategory({names:['Dan','Kay']}));mock.room.game.activeSeat=0;mock.callbacks.game(mock.room,'host',true,true);await scoreFinal();
+ action('final-chain-finish');expect(document.querySelector('#coreDialog').textContent).toContain('ends only your turn');
+ action('confirm-final-chain');await vi.waitFor(()=>expect(mock.room.game.activeSeat).toBe(1));
+ expect(mock.room.game.finalChain).toBeNull();expect(mock.room.game.status).toBe('active');expect(mock.room.game.sheets[0].yahtzeeBonus).toBe(100);
+ expect(sendOnline.mock.calls.at(-1)[0]).toMatchObject({type:'final-chain-roll',face:null,finishAttempt:true});
 });

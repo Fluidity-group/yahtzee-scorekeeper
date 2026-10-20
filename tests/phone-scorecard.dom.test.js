@@ -58,7 +58,7 @@ describe('smartphone scorecard adapter',()=>{
   expect(card.style.getPropertyValue('--peer-offset')).toBe('6');
   expect(root.querySelector('[data-phone-peer-position]').textContent).toBe('7/7');
   expect(changed).toHaveBeenCalledTimes(6);
-  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(19);
+  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(17);
   expect([...root.querySelectorAll('.phone-peer-track')].every(track=>!track.hasAttribute('style'))).toBe(true);
   root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');
   cleanup();root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');

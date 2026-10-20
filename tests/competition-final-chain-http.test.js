@@ -39,3 +39,11 @@ it('does not finish tournament or award standings while a final chain remains ac
  const h=harness();h.room.tournament={name:'Two games',gameCount:2,playerCount:2,rules:structuredClone(h.room.game.rules),status:'playing'};h.room.gameSequence=2;
  for(let n=1;n<=3;n++){const response=await h.call(guest,h.roll(null,`tournament-failed-${n}`));expect(response.room.tournament.status).toBe(n===3?'completed':'playing');}
 });
+
+it('finishes one explicitly failed attempt with ownership/revision checks and idempotent retry',async()=>{
+ const h=harness();const body=h.roll(null,'finish-whole-attempt');body.action.finishAttempt=true;
+ expect((await h.call(host,body)).status).toBe(403);expect(h.commits).toBe(0);
+ const result=await h.call(guest,body);expect(result.status).toBe(200);expect(result.room.capabilities.manualAttemptFinish).toBe(true);expect(result.room.game.status).toBe('finished');
+ expect(result.room.game.turns.at(-1).manualRolls).toHaveLength(0);expect(result.room.game.turns.at(-1).manualAttemptOutcome).toBe('no-yahtzee');
+ expect((await h.call(guest,body)).status).toBe(200);expect(h.commits).toBe(1);
+});

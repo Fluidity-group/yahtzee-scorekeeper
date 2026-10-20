@@ -24,3 +24,27 @@ describe('Competition v2 final bonus attempts',()=>{
  it('keeps pre-final repeat bonuses unchanged, including four initial final rolls',()=>{let g=game();g.sheets[0].yahtzee=50;g=act(act(g,'start'),'bonus',{yahtzeeFace:2});expect(g.sheets[0].yahtzeeBonus).toBe(100);expect(g.finalChain).toBeUndefined();g=act(g,'start');expect(g.turn.limit).toBe(3);});
  it('uses independent rules copies for saved games and new creation',()=>{const g=game(),other=game();g.rules.bonusRolls=99;expect(other.rules.bonusRolls).toBe(3);expect(gameRules('competition',2).bonusRolls).toBe(3);});
 });
+
+it('explicitly finishes a failed manual attempt without inventing individual roll observations; Undo restores it',()=>{
+ let g=act(finalYahtzee(['A','B']),'start');
+ const request={type:'final-chain-roll',seat:0,face:null,finishAttempt:true};
+ g=command(g,request,{id:'finish-attempt'});
+ expect(g.activeSeat).toBe(1);expect(g.status).toBe('active');expect(g.finalChain).toBeNull();
+ expect(g.turns.at(-1).manualRolls).toHaveLength(0);expect(g.turns.at(-1).manualAttemptOutcome).toBe('no-yahtzee');
+ const outcome=g.events.findLast(e=>e.type==='final-chain-roll');expect(outcome).toMatchObject({scope:'attempt',rollNumber:null,value:0});
+ expect(command(g,request,{id:'finish-attempt'})).toBe(g);
+ g=command(g,{type:'undo-score',seat:0,target:outcome.id},{id:'undo-finish-attempt'});
+ expect(g.activeSeat).toBe(0);expect(g.finalChain).toEqual({seat:0,attempt:1});
+});
+it('finishes the game only when every scorecard is complete and rejects a success disguised as a failed attempt',()=>{
+ let g=act(finalYahtzee(),'start');
+ expect(()=>act(g,'final-chain-roll',{face:6,finishAttempt:true})).toThrow('cannot also');
+ g=act(g,'final-chain-roll',{face:null,finishAttempt:true});expect(g.status).toBe('finished');
+});
+
+it('new manual Competition games have no Joker substitution, while existing frozen rule snapshots stay unchanged',()=>{
+ let g=game();expect(g.rules.joker).toBe(false);g.sheets[0].yahtzee=0;g.sheets[0].sixes=18;
+ const opt=scoreOptions(g,[6,6,6,6,6]);expect(opt.joker).toBe(false);expect(opt.scores.fullHouse).toBe(0);expect(opt.scores.largeStraight).toBe(0);
+ const old=structuredClone(g);old.rules.joker=true;expect(scoreOptions(old,[6,6,6,6,6]).scores.fullHouse).toBe(25);
+ g=act(act(g,'start'),'score',{category:'fullHouse',value:0,yahtzeeFace:6});expect(g.sheets[0].fullHouse).toBe(0);
+});

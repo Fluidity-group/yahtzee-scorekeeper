@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+20 October SW049 requirements gathered from phone playtest: compact tournament header/connection indicator, section background distinction, single upper/bonus row and no duplicate grand total; explicit failed final-Yahtzee attempt, repeat +100/extra turn and no Joker. Source inspected, no code/live changes. First-final-Yahtzee trigger conflicts with SW048 owner decision and awaits clarification. See docs/plans/SW-049-compact-scorecard-and-tournament-yahtzee.md.
+
 19 October SW048 installed/deployed under explicit owner authorization: clean9424614/Node24 gate1,129passed/13optional skips/all builds; Android49assets matched. Pixel install-r/readback hash/launch verified; app-private storage byte-preserved before launch. game-room ACTIVEv11/readback canonical match/unsigned401; commentary remainsv10. Full room/game/profile-settings/account fingerprints preserved4rooms/15games/4accounts; completed tournament12/12/revision359/bothmemberships intact. Web unchanged, iOS on hold, push/worker off. Physical phone acceptance open (black screenshot). See docs/releases/SW-048-2026-10-19-pixel-and-room.md.
 
 18 October SW048 follow-up: saved scratched scores now show one large diagonal cross across the frame, with no visible 0/SCRATCH label or warning tint; own and opponent scorecards retain accessible zero-point labels and existing edit behavior. Existing scorecard checks:20 passed. Display-only source change after the prior full gate; not deployed, release gate/phone visual acceptance pending.

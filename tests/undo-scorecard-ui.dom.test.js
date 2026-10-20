@@ -31,8 +31,8 @@ it('shows pending save, restores controls after failure and retries the same dra
  expect(sendOnline.mock.calls.at(-1)[2]).toBe(first[2]);expect(mock.room.game.sheets[0].fives).toBe(15);
 });
 it('opens precise bonus facts from the graphical meter without changing a score',()=>{
- const before=JSON.stringify(mock.room.game);document.querySelector('.bonus-graphic:not(.compact) .bonus-ring-track').dispatchEvent(new MouseEvent('click',{bubbles:true}));
- expect(document.querySelector('#coreDialog').textContent).toContain('Fill the ring to63');expect(document.querySelector('#coreDialog').textContent).toContain('Dan');expect(document.querySelector('#coreDialog').textContent).toContain('Amber');
+ const before=JSON.stringify(mock.room.game);document.querySelector('.own-bonus-summary .upper-total-guide').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+ expect(document.querySelector('#coreDialog').textContent).toContain('Reach 63 upper points');expect(document.querySelector('#coreDialog').textContent).toContain('Dan');expect(document.querySelector('#coreDialog').textContent).toContain('Amber');
  expect(JSON.stringify(mock.room.game)).toBe(before);expect(sendOnline).not.toHaveBeenCalled();document.querySelector('#coreDialog').close();
 });
 it('lets the score owner undo a scratch after turn handoff, reopen the category, and choose another score',async()=>{
@@ -58,4 +58,3 @@ it('also reopens the latest score and returns the original turn in local manual 
  mock.callbacks.exit();document.querySelector('[data-action=home-local]').click();document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await vi.waitFor(()=>expect(document.querySelector('#createCore')).toBeNull());await score('fullHouse',25);expect(document.querySelector('.game-bottom-actions')).toBeNull();openLastScore('fullHouse');await undo();
  const saved=saveCore.mock.calls.at(-1)[0];expect(saved.mode).toBe('standard');expect(saved.activeSeat).toBe(0);expect(saved.sheets[0].fullHouse).toBeUndefined();expect(document.querySelector('[data-action="choose"][data-key="fullHouse"]')).not.toBeNull();expect(sendOnline).not.toHaveBeenCalled();
 });
-

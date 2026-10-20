@@ -104,7 +104,7 @@ var FACE_SOURCES = ["manual-faces", "simulated", "godice", "camera"];
 function gameRules(mode, rulesVersion = 1, source = "manual") {
   if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail("Unknown game mode.");
   if (rulesVersion === 1) return { ...MODES[mode] };
-  if (rulesVersion === 2 && mode === "competition" && source === "manual") return { ...MODES.competition, version: 2, finalChain: true, bonusRolls: 3 };
+  if (rulesVersion === 2 && mode === "competition" && source === "manual") return { ...MODES.competition, version: 2, joker: false, finalChain: true, bonusRolls: 3 };
   fail("This rules version requires Competition with manual scoring.");
 }
 var finalChainRules = (g) => g.mode === "competition" && g.rules.version === 2 && g.rules.finalChain === true;
@@ -166,7 +166,7 @@ function scoreOptions(game, dice) {
       allowed2 = lower.length ? lower : available;
     }
   }
-  const joker = repeat && sheet[matchingUpper] !== void 0;
+  const joker = repeat && game.rules.joker && sheet[matchingUpper] !== void 0;
   const result = {};
   for (const key2 of allowed2) {
     const cat = META[key2];
@@ -176,7 +176,7 @@ function scoreOptions(game, dice) {
     scores: result,
     bonus: repeat && sheet.yahtzee > 0 ? bonusPoints(game.rules, dice[0]) : 0,
     extraTurn: repeat && sheet.yahtzee > 0 && game.rules.extraTurn && !(finalChainRules(game) && filled(sheet) === 12),
-    joker: repeat,
+    joker: repeat && game.rules.joker,
     combinations: c
   };
 }
@@ -281,15 +281,18 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
         if (!finalChainRules(g) || !g.finalChain || g.turn.phase !== "final-bonus" || g.turn.source !== "manual") fail("No final bonus attempt is active.");
         if (action.face !== null && !isFace(action.face)) fail("Report a Yahtzee face from one to six, or no Yahtzee.");
         if (g.turn.manualRolls.length >= g.turn.limit) fail("Final bonus roll limit reached.");
-        const rollNumber = g.turn.manualRolls.length + 1, attempt = g.finalChain.attempt;
+        const finishAttempt = action.finishAttempt === true;
+        if (finishAttempt && action.face !== null) fail("A failed attempt cannot also report a Yahtzee.");
+        const rollNumber = finishAttempt ? null : g.turn.manualRolls.length + 1, attempt = g.finalChain.attempt;
         const value = action.face === null ? 0 : bonusPoints(g.rules, action.face);
-        const e = event("final-chain-roll", { face: action.face, attempt, rollNumber, value, source: "manual" });
-        g.turn.manualRolls.push({ id: e.id, face: action.face });
+        const e = event("final-chain-roll", { face: action.face, attempt, rollNumber, value, source: "manual", ...finishAttempt ? { scope: "attempt", outcome: "no-yahtzee" } : {} });
+        if (finishAttempt) g.turn.manualAttemptOutcome = "no-yahtzee";
+        else g.turn.manualRolls.push({ id: e.id, face: action.face });
         if (value) {
           g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + value;
           g.finalChain.attempt++;
           finishTurn(g, true, time);
-        } else if (rollNumber === g.turn.limit) {
+        } else if (finishAttempt || rollNumber === g.turn.limit) {
           event("final-chain-end", { attempt });
           g.finalChain = null;
           finishTurn(g, false, time);
@@ -359,7 +362,7 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
           g.sheets[g.activeSeat][action.category] = action.value;
           if (bonus) g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + bonus;
           event("score", { category: action.category, value: action.value, bonus, face: dice?.[0] ?? null, source: g.turn.source, rollId: last?.id ?? null });
-          const finalYahtzee = finalChainRules(g) && filled(g.sheets[g.activeSeat]) === 13 && options?.bonus > 0;
+          const finalYahtzee = finalChainRules(g) && filled(g.sheets[g.activeSeat]) === 13 && (options?.bonus > 0 || action.category === "yahtzee" && action.value > 0);
           if (finalYahtzee) {
             g.finalChain = { seat: g.activeSeat, attempt: 1 };
             event("final-chain-start", { attempt: 1 });

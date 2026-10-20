@@ -17,11 +17,11 @@ it('shows progress for the correct original seats and suppresses all derived bon
  const game=createCoreGame({names:['Keith','Amber'],id:'display'});
  game.sheets[0]={aces:3,twos:6,threes:12,fours:12,fives:15};game.sheets[1]={aces:0,twos:0,threes:0,fours:0};
  document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:1});
- expect(document.querySelector('th [data-bonus-seat="1"]').textContent).toContain('Out of reach');
- expect(document.querySelector('[data-bonus-seat="0"]').textContent).toContain('15 needed');
- expect(document.querySelector('[data-bonus-seat="0"]').textContent).toContain('3 ahead');
+ expect(document.querySelector('th [data-bonus-seat="1"] .upper-total-guide').getAttribute('aria-label')).toContain('Out of reach');
+ expect(document.querySelector('[data-bonus-seat="0"] .upper-total-guide').getAttribute('aria-label')).toContain('15 needed');
+ expect(document.querySelector('[data-bonus-seat="0"] .upper-total-guide').getAttribute('aria-label')).toContain('3 ahead');
  game.hideTotals=true;document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:1});
  expect(document.querySelector('progress')).toBeNull();expect(document.querySelector('[data-bonus-seat]')).toBeNull();
  expect(document.querySelector('.bonus-progress-row').textContent).not.toMatch(/ahead|behind|needed|possible|reach|48/);
- game.status='finished';document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:1});expect(document.querySelectorAll('.bonus-graphic svg')).toHaveLength(2);
+ game.status='finished';document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:1});expect(document.querySelectorAll('.upper-total-guide')).toHaveLength(2);
 });
