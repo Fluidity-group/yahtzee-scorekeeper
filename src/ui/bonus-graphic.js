@@ -1,6 +1,15 @@
 import{UPPER}from'../game/categories.js';
 import{upperProgress}from'../game/upper-progress.js';
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+export function renderHeaderBonusGraphic(sheet,{name=''}={}){
+ const p=upperProgress(sheet),secured=p.state==='secured',fourOut=!secured&&!p.fourDiceReachable;
+ const status=secured?'Secured':p.state==='unreachable'?'Bonus out':fourOut?'4-dice out':`${p.remaining} open`;
+ const signed=p.pace>0?'+'+p.pace:String(p.pace),pace=p.pace===0?'On three-of-each pace':`${Math.abs(p.pace)} points ${p.pace>0?'over':'under'} three-of-each pace`;
+ const detail=secured?'35-point bonus secured':p.state==='unreachable'?'Bonus mathematically out of reach even with five dice':fourOut?'Cannot reach 63 using four or fewer matching dice in each remaining frame; five-dice legal maximum is separate':'Still reachable using four or fewer matching dice in each remaining frame';
+ const label=`${name}: ${p.needed} points to 63. ${pace}. ${p.remaining} upper frames open. ${detail}. Four-dice ceiling ${p.fourDiceMaximum}; legal five-dice ceiling ${p.maximum}. Tap for details.`;
+ const fraction=Math.min(100,p.subtotal/63*100),balance=Math.min(28,Math.abs(p.pace)),start=p.pace<0?106-balance:106;
+ return `<button type="button" data-action="bonus-guide" class="header-bonus-graphic ${p.fourDiceState} ${p.pace<0?'under':'over'}" aria-label="${esc(label)}"><svg viewBox="0 0 160 72" role="img" aria-label="${esc(label)}"><title>${esc(label)}</title><circle class="header-bonus-track" cx="32" cy="33" r="25"/><circle class="header-bonus-fill" cx="32" cy="33" r="25" pathLength="100" stroke-dasharray="${fraction} 100" transform="rotate(-90 32 33)"/><text class="header-bonus-needed" x="32" y="32">${secured?'+35':p.needed}</text><text class="header-bonus-target" x="32" y="45">${secured?'BONUS':'TO GO'}</text><text class="header-bonus-pace" x="80" y="22">${signed}</text><text class="header-bonus-pace-label" x="156" text-anchor="end" y="21">PACE</text><path class="header-pace-track" d="M76 33h60"/><path class="header-pace-zero" d="M106 28v10"/><rect class="header-pace-balance" x="${start}" y="30" width="${balance}" height="6" rx="3"/><text class="header-bonus-status" x="76" y="53">${esc(status)}</text>${Array.from({length:6},(_,j)=>`<rect class="header-open-tile ${j<p.remaining?'still-open':'closed'}" style="--tile-index:${j}" x="${77+j*10}" y="60" width="7" height="6" rx="1.5"/>`).join('')}</svg></button>`;
+}
 export function renderUpperCategoryIndicator(sheet,key,{name=''}={}){
  const category=UPPER.find(c=>c.key===key);if(!category)return '';
  const value=sheet[key],count=value===undefined?null:value/category.face;

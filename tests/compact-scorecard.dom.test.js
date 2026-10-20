@@ -16,5 +16,5 @@ it('shows one upper total including its bonus, with distinct semantic sections a
 it('does not expose progress or upper totals when active totals are hidden',()=>{
  const g=createCoreGame({id:'compact-hidden',names:['A','B'],hideTotals:true});
  document.body.innerHTML=renderPhoneScorecard(g,{viewerSeat:0});
- expect(document.querySelector('.upper-total-guide')).toBeNull();expect(document.querySelectorAll('.bonus-hidden')).toHaveLength(2);
+ expect(document.querySelector('.upper-total-guide')).toBeNull();expect(document.querySelectorAll('tbody .bonus-hidden')).toHaveLength(2);
 });

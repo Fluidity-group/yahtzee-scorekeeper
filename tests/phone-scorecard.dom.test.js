@@ -13,7 +13,7 @@ describe('smartphone scorecard adapter',()=>{
   document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:0});
   const row=document.querySelector('.bonus-progress-row');expect(row.children).toHaveLength(2);expect(row.firstElementChild.colSpan).toBe(2);
   expect(row.firstElementChild.querySelector('[data-bonus-seat="0"]')).not.toBeNull();expect(row.lastElementChild.querySelector('[data-bonus-seat="1"]')).not.toBeNull();
-  expect(document.querySelector('.phone-scorecard-caption')).toBeNull();expect(document.querySelector('[data-action="scorecard-display"]')).not.toBeNull();
+  expect(document.querySelector('.phone-scorecard-caption')).toBeNull();expect(document.querySelector('[data-action="scorecard-display"]')).toBeNull();expect(document.querySelector('.header-bonus-graphic')).not.toBeNull();
  });
  it.each([2,4,8])('keeps original seat IDs with own seat first and %i named players',count=>{
   const game=fixture(count),viewerSeat=count-1;mount(game,{viewerSeat});
