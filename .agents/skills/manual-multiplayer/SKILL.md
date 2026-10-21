@@ -7,6 +7,8 @@ description: Develop or investigate Dice Clubhouse hosted manual games, tourname
 
 Read `docs/project-memory.md`, current entries in `docs/status.md`, and the relevant SW task. Use `docs/handovers/2026-10-14-manual-multiplayer-tournaments.md` for SW-019 contracts and evidence; inspect current source/runtime separately. Scope camera, BLE and physical dice work only when requested.
 
+Resolve legacy/migration obligations from current owner decisions. `docs/decisions/2026-10-14-fresh-poc-baseline.md` removes old-game/save migration and legacy compatibility from the fresh POC. Historical continuation contracts below apply only where the task actually continues such a table; use fresh fixtures for POC acceptance.
+
 ## Contracts that change implementation decisions
 
 - Supabase Auth UUID owns membership and analytics. Email is an account label; game-time aliases are frozen snapshots. Do not reuse legacy name-keyed statistics for hosted identity.
@@ -25,6 +27,6 @@ For web-update work, inspect the actual service-worker lifecycle and test an alr
 
 Use focused regression coverage for ownership, revision races, idempotent retries, paused return, pagination and reopened completion as relevant. Release preparation uses Node24 and the configured gate. Phone acceptance and installed/deployed identity are separate records; do not repeat an install solely because the chat changed.
 
-Separate in-app inbox availability from real APNs/FCM delivery. Test social SQL/RLS with `scripts/test-tournament-social-db.mjs` in its disposable local database. Native iOS storage is separate from Safari; native sign-in does not imply Safari preferences have migrated. Current build/setup evidence belongs in status/release records, not this skill.
-
 When expert agents are authorized, assign explicit domain and file ownership. Read-only review can share the checkout; concurrent implementation needs isolated worktrees. Lead integrates sequentially and verifies shared contracts. Agent/self-review is development evidence, not independent release approval.
+
+Separate in-app inbox availability from real APNs/FCM delivery. Test social SQL/RLS with `scripts/test-tournament-social-db.mjs` in its disposable local database. Native iOS storage is separate from Safari; native sign-in does not imply Safari preferences have migrated. Current build/setup evidence belongs in status/release records, not this skill.
