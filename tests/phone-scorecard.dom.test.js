@@ -8,11 +8,11 @@ function mount(game, options={}) {
  return document.body;
 }
 describe('smartphone scorecard adapter',()=>{
- it('keeps own bonus facts in the merged label area and preserves a separate compact opponent reference',()=>{
+ it('keeps own upper total in its score column and preserves a separate compact opponent reference',()=>{
   const game=createCoreGame({id:'merged-bonus',names:['Keith','Amber']});
   document.body.innerHTML=renderPhoneScorecard(game,{viewerSeat:0});
-  const row=document.querySelector('.bonus-progress-row');expect(row.children).toHaveLength(2);expect(row.firstElementChild.colSpan).toBe(2);
-  expect(row.firstElementChild.querySelector('[data-bonus-seat="0"]')).not.toBeNull();expect(row.lastElementChild.querySelector('[data-bonus-seat="1"]')).not.toBeNull();
+  const row=document.querySelector('.bonus-progress-row');expect(row.children).toHaveLength(3);expect(row.firstElementChild.colSpan).toBe(1);
+  expect(row.children[1].querySelector('[data-bonus-seat="0"]')).not.toBeNull();expect(row.lastElementChild.querySelector('[data-bonus-seat="1"]')).not.toBeNull();
   expect(document.querySelector('.phone-scorecard-caption')).toBeNull();expect(document.querySelector('[data-action="scorecard-display"]')).toBeNull();expect(document.querySelector('.header-bonus-graphic')).not.toBeNull();
  });
  it.each([2,4,8])('keeps original seat IDs with own seat first and %i named players',count=>{

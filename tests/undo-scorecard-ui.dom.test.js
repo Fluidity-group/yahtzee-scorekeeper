@@ -31,7 +31,7 @@ it('shows pending save, restores controls after failure and retries the same dra
  expect(sendOnline.mock.calls.at(-1)[2]).toBe(first[2]);expect(mock.room.game.sheets[0].fives).toBe(15);
 });
 it('opens precise bonus facts from the graphical meter without changing a score',()=>{
- const before=JSON.stringify(mock.room.game);document.querySelector('.own-bonus-summary .upper-total-guide').dispatchEvent(new MouseEvent('click',{bubbles:true}));
+ const before=JSON.stringify(mock.room.game);document.querySelector('.phone-own-upper-total .upper-total-guide').dispatchEvent(new MouseEvent('click',{bubbles:true}));
  expect(document.querySelector('#coreDialog').textContent).toContain('Reach 63 upper points');expect(document.querySelector('#coreDialog').textContent).toContain('Dan');expect(document.querySelector('#coreDialog').textContent).toContain('Amber');
  expect(JSON.stringify(mock.room.game)).toBe(before);expect(sendOnline).not.toHaveBeenCalled();document.querySelector('#coreDialog').close();
 });
