@@ -2,6 +2,7 @@
 import { beforeEach,describe,it,expect,vi } from 'vitest';
 import { createRoom,joinRoom,startRoom } from '../src/multiplayer/room.js';
 import {setTournamentPaused} from '../src/multiplayer/tournament.js';
+import {socialDestination,socialLandingView} from '../src/multiplayer/social-links.js';
 
 const mock=vi.hoisted(()=>({user:{id:'host',email:'host@example.test'},room:null,onRoom:null,configured:true,emailOtpEnabled:true}));
 vi.mock('../src/multiplayer/client.js',()=>({
@@ -27,6 +28,18 @@ beforeEach(()=>{
  document.body.innerHTML='<div id="root"></div>';callbacks={game:vi.fn(),connection:vi.fn(),notice:vi.fn(),exit:vi.fn()};
 });
 describe('multiplayer screens',()=>{
+ it('opens a native shared link as an explicit join form, without a member-only read or automatic join',async()=>{
+  const destination=socialDestination('diceclubhouse://table/ABCDEFGH');
+  await openOnline(document.querySelector('#root'),callbacks,destination.code,socialLandingView(destination));
+  expect(document.querySelector('[data-mp-form="join"]')).not.toBeNull();
+  expect(document.querySelector('[name="code"]').value).toBe('ABCDEFGH');
+  expect(requestRoom).not.toHaveBeenCalled();
+  mock.room=createRoom({id:'join-native',code:'ABCDEFGH',userId:'organiser',name:'Organiser',time:'2026-09-16T12:00:00.000Z'});
+  document.querySelector('[name="name"]').value='Guest';submit();
+  await vi.waitFor(()=>expect(document.querySelectorAll('.mp-roster li')).toHaveLength(2));
+  expect(requestRoom.mock.calls[0][0]).toEqual({operation:'join',code:'ABCDEFGH',name:'Guest'});
+  expect(document.querySelector('[data-mp="start"]')).toBeNull();
+ });
  it('finds an older paused tournament after fresh entry and returns to its saved host/game',async()=>{
   let saved=startRoom(joinRoom(createRoom({id:'older-paused',code:'ABCDEFGH',userId:'host',name:'Dan',time:'2026-10-01T18:00:00.000Z',tournament:{name:'Weekend cup',gameCount:3,playerCount:2}}),{userId:'guest',name:'Amber',time:'2026-10-01T18:00:00.000Z'}),{userId:'host',time:'2026-10-01T18:00:00.000Z'});
   saved=setTournamentPaused(saved,{userId:'host',gameId:saved.game.id,expectedRevision:saved.revision,paused:true,time:'2026-10-01T19:00:00.000Z'});

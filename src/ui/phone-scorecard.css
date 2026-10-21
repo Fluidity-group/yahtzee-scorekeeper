@@ -180,5 +180,5 @@ body:has(dialog[open]){overflow:hidden;}
 @keyframes header-bonus-pulse{0%{stroke-width:4;opacity:.5}45%{stroke-width:7;opacity:1}100%{stroke-width:4;opacity:1}}
 @media(prefers-reduced-motion:reduce){.header-bonus-dashboard *{animation:none!important;transition:none!important;}}
 
-#coreApp .compact-upper-total .upper-total-guide{justify-content:flex-end;}
+#coreApp .compact-upper-total .upper-total-guide{justify-content:center;flex-direction:column;gap:0;line-height:1.1;}
 .header-bonus-graphic.needs-five .header-bonus-fill{stroke:var(--club-warm);}.header-bonus-graphic.needs-five .header-bonus-status{fill:var(--club-warm);}.header-bonus-graphic.unreachable .header-bonus-fill{stroke:var(--club-muted);}.header-bonus-graphic.secured .header-bonus-fill{stroke:var(--club-second);}

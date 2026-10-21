@@ -9,3 +9,5 @@ Read the relevant deployment contract and AGENTS.md. Inventory the intended sour
 
 See docs/engineering-workflow.md in the active repository for commands and evidence conventions. Apply this workflow only to the user's requested scope.
 
+For the manual Android/iOS test pair, use validated public-only `.env.ios-test.local` and `scripts/prepare-ios-test.mjs`; keep server/provider secrets and Windows login sessions off the Mac. Match packaged/synced assets to the qualified source and record bundle IDs and artifact hashes. An unsigned simulator app is not an installable physical-iPhone build: freshly check signing identity and physical destination, then record compilation, installation and owner acceptance separately. Match the Mac host fingerprint to the verified handover when its IP changes; keep access files ignored. Do not enable push merely to prepare manual test builds.
+

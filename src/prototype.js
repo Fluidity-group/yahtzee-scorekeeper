@@ -1,3 +1,4 @@
+import {socialLandingView} from './multiplayer/social-links.js';
 import './styles.css';
 import './clubhouse.css';
 import './prototype.css';
@@ -639,7 +640,7 @@ document.addEventListener('click',async e=>{
   }
  }catch(e){notice(e.message);}
 });
-async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join'),saved=(await import('./multiplayer/social-links.js')).readSocialDestination();if(join)await openMultiplayer(join);else if(saved)await openMultiplayer(saved.code,saved.kind==='invite'?'invitations':'return-table');else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
+async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join'),saved=(await import('./multiplayer/social-links.js')).readSocialDestination();if(join)await openMultiplayer(join);else if(saved)await openMultiplayer(saved.code,socialLandingView(saved));else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
 initialize().then(async()=>{
  try{await(await import('./multiplayer/social-native.js')).initialiseNativeSocial();}catch{ /* Native setup remains optional for manual play. */ }
  try{const {auth}=await import('./multiplayer/client.js'),session=await auth?.getSession();await(await import('./multiplayer/social-ui.js')).connectSocial(session?.data?.session?.user);}catch{}
@@ -649,7 +650,7 @@ document.addEventListener('clubhouse-open-tournament',async event=>{
  const destination=event.detail;if(!/^[A-Z2-9]{8}$/.test(destination?.code||''))return;
  rememberSocialDestination(destination);
  if(dialog.open||busy){notice('Finish your score entry first, then open Invitations from the menu.');return;}
- try{await openMultiplayer(destination.code,destination.kind==='invite'?'invitations':'return-table');}catch(error){notice(error.message);}
+ try{await openMultiplayer(destination.code,socialLandingView(destination));}catch(error){notice(error.message);}
 });
 
 

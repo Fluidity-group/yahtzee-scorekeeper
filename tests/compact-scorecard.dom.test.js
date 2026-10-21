@@ -12,6 +12,9 @@ it('shows one upper total including its bonus, with distinct semantic sections a
  expect(document.querySelector('[data-bonus-seat="0"] .upper-bonus-ribbon').textContent).toContain('+35');
  expect(document.querySelector('.grand-total-row')).toBeNull();
  expect(document.querySelector('[data-bonus-seat="0"] button').getAttribute('aria-label')).toContain('includes 35');
+ const row=document.querySelector('.bonus-progress-row');
+ expect(row.querySelector('th').colSpan).toBe(1);
+ expect(row.querySelector('td [data-bonus-seat="0"]')).not.toBeNull();
 });
 it('does not expose progress or upper totals when active totals are hidden',()=>{
  const g=createCoreGame({id:'compact-hidden',names:['A','B'],hideTotals:true});
