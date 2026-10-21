@@ -5,6 +5,7 @@ import './multiplayer.css';
 import {getDiceStatus} from '../dice/live-status.js';
 import {onlineErrorMessage,waitForOnline} from './connection.js';
 import {recoveryRedirect} from './recovery.js';
+import {readSocialDestination,clearSocialDestination} from './social-links.js';
 import {renderResumeEntry,renderSavedSessions} from './session-cards.js';
 import {renderOpenTournaments} from './tournament-list.js';
 
@@ -265,7 +266,10 @@ document.addEventListener('submit',async e=>{
     payload.tournament={name,gameCount,playerCount};payload.source='manual';
    }
    if(kind==='host'&&payload.mode==='competition'&&payload.source==='manual')payload.rulesVersion=2;
-   await mutate(payload);if(current(ticket))invite='';
+   const joined=await mutate(payload);if(current(ticket)){
+    if(kind==='join'&&joined&&readSocialDestination()?.code===joined.code)clearSocialDestination();
+    invite='';
+   }
   }
  }catch(error){if(current(ticket))message(onlineErrorMessage(error));}
  finally{if(current(ticket)){working=false;form.querySelector('button[type="submit"],button.bigbtn')?.removeAttribute('disabled');}}
