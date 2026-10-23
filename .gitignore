@@ -30,4 +30,5 @@ dist-ios-test/
 android/app/google-services.json
 android/.kotlin/
 .private/
+dist-lab/
 *.p8

@@ -1,0 +1,10 @@
+{
+  "workstream": "SW-054",
+  "branch": "codex/amber-ui-lab",
+  "sourceBaseline": "1283973c170651292f87db154d65ae20d1c31529",
+  "iphoneRuntime": "0bc8ca04c237af7dfa7ce0c8af62c93b14451327",
+  "reference": "http://192.168.1.148:8473/review/",
+  "playableLab": "http://192.168.1.148:8475/lab/",
+  "promotion": "Review accepted scoped product commits, run the engineering gate, identify target baseline and obtain promotion authorization; no automatic merge or public deployment.",
+  "productionCredentialsCopied": false
+}
