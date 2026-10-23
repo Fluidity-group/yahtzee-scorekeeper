@@ -1,0 +1,5 @@
+import {MIDNIGHT_PRESETS,locationById} from './midnight-art.js';
+const key='dice-clubhouse:midnight-preferences:v1';
+export function readMidnight(storage=globalThis.localStorage){try{const raw=JSON.parse(storage.getItem(key)||'{}');return {location:locationById(raw.location).id,avatar:MIDNIGHT_PRESETS.includes(raw.avatar)?raw.avatar:MIDNIGHT_PRESETS[0],muted:raw.muted!==false};}catch{return{location:'miami',avatar:MIDNIGHT_PRESETS[0],muted:true};}}
+export function saveMidnight(patch,storage=globalThis.localStorage){const next={...readMidnight(storage),...patch};if(locationById(next.location).id!==next.location||!MIDNIGHT_PRESETS.includes(next.avatar)||typeof next.muted!=='boolean')throw Error('Choose a supported city, avatar and sound setting.');storage.setItem(key,JSON.stringify(next));return next;}
+export function initializeMidnight(){document.documentElement.dataset.art='midnight';document.documentElement.dataset.location=readMidnight().location;try{if(localStorage.getItem('yz_theme')===null)localStorage.setItem('yz_theme','dark');}catch{}}

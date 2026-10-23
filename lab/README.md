@@ -4,6 +4,8 @@
 
 Current review: SW055 enlarges all four Home category titles, adds a tournament trophy counter/detail, and opens past opponents through Online multiplayer / People you've played. The lab explicitly labels a fictional Alex profile (three wins, three opponents); these are not real account statistics. Normal production entry does not load this fixture. The three requests are saved as Testing for Amber's visual decision. See `docs/plans/SW-055-home-readability-trophies-people.md`.
 
+SW056 now begins the requested Midnight Casino redesign. The shared retro skin and original SVG artwork are active; Home/menu offers Your avatar, four Locations and Sound/appearance. Those choices currently persist on this device. Photo preview is private and transient; four styles are visible, but generation/regeneration/retention are disabled until a real portrait service is configured. No photo transformation is claimed. Positive score acceptance is silent. Multiplayer4s event synchronization, shared tournament locations and account-synced avatars remain later phases in `docs/plans/SW-056-midnight-casino.md`.
+
 ## Review and edit workflow
 
 1. Play a solo or shared-phone local game. Score categories, inspect the bonus guide, change a score, Undo and resume games. All real scoring and persistence code is retained. The lab uses its own browser origin/port, so its test games and preferences are separate.

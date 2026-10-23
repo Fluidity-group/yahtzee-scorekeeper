@@ -1,5 +1,7 @@
 # Software project control
 
+23 October SW056 phase1: Midnight Casino shared theme/original city and portrait assets, device-only appearance/avatar/mute controls and honest four-style photo/provider fallback implemented on UI lab branch.1,163 tests passed/13 optional camera skips and all configured builds; stable development gate passed. Existing scoring rules, ready flow and SW055 additions preserved; positive acceptance made silent. Later synchronized event/room location/provider phases remain open. See `../plans/SW-056-midnight-casino.md`.
+
 23 October SW055: larger Home category titles, account-owned tournament trophy breakdown and past-opponent list implemented on the lab branch.53 focused checks, lab/standard web compilation and HMR passed; lab profile is explicitly fictional. Existing member-scoped reads only; no backend schema/authority changes. Review queue file-lock defect repaired and3 requests saved as Testing. Visual, live-account and release qualification remain open. See `../plans/SW-055-home-readability-trophies-people.md`.
 
 23 October SW054: Amber playable UI lab on isolated `codex/amber-ui-lab`, starting from SW052's recorded iPhone source. Local real-game preview, HMR, persisted review requests and scoped promotion workflow implemented; HTTP/WebSocket and lab compile passed. No production runtime edits, live accounts, device install or baseline promotion. See `../plans/SW-054-amber-playable-ui-lab.md` and `../../lab/README.md`.

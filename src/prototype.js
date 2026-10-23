@@ -1,3 +1,5 @@
+import {initializeMidnight} from './ui/midnight-profile.js';
+import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midnight-panels.js';
 import {loadHomeAccount,watchHomeAccount} from './multiplayer/home-account.js';
 import {renderPeopleDialog,renderTrophyDialog} from './ui/home-account.js';
 import {socialLandingView} from './multiplayer/social-links.js';
@@ -7,6 +9,7 @@ import './prototype.css';
 import './ui/clubhouse-home.css';
 import './ui/playform.css';
 import './ui/home-account.css';
+import './ui/midnight.css';
 document.documentElement.dataset.design='playform';
 import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';
 import {renderCommentarySettings,bindCommentarySettings} from './ui/commentary-settings.js';
@@ -39,6 +42,7 @@ import {createSessionCommentary} from './ui/commentary-session.js';
 import {createHostedCommentarySession} from './ui/hosted-commentary-session.js';
 import {createAuthenticatedCommentaryTransport} from './commentary/authenticated-transport.js';
 
+initializeMidnight();
 const iosManualTest=import.meta.env.MODE==='ios-test';
 if(iosManualTest)document.documentElement.dataset.iosTest='true';
 const esc = v => String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -387,7 +391,8 @@ function celebrate(previous,next){
  const seen=new Set(previous?.events?.map(event=>event.id)||[]);
  const invalidated=previous?.id!==next.id||next.events.some(event=>['score-undo','score-correction'].includes(event.type)&&!seen.has(event.id));
  if(invalidated){cancelPulse(root);clearCelebration();}
- queueMicrotask(()=>{if(game?.id===pulseId&&game.revision===pulseRevision)pulseAccepted(root,previous,next);});
+ const acceptedEffect=celebration(previous,next);
+ if(acceptedEffect?.upperBonus||acceptedEffect?.bonus>0)queueMicrotask(()=>{if(game?.id===pulseId&&game.revision===pulseRevision)pulseAccepted(root,previous,next);});
  const effect=celebration(previous,next);if(!effect||effect.kind!=='finish')return;
  clearCelebration();activeEffect={...effect,gameId:next.id};
  const box=document.getElementById('gameCelebration'),message=celebrationMessage(effect,next);
@@ -403,7 +408,7 @@ window.addEventListener('pageshow',syncHostedCommentary);
 function showRules(){openDialog(`<h2>${esc(game.rules.name)} rules · version ${game.rules.version}</h2><p class="core-muted">Score totals: ${game.hideTotals?'hidden until the game ends':'visible during play'}.</p><p class="core-muted">${rulesDescription()}</p><p class="core-muted">Tap + in your column to score. Tap a recorded score to correct it. A scratched first Yahtzee earns no bonus. ${game.rules.joker?'This saved game uses Joker placement.':'No Joker placement: choose a legal scoring category.'}</p><p class="core-muted">Corrections change category points without rewriting historical turns or granted bonuses. Suggested points are only saved when confirmed.</p>`);}
 async function persist(next){
  busy=true;root.setAttribute('inert','');
- try{const saved=await saveCore(next);const previous=game;game=next;reportedFace=0;render();celebrate(previous,next);notice(saved?.recoveryOnly?'Saved in recovery storage. Keep this browser’s data until database access returns.':'Saved on this device.');}
+ try{const saved=await saveCore(next);const previous=game;game=next;reportedFace=0;render();celebrate(previous,next);if(saved?.recoveryOnly)notice('Saved in recovery storage. Keep this browser’s data until database access returns.');}
  catch(e){notice(`Save failed: ${e.message}. Retry before continuing.`);throw e;}
  finally{busy=false;root.removeAttribute('inert');if(game)render();queueMicrotask(ensureAutomaticTurn);}
 }
@@ -413,7 +418,7 @@ async function send(action,commandId){
  const scoreCommandId=commandId||id();if(['score','bonus','final-chain-roll'].includes(action.type))markScoreSubmitted(scoreCommandId);
  if(onlineRoom){
   busy=true;root.setAttribute('inert','');
-  try{const {sendOnline}=await import('./multiplayer/ui.js');await sendOnline(action,onlineRoom.revision,scoreCommandId);reportedFace=0;render();notice('Saved to the shared game.');}
+  try{const {sendOnline}=await import('./multiplayer/ui.js');await sendOnline(action,onlineRoom.revision,scoreCommandId);reportedFace=0;render();}
   finally{busy=false;root.removeAttribute('inert');render();queueMicrotask(ensureAutomaticTurn);}
   return;
  }
@@ -424,7 +429,10 @@ async function send(action,commandId){
  const acceptedAction={seat:base.activeSeat,...action};await persist(command(base,acceptedAction,{id:scoreCommandId}));
  if(localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes'){const mirrored=[...(base!==beforeLocal?[{commandId:startCommandId,action:{type:'start',seat:beforeLocal.activeSeat}}]:[]),{commandId:scoreCommandId,action:acceptedAction}];queueLocalCommands(game.id,mirrored);if(localVoice&&localVoiceGameId===game.id)void localVoice.flush();}
 }
-function openDialog(html){delete dialog.dataset.homeAccountPanel;insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
+let midnightCleanup=()=>{};
+function openMidnightPanel(kind){openDialog(renderMidnightPanel(kind));midnightCleanup=bindMidnightPanel(dialog,kind,next=>{initializeMidnight();if(view==='home')drawHome();if(next)openMidnightPanel(next);else dialog.close();});}
+dialog.addEventListener('close',()=>midnightCleanup());
+function openDialog(html){midnightCleanup();delete dialog.dataset.homeAccountPanel;insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',landing='home'){
  view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
@@ -530,6 +538,10 @@ document.addEventListener('click',async e=>{
  try{
   if(a==='home')await returnHome();
   if(a==='game-menu')openNavigation();
+  if(a==='midnight-avatar')openMidnightPanel('avatar');
+  if(a==='midnight-locations')openMidnightPanel('locations');
+  if(a==='midnight-settings')openMidnightPanel('settings');
+  if(e.isTrusted)playMidnightSound();
   if(a==='social-inbox'){dialog.close();await openMultiplayer('','invitations');}
   if(a==='tournament-players'){dialog.close();await (await import('./multiplayer/social-ui.js')).openSocial(onlineRoom);}
   if(a==='connection-details')openDialog('<h2>Connection</h2><p>'+ (onlineRoom?(onlineConnected?'Online · ':'Reconnecting · ')+esc(onlineRoom.code):'Local game · works offline')+'</p><button class="all-scores" data-action="close">Close</button>');
@@ -601,7 +613,7 @@ document.addEventListener('click',async e=>{
    if(!candidate||candidate.id!==b.dataset.target||candidate.seat!==Number(b.dataset.seat)||game.id!==b.dataset.game||game.revision!==Number(b.dataset.revision))throw Error('The game changed. Review the latest score again.');
    await send({type:'undo-score',target:candidate.id,seat:candidate.seat});dialog.close();notice('Turn undone. Start a fresh turn.');
   }
-  if(a==='close'){cancelBonus();dialog.close();}
+  if(a==='close'){midnightCleanup();cancelBonus();dialog.close();}
   if(a==='analytics')await analytics();
   if(a==='roll-insights')rollInsights();
   if(['tournament-standings','tournament-exit','tournament-invitation','tournament-pause','tournament-resume'].includes(a))dialog.close();
