@@ -1,9 +1,12 @@
+import {loadHomeAccount,watchHomeAccount} from './multiplayer/home-account.js';
+import {renderPeopleDialog,renderTrophyDialog} from './ui/home-account.js';
 import {socialLandingView} from './multiplayer/social-links.js';
 import './styles.css';
 import './clubhouse.css';
 import './prototype.css';
 import './ui/clubhouse-home.css';
 import './ui/playform.css';
+import './ui/home-account.css';
 document.documentElement.dataset.design='playform';
 import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';
 import {renderCommentarySettings,bindCommentarySettings} from './ui/commentary-settings.js';
@@ -122,7 +125,11 @@ function header(){return '<header class="compact-header"><button class="compact-
 
 let launchGeneration=0;
 let view='home',localVoice=null,localVoiceGameId=null,welcomeGate=null,pendingWelcome=false,pendingLocalLaunch=null,settingsCleanup=()=>{};
-function showHome(){view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest})+'<button class="all-scores" data-action="saved-sessions">Your online games &amp; tournaments</button>';}
+let homeAccount={status:'loading'},homeAccountGeneration=0;
+function drawHome(){const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount})+'<button class="all-scores" data-action="saved-sessions">Your online games &amp; tournaments</button>';if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
+function openHomeAccountPanel(kind){openDialog(kind==='people'?renderPeopleDialog(homeAccount):renderTrophyDialog(homeAccount));dialog.dataset.homeAccountPanel=kind;}
+async function refreshHomeAccount(){const ticket=++homeAccountGeneration;let data;try{data=await loadHomeAccount();}catch{data={status:'error'};}if(ticket!==homeAccountGeneration||view!=='home')return;homeAccount=data;drawHome();const panel=dialog.dataset.homeAccountPanel;if(dialog.open&&panel)openHomeAccountPanel(panel);}
+function showHome(){view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();homeAccount={status:'loading'};drawHome();void refreshHomeAccount();}
 async function returnHome(){launchGeneration++;welcomeGate?.cancel();if(onlineRoom){const {leaveOnline}=await import('./multiplayer/ui.js');leaveOnline();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;hostedCommentaryActive=false;resetHostedCommentary();}dialog.close();showHome();}
 function openNavigation(){if(dialog.open){notice('Finish or close score entry before opening the menu.');return;}openDialog(renderGameMenu({hasGame:!!game,theme,native:Capacitor.getPlatform()==='android',resumeTournament:!!(tournamentPaused()&&onlineRoom.hostId===onlineUserId&&onlineRoom.capabilities?.tournaments===true),resumeDisabled:busy||!onlineConnected}));dialog.dataset.navigation='true';}
 function openGlobalCommentary(){if(iosManualTest){notice('Voice is deferred in this iOS manual test.');return;}const saved=readCommentaryPreferences(),defaults=readLocalPlayerDefaults(),players=defaults.length?defaults:[{displayName:localStorage.getItem('clubhouse-name')||'',gender:'',blurb:''}];openDialog(renderCommentarySettings({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted,isHost:true,connected:false,id:'global-commentary'}).replace('Voice not connected · preferences only','Saved defaults · connect when a new game begins').replace('Enable table commentary','Offer commentary for new games').replace('Table voice style','Your default commentator').replace('<p data-commentary-error', '<details class="global-player-defaults"><summary>Saved player details for local games</summary><p class="core-muted">Stored on this phone. Only players in the new game are shared when you choose commentary.</p>'+players.map((p,i)=>'<label>Player '+(i+1)+' name<input name="localName'+i+'" maxlength="24" value="'+esc(p.displayName)+'"></label>'+renderPlayerProfileFields('defaultPlayer'+i,p)).join('')+'</details><p data-commentary-error')+'<p class="core-muted">Saved on this phone across app launches. Each new game asks whether to use commentary. Live voice needs an internet connection and sign-in; your optional player details are shared only when you choose commentary for that game.</p>');settingsCleanup();settingsCleanup=bindCommentarySettings(dialog,{onClose:()=>dialog.close(),onListenerMute:value=>{persistCommentaryPatch({listenerMuted:value});(onlineRoom?hostedCommentary:localVoice?.session)?.setListenerMuted?.(value);},onTableSettings:async value=>{const data=new FormData(dialog.querySelector('[data-commentary-form]'));saveLocalPlayerDefaults(players.map((_,i)=>({displayName:String(data.get('localName'+i)||''),...readPlayerProfileFields(data,'defaultPlayer'+i)})));const saved=persistCommentaryPatch({profile:{...value.profile,enabled:value.enabled}});const active=onlineRoom?hostedCommentary:localVoice?.session;if(active&&(!onlineRoom||onlineRoom.hostId===onlineUserId)){active.muteForGame?.();await active.configure({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted});}notice('Commentary settings saved for every game.');}});}
@@ -417,7 +424,7 @@ async function send(action,commandId){
  const acceptedAction={seat:base.activeSeat,...action};await persist(command(base,acceptedAction,{id:scoreCommandId}));
  if(localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes'){const mirrored=[...(base!==beforeLocal?[{commandId:startCommandId,action:{type:'start',seat:beforeLocal.activeSeat}}]:[]),{commandId:scoreCommandId,action:acceptedAction}];queueLocalCommands(game.id,mirrored);if(localVoice&&localVoiceGameId===game.id)void localVoice.flush();}
 }
-function openDialog(html){insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
+function openDialog(html){delete dialog.dataset.homeAccountPanel;insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',landing='home'){
  view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
@@ -533,7 +540,9 @@ document.addEventListener('click',async e=>{
   if(a==='timing-log')showTimingLog();
   if(a==='home-solo')newScreen({players:1});
   if(a==='home-local')newScreen({players:2});
-  if(a==='home-online')await openMultiplayer();
+  if(a==='home-online'||a==='home-people')openHomeAccountPanel('people');
+  if(a==='home-trophies')openHomeAccountPanel('trophies');
+  if(a==='home-account-retry'){homeAccount={status:'loading'};drawHome();const panel=dialog.dataset.homeAccountPanel||'people';openHomeAccountPanel(panel);void refreshHomeAccount();}
   if(a==='home-tournament')await openMultiplayer('','host-tournament');
   if(a==='online-sessions')await openMultiplayer('','sessions');
   if(a==='resume-game'){view='game';localVoice?.setVisible(true);render();if(!localVoice&&Capacitor.getPlatform()==='android'&&readCommentaryPreferences().profile.enabled&&localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes')void launchLocalVoice(game,[],{resume:true});}
@@ -642,6 +651,7 @@ document.addEventListener('click',async e=>{
 });
 async function initialize(){try{game=await loadCore();const join=new URLSearchParams(location.search).get('join'),saved=(await import('./multiplayer/social-links.js')).readSocialDestination();if(join)await openMultiplayer(join);else if(saved)await openMultiplayer(saved.code,socialLandingView(saved));else showHome();}catch(e){root.innerHTML=header()+'<main class="new-core"><h1>Save recovery needs attention</h1><p>Your saved records have not been deleted.</p></main>';notice(e.message);}}
 initialize().then(async()=>{
+ void watchHomeAccount(()=>{homeAccountGeneration++;if(view==='home')showHome();}).catch(()=>{});
  try{await(await import('./multiplayer/social-native.js')).initialiseNativeSocial();}catch{ /* Native setup remains optional for manual play. */ }
  try{const {auth}=await import('./multiplayer/client.js'),session=await auth?.getSession();await(await import('./multiplayer/social-ui.js')).connectSocial(session?.data?.session?.user);}catch{}
 });
