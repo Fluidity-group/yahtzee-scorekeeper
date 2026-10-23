@@ -2,6 +2,8 @@
 
 **Open http://192.168.1.148:8475/lab/**. This is a real, playable source copy, not the frozen SW053 gallery. Use **Play full screen** for normal game testing. The ROG must be awake and reachable on the same LAN. No new firewall change is made by this setup.
 
+Current review: SW055 enlarges all four Home category titles, adds a tournament trophy counter/detail, and opens past opponents through Online multiplayer / People you've played. The lab explicitly labels a fictional Alex profile (three wins, three opponents); these are not real account statistics. Normal production entry does not load this fixture. The three requests are saved as Testing for Amber's visual decision. See `docs/plans/SW-055-home-readability-trophies-people.md`.
+
 ## Review and edit workflow
 
 1. Play a solo or shared-phone local game. Score categories, inspect the bonus guide, change a score, Undo and resume games. All real scoring and persistence code is retained. The lab uses its own browser origin/port, so its test games and preferences are separate.
