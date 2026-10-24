@@ -18,3 +18,5 @@ Current handover: 2026-10-24-amber-ui-review.md. Status/project-memory/software 
 Independent review and fix evidence: ../plans/SW-063-independent-review-report.md and SW063 plan. Endpoint code/test coverage, limited public live probes and unverified authenticated/physical gates are separate. Independent agent review is not human/commercial release approval.
 
 Subsequent SW064 deployment: owner authorized both phones, Pixel first; reviewed Pixel install/launch is verified with data container/identity retained. iPhone remains pending. Current runtime facts are in SW064 and the current handover; earlier no-install records were pre-deployment observations.
+
+Latest SW065 completion supersedes earlier pending notes: Pixel and iPhone installs/launches verified;46public assets matched, owner confirmed Home and same-account existing tournament on both. No data-clear/uninstall/Supabase-DB deployment/table command; full played-game acceptance pending. iPhone development profile expires28October2026; inspect signing freshly before future updates.

@@ -28,3 +28,5 @@ Sign into the same existing accounts, return through Saved games & tournaments a
 If a UI update fails, stop and retain evidence. Restore a known signed same-ID app/source through a data-preserving update, not a database rollback or app-data reset. See SW052 for historical rollback identities and SW063 for current review scope/remaining gates.
 
 Deployment progress: SW064 now records Pixel installation/launch of the reviewed build with preserved app identity/data container. iPhone remains pending; follow its fresh Mac/Xcode checks above. These instructions are not proof of two-phone game acceptance.
+
+Latest SW065 completion supersedes earlier pending notes: Pixel and iPhone installs/launches verified;46public assets matched, owner confirmed Home and same-account existing tournament on both. No data-clear/uninstall/Supabase-DB deployment/table command; full played-game acceptance pending. iPhone development profile expires28October2026; inspect signing freshly before future updates.

@@ -4,7 +4,7 @@
 
 Use branch `codex/amber-ui-lab`. On the ROG its active checkout is `C:/Codex/Yahtzee Game/artifacts/sw054/source`. The old `C:/Codex/Yahtzee Game` checkout is dirty and retained; its documentation routes here. Do not reset it or copy its old app files over the review branch. The SW052 worktree and Mac build are historical native candidates, not this UI runtime.
 
-Latest owner decision: test Amber's version separately, then promote or hand to Dan after acceptance. Owner subsequently explicitly authorized both phone updates, Pixel first. SW064 records the reviewed Pixel APK installed and launched from the ROG on24October; iPhone is next and requires fresh Mac/device/signing checks. Source is pushed to the review branch; default `master` remains e599b71. Pixel native update is recorded in SW064; no new iPhone install, public web/backend deployment or live tournament command has been performed. Existing games/accounts/history must be preserved.
+Latest owner decision: test Amber's version separately, then promote or hand to Dan after acceptance. Owner subsequently explicitly authorized both phone updates, Pixel first. SW064 records the reviewed Pixel APK installed and launched from the ROG on24October; SW065 now records matching signed iPhone installation/launch and owner-confirmed Home/account/tournament return on both phones. Source is pushed to the review branch; default `master` remains e599b71. Pixel native update is recorded in SW064; iPhone update is in SW065; no public web/backend deployment or live tournament command has been performed. Existing games/accounts/history must be preserved.
 
 ## Run and test surfaces
 
@@ -39,3 +39,5 @@ Read AGENTS.md, docs/status.md and project-memory.md first; then only the needed
 Native owner instructions are in 2026-10-24-native-owner-rollout.md. No Supabase functions/schema/RLS/migrations were deployed for the UI work; server/supabase source has no diff from recorded phone source1283973.
 
 Latest Pixel runtime: SW064 APK90465fe14bae6c6dd922b19821758dff10fb42eb4747d7d52986587d26647640, source a73676b,46assets matched, same certificate/UID/first-install date, install-r Success and MainActivity launch Status ok. User account/tournament/visual acceptance pending. iPhone unchanged.
+
+Latest native state supersedes the earlier preparation observations: both phones updated/launch verified in SW064/SW065, source a73676b and46identical public assets; owner confirmed same-account existing tournament visibility. iPhone signing expires28October2026; full played-game acceptance remains open. No Supabase/database migration or server deployment.

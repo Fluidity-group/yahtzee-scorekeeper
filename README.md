@@ -15,7 +15,7 @@ Amber's YAHTZ Midnight Casino UI is on `codex/amber-ui-lab`. Read the
 [current handover](docs/handovers/2026-10-24-amber-ui-review.md) and
 [SW061 sample record](docs/releases/SW-061-amber-phone-sample.md).
 The separate phone-browser sample uses existing accounts/backend; the offline workbench
-uses an explicitly fictional profile. Main remains unchanged. The reviewed Pixel update is recorded in SW064; iPhone is pending.
+uses an explicitly fictional profile. Main remains unchanged. Reviewed Pixel/iPhone installs are recorded in SW064/SW065; owner confirmed Home and existing tournament return on both.
 Real phone visual/gameplay acceptance and later portrait/shared-venue phases remain open.
 
 The current implementation supports manual local and authoritative hosted games,
