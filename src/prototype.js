@@ -11,6 +11,7 @@ import './ui/playform.css';
 import './ui/home-account.css';
 import './ui/midnight.css';
 import './ui/yahtz-home.css';
+import './ui/venue-reel.css';
 import {renderTournamentEntry} from './ui/yahtz-home.js';
 document.documentElement.dataset.design='playform';
 import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';

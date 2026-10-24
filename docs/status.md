@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October venue selector follow-up: slot-machine-styled horizontal city reel with native swipe/snap, arrows/dots/keyboard, explicit confirmation and cancel; saved device venue preserved until Use-city.8 focused checks/lab build/LAN module+CSS200 passed. Four approved cities, reduced motion and storage errors handled; touch/visual acceptance pending. See SW057 follow-up.
+
 23 October ribbon avatar follow-up: selected portrait logo added beside player name/Stats, matching saved persona and preserving profile access.4 focused checks passed, including avatar-change synchronization. No account/rule/deployment change; see SW057 follow-up.
 
 23 October Home navigation follow-up: explicit top Home button added to Home ribbon, local game/setup and existing online exit.24 focused checks passed; scored local game preserved through Home/Resume, with no reset or extra save. LAN serves latest YAHTZ renderer/UUID-protected entry. No release/deployment; see SW057 follow-up.
