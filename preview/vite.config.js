@@ -11,6 +11,6 @@ export default defineConfig({
  resolve:{alias:{'#dice-panel':resolve(root,'src/dice/connection-ui.js')}},
  define:{...Object.fromEntries(Object.entries(fields).map(([key,value])=>['import.meta.env.'+key,JSON.stringify(value)])),'import.meta.env.MODE':'"ios-test"','import.meta.env.VITE_PUSH_ENABLED':'"false"','import.meta.env.VITE_COMMENTARY_URL':'""'},
  plugins:[{name:'amber-multiplayer-preview',transformIndexHtml:{order:'pre',handler:rewritePreviewEntry}}],
- server:{host:'192.168.1.148',port:8476,strictPort:true,watch:{ignored:['**/artifacts/**','**/dist-*/**']},fs:{strict:true,allow:[root,resolve(root,'node_modules')],deny:['**/.env*','**/.git/**','**/artifacts/**','**/.private/**']}},
+ server:{host:'192.168.1.148',port:8476,strictPort:true,watch:{ignored:[resolve(root,'artifacts/**').replaceAll('\\','/'),'**/dist-*/**']},fs:{strict:true,allow:[root,resolve(root,'node_modules')],deny:['**/.env*','**/.git/**',resolve(root,'artifacts/**').replaceAll('\\','/'),'**/.private/**']}},
  build:{outDir:'dist-phone-preview',emptyOutDir:true},
 });
