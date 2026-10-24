@@ -3,6 +3,13 @@ import {it,expect,vi} from 'vitest';
 import {renderClubhouseHome} from '../src/ui/clubhouse-home.js';
 import {renderPeopleDialog,renderTrophyDialog} from '../src/ui/home-account.js';
 const preview={status:'ready',preview:true,user:{id:'sample',name:'Alex'},trophies:{total:3,points:3,wins:2,completed:4},people:[{userId:'a',name:'<img src=x onerror=alert(1)>',games:2},{userId:'b',name:'Jamie',games:1}]};
+it('shows the personal Razzie with its rules/date and preserves zero versus missing history',()=>{
+ document.body.innerHTML=renderTrophyDialog({...preview,razzies:[{score:0,rulesName:'Standard <img>',rulesVersion:1,endedAt:'2026-10-23T18:00:00Z',tiedGames:2}]});
+ expect(document.querySelector('.razzie-score').textContent).toBe('0points');expect(document.querySelector('.home-razzies').textContent).toContain('2 games tied');
+ expect(document.querySelector('.home-razzies').textContent).toContain('2026-10-23');expect(document.querySelector('.home-razzies').textContent).toContain('Standard <img>');expect(document.querySelector('img')).toBeNull();
+ document.body.innerHTML=renderTrophyDialog(preview);expect(document.querySelector('.razzie-score')).toBeNull();expect(document.querySelector('.razzie-empty').textContent).toContain('No completed online games');
+ document.body.innerHTML=renderTrophyDialog({status:'error'});expect(document.querySelector('.home-razzies')).toBeNull();
+});
 it('keeps all four game actions and adds accessible separate trophy/people controls without nested buttons',()=>{
  document.body.innerHTML=renderClubhouseHome({account:preview});
  expect(document.querySelectorAll('.home-game-card strong')).toHaveLength(4);

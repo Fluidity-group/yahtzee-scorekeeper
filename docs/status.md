@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October SW059 Razzie section: personal lowest completed online score with rule/version separation, date and ties; explicit empty/error/account ownership handling and local-history exclusion.19 focused checks passed. Definition lowest personal final score is a stated first-version assumption for owner review. Node24 gate passed:1,178 tests/13 optional camera skips/all configured builds/source stable; lab build/LAN-HMR passed. See SW059 plan.
+
 23 October trophy heading: larger two-line neon-accent title with close-button clearance.3 focused checks/lab build/LAN-HMR passed; see SW058 follow-up. Visual acceptance pending.
 
 23 October SW058 trophy cabinet follow-up: KA-CHING marquee and real-stat reel windows added to trophy dialog, preserving independent honours, total counting and sample/error states.11 focused checks/lab build/LAN-HMR passed; reduced motion respected, no added audio. Phone visual acceptance open.

@@ -6,6 +6,25 @@ function game(id,other='peer',name='Jamie',own=10,peer=5){const g=createCoreGame
 function table(id,games,{status='completed',count=games.length}={}){const current=games.at(-1);return{room:{id,code:'ABCDEFGH',revision:3,mode:'standard',game:current,members:current.players.map(p=>({userId:p.id,name:p.name})),capabilities:{history:true},tournament:{status,gameCount:count,rules:current.rules}},snapshots:games.slice(0,-1)};}
 afterEach(()=>setHomeAccountPreview(null));
 describe('account-owned Home history',()=>{
+ it('finds personal lowest completed scores including zero, counts ties once per game and separates rule versions',()=>{
+  const zero=game('zero','peer','Jamie',0,20),tie=game('tie-zero','peer','Jamie',0,30),higher=game('higher','peer','Jamie',2,0);
+  tie.endedAt='2026-10-23T18:00:00Z';
+  const otherRules=game('v2','peer','Jamie',1,0);otherRules.rules={...otherRules.rules,version:2};
+  const unfinished=table('active',[game('unfinished','peer','Jamie',0,0)],{status:'playing'});unfinished.room.game.status='active';
+  const entry=table('results',[zero,tie,higher,otherRules],{status:'playing'});
+  const result=summarizeHomeAccount('me',[entry,entry,unfinished]);
+  expect(result.razzies).toHaveLength(2);
+  expect(result.razzies.find(row=>row.rulesVersion===1)).toMatchObject({score:0,tiedGames:2,gameId:'tie-zero'});
+  expect(result.razzies.find(row=>row.rulesVersion===2)).toMatchObject({score:1,tiedGames:1,gameId:'v2'});
+  expect(summarizeHomeAccount('outsider',[entry]).razzies).toEqual([]);
+ });
+ it('uses the signed-in seat and complete bonus-inclusive score rather than an opponent score',()=>{
+  const bonus=game('bonus','peer','Jamie',0,5);bonus.sheets[0].yahtzeeBonus=100;
+  const low=game('low','peer','Jamie',10,0);
+  const entry=table('scores',[bonus,low],{status:'playing'});
+  expect(summarizeHomeAccount('me',[entry]).razzies[0]).toMatchObject({score:10,gameId:'low'});
+  expect(summarizeHomeAccount('peer',[entry]).razzies[0]).toMatchObject({score:0,gameId:'low'});
+ });
  it('counts each won tournament once, preserves independent honours and includes ties',()=>{
   const both=table('both',[game('a'),game('b')]);const tied=table('tie',[game('c','peer','Jamie',5,5)]);const loss=table('loss',[game('d','peer','Jamie',0,10)]);
   const value=summarizeHomeAccount('me',[both,both,tied,loss]);expect(value.trophies).toEqual({total:2,points:2,wins:2,completed:3});expect(value.people[0].games).toBe(4);
