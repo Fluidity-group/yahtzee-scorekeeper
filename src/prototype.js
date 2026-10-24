@@ -36,6 +36,7 @@ import {pulseAccepted,cancelPulse,refreshPulse} from './ui/pulse.js';
 import './ui/phone-scorecard.css';
 import './ui/local-setup.css';
 import './ui/mobile-polish.css';
+import './ui/slot-cabinet.css';
 import {applyScorecardSize,saveScorecardSize,renderScorecardDisplay} from './ui/scorecard-display.js';
 import {renderPhoneScorecard,bindPhoneScorecard} from './ui/phone-scorecard.js';
 import { getDiceStatus, subscribeDiceStatus, subscribeDiceEvents } from './dice/live-status.js';

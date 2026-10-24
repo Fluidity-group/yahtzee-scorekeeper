@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October SW058 cabinet follow-up: recognizable slot-machine chooser with bulb marquee, inset reel windows, larger symbols, decorative lever and payout tray. Original four direct game actions preserved.5 focused checks/lab build/LAN-HMR passed; visual phone acceptance pending. See SW058 plan.
+
 23 October SW058 mobile UI pass: compact expandable solo/local setup, narrower scorecard labels with preserved upper indicators, shared dialog/lobby/history/results readability and Home text polish implemented.61 focused tests, LAN/HMR and lab build passed. Node24 gate:1,175 tests passed/13 optional camera skips/all configured builds/source stable. Device visual/touch acceptance remains open. See plans/SW-058-mobile-ui-pass.md.
 
 23 October venue selector follow-up: slot-machine-styled horizontal city reel with native swipe/snap, arrows/dots/keyboard, explicit confirmation and cancel; saved device venue preserved until Use-city.8 focused checks/lab build/LAN module+CSS200 passed. Four approved cities, reduced motion and storage errors handled; touch/visual acceptance pending. See SW057 follow-up.

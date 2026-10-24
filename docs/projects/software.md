@@ -1,5 +1,7 @@
 # Software project control
 
+23 October SW058 cabinet follow-up: recognizable slot-machine chooser with bulb marquee, inset reel windows, larger symbols, decorative lever and payout tray. Original four direct game actions preserved.5 focused checks/lab build/LAN-HMR passed; visual phone acceptance pending. See SW058 plan.
+
 23 October SW058 mobile UI pass: compact expandable solo/local setup, narrower scorecard labels with preserved upper indicators, shared dialog/lobby/history/results readability and Home text polish implemented.61 focused tests, LAN/HMR and lab build passed. Node24 gate:1,175 tests passed/13 optional camera skips/all configured builds/source stable. Device visual/touch acceptance remains open. See plans/SW-058-mobile-ui-pass.md.
 
 23 October SW057 YAHTZ mobile Home redesign from17 browser notes: consolidated title/credits/exact slogan, compact ribbon and slot-machine modes, readable Resume, profile stats and explicit tournament navigation implemented.Stable Node24 gate1,168passed/13optional camera skips/all configured builds;51 focused checks passed. No rule/backend-authority changes; visual/device and owner acceptance remain open. See `../plans/SW-057-yahtz-mobile-home.md`.
