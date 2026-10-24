@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+24 October SW062: shared retro cabinet detailing extended to setup, headers, menus, profiles/people, multiplayer entry/lobby and results; scoring text/semantics retained.50 focused checks/phone-preview build/HTTP passed. Full clean-source gate pending; independent endpoint/code review and skills-memory reconciliation requested next. See plans/SW-062-retro-throughout.md.
+
 24 October trophy polish: neon medallion, compact hero, larger honour labels, expandable counting note and sticky Close.7 focused checks/both previews built/HTTP passed; visual touch acceptance pending. SW061 follow-up, review branch only.
 
 24 October SW061: owner chose separate sample/handoff before main/native promotion. Real-account LAN multiplayer preview at8476, no fictional profile, no main/native/backend changes; bright full slot cabinet implemented.44 focused checks/2 preview regressions/preview build/HTTP passed. Clean Node24 gate1,186passed/13optional skips/all builds/source stable at ba70d2f; phone acceptance pending. See releases/SW-061-amber-phone-sample.md.
