@@ -1,5 +1,6 @@
 import {tournamentStandings} from './tournament.js';
 import {computeTotals} from '../game/scoring.js';
+import {recordedYahtzees} from '../game/personal-records.js';
 
 let previewProvider=null;
 // Dependency injection for an explicit, labelled development profile. Release code never sets it.
@@ -26,15 +27,19 @@ export function summarizeHomeAccount(userId,tables){
   if(prior){prior.games++;if(lastPlayed>=prior.lastPlayed){prior.name=player.name;prior.lastPlayed=lastPlayed;}}
   else people.set(player.id,{userId:player.id,name:player.name,games:1,lastPlayed});
  }
- const lowest=new Map();
+ const lowest=new Map(),bests=new Map();
  for(const game of games.values()){
   const seat=game.players.findIndex(player=>player.id===userId),score=computeTotals(game.sheets[seat]).grand;
   // Compare exact scoring contracts, never different modes/rule versions.
   const key=JSON.stringify([game.mode,game.rules,game.players.length===1]),prior=lowest.get(key);
+  const date=game.endedAt||game.startedAt||'',yahtzees=recordedYahtzees(game,seat),best=bests.get(key)||{rulesName:game.rules.name,rulesVersion:game.rules.version,highestScore:null,mostYahtzees:null};
+  if(!best.highestScore||score>best.highestScore.value)best.highestScore={value:score,gameId:game.id,date};
+  if(yahtzees!==null&&(!best.mostYahtzees||yahtzees>best.mostYahtzees.value))best.mostYahtzees={value:yahtzees,gameId:game.id,date};
+  bests.set(key,best);
   if(!prior||score<prior.score)lowest.set(key,{score,rulesName:game.rules.name,rulesVersion:game.rules.version,gameId:game.id,endedAt:game.endedAt||game.startedAt||'',tiedGames:1});
   else if(score===prior.score){prior.tiedGames++;if((game.endedAt||game.startedAt||'')>prior.endedAt){prior.gameId=game.id;prior.endedAt=game.endedAt||game.startedAt||'';}}
  }
- return {gamesPlayed:games.size,razzies:[...lowest.values()],trophies:{total,points,wins,completed},people:[...people.values()].sort((a,b)=>b.lastPlayed.localeCompare(a.lastPlayed)||a.name.localeCompare(b.name))};
+ return {gamesPlayed:games.size,personalBests:[...bests.values()],razzies:[...lowest.values()],trophies:{total,points,wins,completed},people:[...people.values()].sort((a,b)=>b.lastPlayed.localeCompare(a.lastPlayed)||a.name.localeCompare(b.name))};
 }
 
 export async function loadHomeAccount({client:provided}={}){

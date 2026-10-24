@@ -3,6 +3,11 @@ import {it,expect,vi} from 'vitest';
 import {renderClubhouseHome} from '../src/ui/clubhouse-home.js';
 import {renderPeopleDialog,renderTrophyDialog} from '../src/ui/home-account.js';
 const preview={status:'ready',preview:true,user:{id:'sample',name:'Alex'},trophies:{total:3,points:3,wins:2,completed:4},people:[{userId:'a',name:'<img src=x onerror=alert(1)>',games:2},{userId:'b',name:'Jamie',games:1}]};
+it('shows independent bests and labels missing Yahtzee evidence without substituting zero',()=>{
+ document.body.innerHTML=renderTrophyDialog({...preview,personalBests:[{rulesName:'Standard',rulesVersion:1,highestScore:{value:320,date:'2026-10-23'},mostYahtzees:null}]});
+ expect([...document.querySelectorAll('.personal-best-reels strong')].map(n=>n.textContent)).toEqual(['320','—']);expect(document.querySelector('.home-personal-bests').textContent).toContain('Not recorded');
+ expect(document.querySelector('.home-personal-bests').textContent).toContain('Unrecorded physical rolls are unknown');
+});
 it('shows the personal Razzie with its rules/date and preserves zero versus missing history',()=>{
  document.body.innerHTML=renderTrophyDialog({...preview,razzies:[{score:0,rulesName:'Standard <img>',rulesVersion:1,endedAt:'2026-10-23T18:00:00Z',tiedGames:2}]});
  expect(document.querySelector('.razzie-score').textContent).toBe('0points');expect(document.querySelector('.home-razzies').textContent).toContain('2 games tied');

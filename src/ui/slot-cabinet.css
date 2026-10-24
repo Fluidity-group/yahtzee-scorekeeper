@@ -75,3 +75,11 @@ html[data-art=midnight] .core-dialog .trophy-dialog-title span{display:block;mar
 .home-razzies ul{list-style:none;display:grid;gap:9px;margin:15px 0;padding:0}.home-razzies li{display:flex;align-items:center;gap:13px;padding:12px 9px;border:1px solid var(--club-line);background:var(--club-bg)}
 .razzie-score{font:800 36px/1 system-ui,sans-serif;color:var(--club-second);font-variant-numeric:tabular-nums;min-width:65px;text-align:center;overflow-wrap:anywhere}.razzie-score small{display:block;font:500 12px/1.5 system-ui,sans-serif;color:var(--club-muted)}
 .home-razzies li>div{min-width:0}.home-razzies li b{display:block;font-size:14px;line-height:1.5;overflow-wrap:anywhere}.home-razzies li div>span{display:block;font-size:12px;line-height:1.5;color:var(--club-muted)}
+.home-personal-bests{margin:20px 0;padding:15px 12px;border:1px solid var(--club-accent);border-top:4px solid var(--club-accent);border-radius:4px;background:var(--club-raised);color:var(--club-text)}
+.home-personal-bests h3{margin:0 0 14px;font:500 30px/1.15 Impact,'Arial Black',system-ui,sans-serif;color:var(--club-accent)}
+.home-personal-bests h4{font:650 14px/1.4 system-ui,sans-serif;margin:15px 0 8px;overflow-wrap:anywhere}
+.personal-best-reels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.personal-best-reels>div{display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:9px;min-width:0;text-align:center;padding:13px 7px;border:1px solid var(--club-line);border-block:2px solid var(--club-accent);border-radius:5px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft))}
+.personal-best-reels span{font:650 14px/1.35 system-ui,sans-serif}.personal-best-reels strong{font:800 clamp(32px,10vw,46px)/1.1 system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--club-accent);max-width:100%;overflow-wrap:anywhere}
+.personal-best-reels small{font:400 12px/1.5 system-ui,sans-serif;color:var(--club-muted)}
+.home-personal-bests .personal-best-note{font:400 12px/1.5 system-ui,sans-serif;color:var(--club-muted);margin:14px 0 0}

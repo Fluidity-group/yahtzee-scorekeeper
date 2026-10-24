@@ -6,6 +6,13 @@ function game(id,other='peer',name='Jamie',own=10,peer=5){const g=createCoreGame
 function table(id,games,{status='completed',count=games.length}={}){const current=games.at(-1);return{room:{id,code:'ABCDEFGH',revision:3,mode:'standard',game:current,members:current.players.map(p=>({userId:p.id,name:p.name})),capabilities:{history:true},tournament:{status,gameCount:count,rules:current.rules}},snapshots:games.slice(0,-1)};}
 afterEach(()=>setHomeAccountPreview(null));
 describe('account-owned Home history',()=>{
+ it('keeps highest score and most recorded Yahtzees as separate personal records',()=>{
+  const score=game('score','peer','Jamie',30,0),dice=game('dice','peer','Jamie',10,0);
+  dice.events=[{id:'a',turnId:'a',seat:0,type:'score',category:'yahtzee',value:50},{id:'b',turnId:'b',seat:0,type:'bonus',value:100}];
+  const entry=table('bests',[score,dice],{status:'playing'}),value=summarizeHomeAccount('me',[entry,entry]);
+  expect(value.personalBests).toHaveLength(1);expect(value.personalBests[0].highestScore).toMatchObject({value:30,gameId:'score'});expect(value.personalBests[0].mostYahtzees).toMatchObject({value:2,gameId:'dice'});
+  expect(summarizeHomeAccount('peer',[entry]).personalBests[0].mostYahtzees).toBeNull();
+ });
  it('finds personal lowest completed scores including zero, counts ties once per game and separates rule versions',()=>{
   const zero=game('zero','peer','Jamie',0,20),tie=game('tie-zero','peer','Jamie',0,30),higher=game('higher','peer','Jamie',2,0);
   tie.endedAt='2026-10-23T18:00:00Z';
