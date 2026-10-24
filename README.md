@@ -9,42 +9,33 @@ A Yahtzee scorekeeper PWA evolving into an Android-first, connected-dice game.
 See [the current prototype specification](docs/prototype-development-spec.md). The original
 two-player implementation and its specification remain available for legacy saves.
 
-## Current development milestone
+## Current review version
 
-The default Clubhouse prototype supports 1–8 local test players, Standard/Competition/
-Accumulative rules, explicit turns, manual scoring, simulated dice, corrections, per-game
-roll insights, history and JSON export. Phone and tablet layouts use the midnight/teal theme
-with a light option. QR multiplayer and account screens now have a Supabase backend
-implementation deployed for testing; two-phone acceptance testing is pending. See
-[multiplayer setup](docs/multiplayer-development.md). Bluetooth and new commentary
-are not connected yet.
+Amber's YAHTZ Midnight Casino UI is on `codex/amber-ui-lab`. Read the
+[current handover](docs/handovers/2026-10-24-amber-ui-review.md) and
+[SW061 sample record](docs/releases/SW-061-amber-phone-sample.md).
+The separate phone-browser sample uses existing accounts/backend; the offline workbench
+uses an explicitly fictional profile. Main and installed native apps are unchanged.
+Real phone visual/gameplay acceptance and later portrait/shared-venue phases remain open.
 
-New games use a separate database and a synchronous recovery journal before IndexedDB commits.
-Use one tab per game during this local prototype. The original game, commentary and statistics
-are preserved at `?legacy=1`, with their original saving behaviour. No old records are migrated.
-See [the testing guide](docs/local-prototype-testing.md) for the next device check.
+The current implementation supports manual local and authoritative hosted games,
+saved-table return, versioned rules, Undo, history, profiles and device text-size settings.
+Camera/Bluetooth/commentary interfaces have separate qualification records; their presence
+in source does not establish current device availability. Preserve saved tables and account ownership.
 
-An Android development shell is now available. Build a debug APK with
-`scripts/build-android.ps1` from PowerShell. See [Android development](docs/android-development.md)
-for project-local Java/SDK setup and Pixel testing. Bluetooth integration is not included.
-
-## Run (WSL, Node 22)
+## Run (Node 24)
 
 ```bash
-cd "/mnt/c/Codex/Yahtzee Game"
-export PATH="/home/fluidity/.nvm/versions/node/v22.22.1/bin:$PATH"
 npm ci
-CHOKIDAR_USEPOLLING=true npm run dev -- --host 127.0.0.1 # http://localhost:8473
-npm run build    # production build into dist/ (PWA service worker + manifest)
-npm run preview  # serve the built app
-npm test         # Vitest (from phase 2 on)
-npm run icons    # regenerate PWA icons in public/icons/
+npm ci --prefix device/pi
+npm run dev
+node scripts/engineering-check.mjs verify
 ```
 
-The Node path above is this workstation's existing installation; use your own Node 22 path
-elsewhere. Polling lets Vite detect Windows edits in this WSL checkout. These settings apply
-only to the current shell/process; do not change global Node defaults or stop unrelated
-Claude Code sessions. Preview uses port 8474. Check port ownership before stopping a server.
+Use the configured Node24 runtime. For the separate ROG review surfaces use the startup
+scripts in `lab/` and `preview/`, not an old WSL Node22 path. Standard dev/preview ports are
+8473/8474; review surfaces8475/8476. Check process ownership before stopping a server.
+Camera assets are optional and skipped checks must be reported.
 
 ### Responsive UI checks
 
@@ -56,7 +47,7 @@ Claude Code sessions. Preview uses port 8474. Check port ownership before stoppi
 - Check Settings, Stats, and both scorecard sections remain reachable on a phone.
 - Physical phone/tablet feedback is still required before the next implementation slice.
 
-## Testing on your phone (WSL2 networking)
+## Historical WSL2 phone-networking guidance
 
 WSL2 has its own virtual IP, so the dev server's `Network:` URL is usually **not** reachable from
 your phone directly. Easiest paths:
@@ -74,7 +65,7 @@ For installation/service-worker testing, use an HTTPS deployment (ordinary LAN H
 only a UI preview). To **install** (Add to Home Screen): Android Chrome shows an install prompt / menu item;
 iOS Safari → Share → *Add to Home Screen* (works, with iOS's usual PWA quirks).
 
-## Status — phased build (see spec §11)
+## Historical legacy build milestones (see original spec §11)
 
 - [x] **Phase 1** — Scaffold (Vite + vite-plugin-pwa) and port the v3 mockup UI with in-memory state.
 - [x] **Phase 2** — Pure `categories`/`scoring`/`rules`, Vitest + jsdom tests (24), UI wired to them.

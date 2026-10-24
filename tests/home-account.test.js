@@ -1,11 +1,19 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {createCoreGame} from '../src/game/core.js';
+import {createCoreGame,command} from '../src/game/core.js';
 import {BASE_KEYS} from '../src/game/categories.js';
 import {summarizeHomeAccount,loadHomeAccount,setHomeAccountPreview} from '../src/multiplayer/home-account.js';
 function game(id,other='peer',name='Jamie',own=10,peer=5){const g=createCoreGame({id,names:['Alex',name],mode:'standard'});g.players[0].id='me';g.players[1].id=other;g.sheets=g.sheets.map((_,i)=>Object.fromEntries(BASE_KEYS.map(key=>[key,key==='chance'?(i?peer:own):0])));g.status='finished';g.endedAt='2026-10-22T18:00:00Z';return g;}
 function table(id,games,{status='completed',count=games.length}={}){const current=games.at(-1);return{room:{id,code:'ABCDEFGH',revision:3,mode:'standard',game:current,members:current.players.map(p=>({userId:p.id,name:p.name})),capabilities:{history:true},tournament:{status,gameCount:count,rules:current.rules}},snapshots:games.slice(0,-1)};}
 afterEach(()=>setHomeAccountPreview(null));
 describe('account-owned Home history',()=>{
+ it('updates completed-game records after accepted manual score corrections',()=>{
+  let corrected=game('corrected');corrected.sheets[0].yahtzee=50;
+  corrected.events=[{id:'original',type:'score',seat:0,turnId:'original-turn',category:'yahtzee',value:50}];
+  corrected=command(corrected,{type:'correct-score',seat:0,target:'original',value:0},{id:'fix'});
+  expect(summarizeHomeAccount('me',[table('corrected',[corrected])]).personalBests[0].mostYahtzees.value).toBe(0);
+  corrected=command(corrected,{type:'correct-score',seat:0,target:'original',value:50},{id:'fix-again'});
+  expect(summarizeHomeAccount('me',[table('corrected',[corrected])]).personalBests[0].mostYahtzees.value).toBe(1);
+ });
  it('keeps highest score and most recorded Yahtzees as separate personal records',()=>{
   const score=game('score','peer','Jamie',30,0),dice=game('dice','peer','Jamie',10,0);
   dice.events=[{id:'a',turnId:'a',seat:0,type:'score',category:'yahtzee',value:50},{id:'b',turnId:'b',seat:0,type:'bonus',value:100}];

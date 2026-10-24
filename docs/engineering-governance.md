@@ -53,4 +53,4 @@ Keep source, lockfiles, design generators, native CAD and reviewed BOMs versione
 
 ## Current operating priority
 
-First reconcile the preserved baseline and native clean-checkout blocker. In parallel planning, identify the hardware candidate and exact specimen for POC, consolidate its existing validation gates, and agree measurable POC thresholds before collecting acceptance data. No purchase, live deployment or commercial release is authorized by this governance setup.
+Resolve the active workstream, checkout and owner rollout decision from docs/status.md, docs/project-memory.md and the current handover. Historical native blockers and device observations require fresh verification; they are not permanent gates on unrelated UI work. Keep software review/sample qualification distinct from native deployment and physical POC acceptance. Hardware work still identifies the exact candidate/specimen and agreed measurement thresholds before collecting acceptance data. No purchase, live deployment or commercial release is authorized by this governance setup alone.

@@ -13,3 +13,5 @@ Read AGENTS.md and docs/status.md, then the relevant product contract. For subst
 
 See docs/engineering-workflow.md in the active repository for commands and evidence conventions. Apply this workflow only to the user's requested scope.
 
+
+For a user-requested independent review, record the frozen reviewed revision, reviewer identity, findings, regression evidence and fix recheck separately from the implementation agent's self-review. Distinguish endpoint source/test coverage from live authenticated or physical-device evidence. Keep project skills and current checkout/handover routing consistent without rewriting historical release facts.

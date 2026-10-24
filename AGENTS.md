@@ -1,5 +1,7 @@
 # Yahtzee engineering entry point
 
+Current YAHTZ UI/sample continuity: read docs/handovers/2026-10-24-amber-ui-review.md and docs/status.md before assuming a native, root-checkout or main deployment state.
+
 Codex coordinates architecture, implementation and verification. Use `docs/status.md` for current work and unresolved gates. Read only the domain documents needed for the task.
 
 Use `docs/project-memory.md` for durable intent, contract reminders and handover routing; it does not establish current deployment/device state. Hosted manual multiplayer tasks also use `.agents/skills/manual-multiplayer/SKILL.md`.
