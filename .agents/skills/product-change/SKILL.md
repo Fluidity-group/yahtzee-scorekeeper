@@ -15,3 +15,5 @@ See docs/engineering-workflow.md in the active repository for commands and evide
 
 
 For a user-requested independent review, record the frozen reviewed revision, reviewer identity, findings, regression evidence and fix recheck separately from the implementation agent's self-review. Distinguish endpoint source/test coverage from live authenticated or physical-device evidence. Keep project skills and current checkout/handover routing consistent without rewriting historical release facts.
+
+Current task routing: resolve SW066/core manual integration from docs/status.md and docs/handovers/2026-10-24-core-manual-integration.md. Manual scoring and tournament dependability on Android/iOS is the owner priority; camera and voice work stays deferred until the owner resumes it after manual-core acceptance. Preserve prior source/device evidence; a running app is not complete-game acceptance. Keep these repository skills and current memory/handover routing synchronized when promoting a build.

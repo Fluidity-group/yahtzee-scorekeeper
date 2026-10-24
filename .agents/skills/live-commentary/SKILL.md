@@ -25,3 +25,5 @@ Read `docs/status.md`, `docs/project-memory.md` and `docs/handovers/2026-10-14-l
 ## Execution and evidence
 
 Start with synthetic repeated-game replay/settings/memory contracts, then voice audition and an authenticated Android event-to-audio slice. `docs/plans/SW-021-commentary-expert-brief.md` supports an expert task when authorized; this skill grants no standing delegation, paid-provider, messaging or deployment authorization. Preserve concurrent work and existing games. Maintain SW-021/status evidence and distinguish authored samples, synthetic tests, provider measurements and physical listening acceptance.
+
+Current task routing: resolve SW066/core manual integration from docs/status.md and docs/handovers/2026-10-24-core-manual-integration.md. Manual scoring and tournament dependability on Android/iOS is the owner priority; camera and voice work stays deferred until the owner resumes it after manual-core acceptance. Preserve prior source/device evidence; a running app is not complete-game acceptance. Keep these repository skills and current memory/handover routing synchronized when promoting a build.

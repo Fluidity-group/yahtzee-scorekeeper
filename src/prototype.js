@@ -440,7 +440,9 @@ async function send(action,commandId){
 }
 let midnightCleanup=()=>{};
 function openMidnightPanel(kind){openDialog(renderMidnightPanel(kind));midnightCleanup=bindMidnightPanel(dialog,kind,next=>{initializeMidnight();if(view==='home')drawHome();if(next)openMidnightPanel(next);else dialog.close();});}
-dialog.addEventListener('close',()=>midnightCleanup());
+// close is queued: a replacement panel may already be open when it arrives.
+// openDialog cleans the outgoing panel synchronously before binding its replacement.
+dialog.addEventListener('close',()=>{if(!dialog.open)midnightCleanup();});
 function openDialog(html){midnightCleanup();delete dialog.dataset.homeAccountPanel;insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
 async function openMultiplayer(joinCode='',landing='home'){
  view='online';

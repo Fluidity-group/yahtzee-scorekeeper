@@ -1,5 +1,7 @@
 # CLAUDE.md — Yahtzee Scorekeeper
 
+Current SW066 core integration: use `C:/Codex/Yahtzee Game/artifacts/sw066/source` and read `docs/handovers/2026-10-24-core-manual-integration.md` plus `docs/status.md`. Owner requests core promotion and lead-architect review. Manual scoring/local/online tournaments on Android and iOS take priority; camera and voice are deferred until the manual core works. Both platform versions run per owner; complete cross-phone gameplay remains unverified. Preserve the dirty root checkout and existing accounts/tables. Older separate-sample/main-unchanged notes below are historical; SW066 records actual qualification/promotion.
+
 Current YAHTZ UI/sample continuity: read docs/handovers/2026-10-24-amber-ui-review.md and docs/status.md before assuming a native, root-checkout or main deployment state.
 
 Current shared engineering instructions: read `AGENTS.md` and `docs/status.md`.

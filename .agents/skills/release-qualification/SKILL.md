@@ -13,3 +13,5 @@ For the manual Android/iOS test pair, use validated public-only `.env.ios-test.l
 
 
 Treat a separate sample/review-branch push, main promotion, public web/backend deployment and each native installation as distinct targets. Respect the latest owner rollout sequence in the current handover. A real-backend sample is not an isolated fake database; never advance user tournaments merely to qualify UI. Verify LAN servers deny private artifacts as well as environment/Git files.
+
+Current task routing: resolve SW066/core manual integration from docs/status.md and docs/handovers/2026-10-24-core-manual-integration.md. Manual scoring and tournament dependability on Android/iOS is the owner priority; camera and voice work stays deferred until the owner resumes it after manual-core acceptance. Preserve prior source/device evidence; a running app is not complete-game acceptance. Keep these repository skills and current memory/handover routing synchronized when promoting a build.
