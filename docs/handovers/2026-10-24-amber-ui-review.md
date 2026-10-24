@@ -26,7 +26,7 @@ Shared tournament venue, synchronized special-event presentation and generated/a
 
 ## Evidence and open gates
 
-Latest completed baseline d8a8118: clean Node24.19.0 gate1,186passed/13optional camera skips/all configured builds/source stable, artifacts/engineering/2026-10-24T16-00-16-402Z-931ecb45/report.json. SW062 focused50checks and phone-preview compilation/HTTP passed. Any later fix must record new qualification separately.
+Initial reviewed baseline d8a8118 passed1,186tests. Final post-fix a73676b clean Node24.19.0 gate passed1,191tests/13optional camera skips/all configured builds/source stable, artifacts/engineering/2026-10-24T16-11-57-202Z-b531a766/report.json. Final lab/phone-preview builds and HTTP/HMR passed. Later completion-document commits leave application source unchanged.
 
 SW063 independent agent review found two P2 issues (manual Yahtzee correction summaries and direct LAN lab artifact reads). Both are fixed and independently rechecked with26 passing focused tests. Read-only cloud probes returned Auth settings200, room preflight204, anonymous room read401 and commentary preflight204; these establish reachability/protection only, not authenticated continuity or deployed-byte identity. Final post-fix qualification is recorded in the SW063 plan.
 
@@ -35,3 +35,5 @@ No current full visual/touch acceptance: desktop observation approval timed out,
 ## Reading and workflow
 
 Read AGENTS.md, docs/status.md and project-memory.md first; then only the needed domain contract/skill. Six project skills under `.agents/skills` are reusable workflows, not live device or deployment evidence. Node24 is required; older Node22/legacy README instructions are historical. Keep source and audit evidence distinct, report remaining gates, and obtain task-specific authorization for any future main/native/public deployment.
+
+Native owner instructions are in 2026-10-24-native-owner-rollout.md. No Supabase functions/schema/RLS/migrations were deployed for the UI work; server/supabase source has no diff from recorded phone source1283973.
