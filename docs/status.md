@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October SW058 trophy cabinet follow-up: KA-CHING marquee and real-stat reel windows added to trophy dialog, preserving independent honours, total counting and sample/error states.11 focused checks/lab build/LAN-HMR passed; reduced motion respected, no added audio. Phone visual acceptance open.
+
 23 October SW058 cabinet follow-up: recognizable slot-machine chooser with bulb marquee, inset reel windows, larger symbols, decorative lever and payout tray. Original four direct game actions preserved.5 focused checks/lab build/LAN-HMR passed; visual phone acceptance pending. See SW058 plan.
 
 23 October SW058 mobile UI pass: compact expandable solo/local setup, narrower scorecard labels with preserved upper indicators, shared dialog/lobby/history/results readability and Home text polish implemented.61 focused tests, LAN/HMR and lab build passed. Node24 gate:1,175 tests passed/13 optional camera skips/all configured builds/source stable. Device visual/touch acceptance remains open. See plans/SW-058-mobile-ui-pass.md.
