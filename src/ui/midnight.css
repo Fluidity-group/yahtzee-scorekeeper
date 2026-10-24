@@ -30,6 +30,7 @@ html[data-art=midnight] .home-account-footer{border-radius:0 0 3px 3px;backgroun
 html[data-art=midnight] .playform-people,html[data-art=midnight] .home-commentary,html[data-art=midnight] .home-resume{border-radius:3px;background:var(--club-panel);color:var(--club-text);border:1px solid var(--club-line);box-shadow:3px 4px 0 var(--midnight-ink)}
 html[data-art=midnight] .playform-people>span:first-child{border-radius:2px;border-color:var(--club-second)}
 html[data-art=midnight] .compact-header{background:var(--club-panel);border-color:var(--club-line)}
+.home-top-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:44px;min-width:60px;flex-shrink:0;white-space:nowrap}.home-top-button>span{font-size:23px;line-height:1}.home-ribbon .home-ribbon-home>span{font-size:23px;line-height:1}.play-header .play-title{min-width:0}
 html[data-art=midnight] .compact-logo{font-family:Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.03em;color:var(--club-accent)}
 html[data-art=midnight] .new-core h1,html[data-art=midnight] .core-dialog h2,html[data-art=midnight] .mp-shell h1,html[data-art=midnight] .hosted-results h2,html[data-art=midnight] .tournament-finish h2{font-family:Impact,'Arial Black',system-ui,sans-serif;color:var(--club-accent);letter-spacing:.025em}
 html[data-art=midnight] .core-primary,html[data-art=midnight] .bigbtn.score{border-radius:3px!important;background:var(--midnight-gold);color:#211a28;border:1px solid #ffe1a3;box-shadow:3px 4px 0 #070e1a;font-weight:800;letter-spacing:.015em;min-height:48px}

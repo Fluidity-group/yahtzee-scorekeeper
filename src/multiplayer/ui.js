@@ -23,7 +23,7 @@ function message(text){const box=root.querySelector('#mpMessage');if(box)box.tex
 function shell(body){
  if(screen==='lobby')callbacks?.table?.(room,user?.id,connected);else callbacks?.table?.(null);
  root.classList.remove('playing');
- root.innerHTML=`<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><button class="hbtn" data-mp="exit">Clubhouse</button></header><main class="mp-screen">${body}<p id="mpMessage" role="status" aria-live="polite"></p></main>`;
+ root.innerHTML=`<header class="compact-header"><span class="compact-logo">yahtzee<span>.</span></span><button class="hbtn home-top-button" data-mp="exit" aria-label="Home"><span aria-hidden="true">⌂</span> Home</button></header><main class="mp-screen">${body}<p id="mpMessage" role="status" aria-live="polite"></p></main>`;
 }
 function accountScreen(codeSent=false){
  if(!emailOtpEnabled&&!codeSent){passwordScreen();return;}
