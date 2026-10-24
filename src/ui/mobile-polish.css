@@ -10,6 +10,11 @@
 html[data-theme=light] #coreApp .upper-category-indicator .positive,
 html[data-theme=light] #coreApp .upper-category-indicator rect.surplus{fill:#1a546b}
 html[data-theme=light] #coreApp .upper-category-indicator .upper-yahtzee-star{fill:#805018}
+/* A steady halo marks a true surplus; exactly three matching dice stay unlit. */
+#coreApp .upper-category-label:has(.upper-pace-delta.positive){--upper-ahead-glow:#f2c76b66;text-shadow:0 0 7px var(--upper-ahead-glow)}
+html[data-theme=light] #coreApp .upper-category-label:has(.upper-pace-delta.positive){--upper-ahead-glow:#1a546b33}
+#coreApp .upper-category-label:has(.upper-pace-delta.positive) .upper-category-indicator{filter:drop-shadow(0 0 3px var(--upper-ahead-glow))}
+@media(forced-colors:active){#coreApp .upper-category-label:has(.upper-pace-delta.positive){text-shadow:none}#coreApp .upper-category-label:has(.upper-pace-delta.positive) .upper-category-indicator{filter:none}}
 #coreApp .phone-scorecard-caption{flex-wrap:wrap;font-size:var(--score-meta);line-height:1.5}
 #coreApp .phone-scorecard .player-summary{min-width:0;column-gap:5px}
 #coreApp .phone-scorecard .player-summary>*{min-width:0}
