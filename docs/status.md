@@ -1,6 +1,6 @@
 # Yahtzee current engineering status
 
-24 October SW061: owner chose separate sample/handoff before main/native promotion. Real-account LAN multiplayer preview at8476, no fictional profile, no main/native/backend changes; bright full slot cabinet implemented.44 focused checks and preview build passed; full gate/phone acceptance pending. See releases/SW-061-amber-phone-sample.md.
+24 October SW061: owner chose separate sample/handoff before main/native promotion. Real-account LAN multiplayer preview at8476, no fictional profile, no main/native/backend changes; bright full slot cabinet implemented.44 focused checks/2 preview regressions/preview build/HTTP passed. Clean Node24 gate1,186passed/13optional skips/all builds/source stable at ba70d2f; phone acceptance pending. See releases/SW-061-amber-phone-sample.md.
 
 23 October SW060 Personal Best section: highest final score and most recorded/reported Yahtzees per completed game, independent records/dates and rule separation. Missing manual history is Not recorded, not inferred from bonus points.20 focused checks/lab build/LAN-HMR passed. Node24 gate1,184passed/13optional camera skips/all configured builds/source stable. See plans/SW-060-personal-bests.md.
 
