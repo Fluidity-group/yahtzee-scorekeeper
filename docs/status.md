@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October ribbon avatar follow-up: selected portrait logo added beside player name/Stats, matching saved persona and preserving profile access.4 focused checks passed, including avatar-change synchronization. No account/rule/deployment change; see SW057 follow-up.
+
 23 October Home navigation follow-up: explicit top Home button added to Home ribbon, local game/setup and existing online exit.24 focused checks passed; scored local game preserved through Home/Resume, with no reset or extra save. LAN serves latest YAHTZ renderer/UUID-protected entry. No release/deployment; see SW057 follow-up.
 
 23 October SW057 YAHTZ mobile Home:17 annotations mapped into one title/exact slogan, Dan/Amber credits, flat neon/static glitter cover with selected avatar, top player/stats–venue–settings/theme ribbon, four-mode slot-machine cabinet, larger Resume and explicit tournament Create/Join/Return. Preserved SW055 account trophies/people, moved secondary links out of the main choice grid; cleared stale game-only notices on Home.Stable Node24 gate1,168passed/13optional camera skips/all configured builds;51 focused checks passed. Real phone geometry/art quality remains Amber review; no main promotion or deployment. See `plans/SW-057-yahtz-mobile-home.md`.
