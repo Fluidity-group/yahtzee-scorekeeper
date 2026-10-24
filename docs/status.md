@@ -1,5 +1,7 @@
 # Yahtzee current engineering status
 
+23 October trophy heading: larger two-line neon-accent title with close-button clearance.3 focused checks/lab build/LAN-HMR passed; see SW058 follow-up. Visual acceptance pending.
+
 23 October SW058 trophy cabinet follow-up: KA-CHING marquee and real-stat reel windows added to trophy dialog, preserving independent honours, total counting and sample/error states.11 focused checks/lab build/LAN-HMR passed; reduced motion respected, no added audio. Phone visual acceptance open.
 
 23 October SW058 cabinet follow-up: recognizable slot-machine chooser with bulb marquee, inset reel windows, larger symbols, decorative lever and payout tray. Original four direct game actions preserved.5 focused checks/lab build/LAN-HMR passed; visual phone acceptance pending. See SW058 plan.
