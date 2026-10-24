@@ -1,7 +1,7 @@
 import {initializeMidnight} from './ui/midnight-profile.js';
 import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midnight-panels.js';
 import {loadHomeAccount,watchHomeAccount} from './multiplayer/home-account.js';
-import {renderPeopleDialog,renderTrophyDialog} from './ui/home-account.js';
+import {renderPeopleDialog,renderTrophyDialog,renderPlayerProfile} from './ui/home-account.js';
 import {socialLandingView} from './multiplayer/social-links.js';
 import './styles.css';
 import './clubhouse.css';
@@ -10,6 +10,8 @@ import './ui/clubhouse-home.css';
 import './ui/playform.css';
 import './ui/home-account.css';
 import './ui/midnight.css';
+import './ui/yahtz-home.css';
+import {renderTournamentEntry} from './ui/yahtz-home.js';
 document.documentElement.dataset.design='playform';
 import {renderClubhouseHome,renderGameMenu} from './ui/clubhouse-home.js';
 import {renderCommentarySettings,bindCommentarySettings} from './ui/commentary-settings.js';
@@ -130,10 +132,10 @@ function header(){return '<header class="compact-header"><button class="compact-
 let launchGeneration=0;
 let view='home',localVoice=null,localVoiceGameId=null,welcomeGate=null,pendingWelcome=false,pendingLocalLaunch=null,settingsCleanup=()=>{};
 let homeAccount={status:'loading'},homeAccountGeneration=0;
-function drawHome(){const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount})+'<button class="all-scores" data-action="saved-sessions">Your online games &amp; tournaments</button>';if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
-function openHomeAccountPanel(kind){openDialog(kind==='people'?renderPeopleDialog(homeAccount):renderTrophyDialog(homeAccount));dialog.dataset.homeAccountPanel=kind;}
+function drawHome(){const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount,theme});if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
+function openHomeAccountPanel(kind){openDialog(kind==='profile'?renderPlayerProfile(homeAccount):kind==='people'?renderPeopleDialog(homeAccount):renderTrophyDialog(homeAccount));dialog.dataset.homeAccountPanel=kind;}
 async function refreshHomeAccount(){const ticket=++homeAccountGeneration;let data;try{data=await loadHomeAccount();}catch{data={status:'error'};}if(ticket!==homeAccountGeneration||view!=='home')return;homeAccount=data;drawHome();const panel=dialog.dataset.homeAccountPanel;if(dialog.open&&panel)openHomeAccountPanel(panel);}
-function showHome(){view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();homeAccount={status:'loading'};drawHome();void refreshHomeAccount();}
+function showHome(){clearTimeout(noticeTimer);document.getElementById('coreNotice').textContent='';view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();homeAccount={status:'loading'};drawHome();void refreshHomeAccount();}
 async function returnHome(){launchGeneration++;welcomeGate?.cancel();if(onlineRoom){const {leaveOnline}=await import('./multiplayer/ui.js');leaveOnline();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;hostedCommentaryActive=false;resetHostedCommentary();}dialog.close();showHome();}
 function openNavigation(){if(dialog.open){notice('Finish or close score entry before opening the menu.');return;}openDialog(renderGameMenu({hasGame:!!game,theme,native:Capacitor.getPlatform()==='android',resumeTournament:!!(tournamentPaused()&&onlineRoom.hostId===onlineUserId&&onlineRoom.capabilities?.tournaments===true),resumeDisabled:busy||!onlineConnected}));dialog.dataset.navigation='true';}
 function openGlobalCommentary(){if(iosManualTest){notice('Voice is deferred in this iOS manual test.');return;}const saved=readCommentaryPreferences(),defaults=readLocalPlayerDefaults(),players=defaults.length?defaults:[{displayName:localStorage.getItem('clubhouse-name')||'',gender:'',blurb:''}];openDialog(renderCommentarySettings({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted,isHost:true,connected:false,id:'global-commentary'}).replace('Voice not connected · preferences only','Saved defaults · connect when a new game begins').replace('Enable table commentary','Offer commentary for new games').replace('Table voice style','Your default commentator').replace('<p data-commentary-error', '<details class="global-player-defaults"><summary>Saved player details for local games</summary><p class="core-muted">Stored on this phone. Only players in the new game are shared when you choose commentary.</p>'+players.map((p,i)=>'<label>Player '+(i+1)+' name<input name="localName'+i+'" maxlength="24" value="'+esc(p.displayName)+'"></label>'+renderPlayerProfileFields('defaultPlayer'+i,p)).join('')+'</details><p data-commentary-error')+'<p class="core-muted">Saved on this phone across app launches. Each new game asks whether to use commentary. Live voice needs an internet connection and sign-in; your optional player details are shared only when you choose commentary for that game.</p>');settingsCleanup();settingsCleanup=bindCommentarySettings(dialog,{onClose:()=>dialog.close(),onListenerMute:value=>{persistCommentaryPatch({listenerMuted:value});(onlineRoom?hostedCommentary:localVoice?.session)?.setListenerMuted?.(value);},onTableSettings:async value=>{const data=new FormData(dialog.querySelector('[data-commentary-form]'));saveLocalPlayerDefaults(players.map((_,i)=>({displayName:String(data.get('localName'+i)||''),...readPlayerProfileFields(data,'defaultPlayer'+i)})));const saved=persistCommentaryPatch({profile:{...value.profile,enabled:value.enabled}});const active=onlineRoom?hostedCommentary:localVoice?.session;if(active&&(!onlineRoom||onlineRoom.hostId===onlineUserId)){active.muteForGame?.();await active.configure({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted});}notice('Commentary settings saved for every game.');}});}
@@ -537,7 +539,7 @@ document.addEventListener('click',async e=>{
  root.querySelector('.game-menu')?.removeAttribute('open');
  try{
   if(a==='home')await returnHome();
-  if(a==='game-menu')openNavigation();
+  if(a==='game-menu'){if(dialog.open&&dialog.querySelector('.midnight-settings-links'))dialog.close();openNavigation();}
   if(a==='midnight-avatar')openMidnightPanel('avatar');
   if(a==='midnight-locations')openMidnightPanel('locations');
   if(a==='midnight-settings')openMidnightPanel('settings');
@@ -554,8 +556,11 @@ document.addEventListener('click',async e=>{
   if(a==='home-local')newScreen({players:2});
   if(a==='home-online'||a==='home-people')openHomeAccountPanel('people');
   if(a==='home-trophies')openHomeAccountPanel('trophies');
+  if(a==='home-profile')openHomeAccountPanel('profile');
   if(a==='home-account-retry'){homeAccount={status:'loading'};drawHome();const panel=dialog.dataset.homeAccountPanel||'people';openHomeAccountPanel(panel);void refreshHomeAccount();}
-  if(a==='home-tournament')await openMultiplayer('','host-tournament');
+  if(a==='home-tournament')openDialog(renderTournamentEntry());
+  if(a==='tournament-create')await openMultiplayer('','host-tournament');
+  if(a==='tournament-join')await openMultiplayer('','join');
   if(a==='online-sessions')await openMultiplayer('','sessions');
   if(a==='resume-game'){view='game';localVoice?.setVisible(true);render();if(!localVoice&&Capacitor.getPlatform()==='android'&&readCommentaryPreferences().profile.enabled&&localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes')void launchLocalVoice(game,[],{resume:true});}
   if(a==='launch-signin')await openMultiplayer('','voice-signin');
@@ -565,7 +570,7 @@ document.addEventListener('click',async e=>{
   if(a==='camera-test'){const {openDiceIdentificationTest}=await import('./dice/camera-panel.js');await openDiceIdentificationTest();}
   if(a==='start-camera')await send({type:'start',source:'camera'});
   if(a==='connect-dice'){clearTimeout(settleTimer);hardwareCapture.cancel();updateHardwarePanel();const {openDiceConnections}=await import('#dice-panel');openDiceConnections();}
-  if(a==='theme'){theme=theme==='dark'?'light':'dark';applyTheme();try{localStorage.setItem('yz_theme',theme);}catch{}b.textContent=(theme==='dark'?'Light':'Dark')+' mode';}
+  if(a==='theme'){theme=theme==='dark'?'light':'dark';applyTheme();try{localStorage.setItem('yz_theme',theme);}catch{}b.textContent=(theme==='dark'?'Light':'Dark')+' mode';if(view==='home')drawHome();}
   if(a==='online')await openMultiplayer(); if(a==='new'){if(onlineRoom)await returnHome();localVoice?.setVisible(false);newScreen();}
   if(a==='saved-sessions')await openMultiplayer('','sessions');
   if(a==='resume'){view='game';render();}

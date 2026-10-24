@@ -28,6 +28,9 @@ beforeEach(()=>{
  document.body.innerHTML='<div id="root"></div>';callbacks={game:vi.fn(),connection:vi.fn(),notice:vi.fn(),exit:vi.fn()};
 });
 describe('multiplayer screens',()=>{
+ it('opens an explicit join landing after account lookup without creating a new room',async()=>{
+  await openOnline(document.querySelector('#root'),callbacks,'','join');expect(document.querySelector('[data-mp-form="join"]')).not.toBeNull();expect(requestRoom).not.toHaveBeenCalled();
+ });
  it('opens a native shared link as an explicit join form, without a member-only read or automatic join',async()=>{
   const destination=socialDestination('diceclubhouse://table/ABCDEFGH');
   rememberSocialDestination(destination);

@@ -1,5 +1,7 @@
 # Amber's playable UI lab
 
+Current Home review is SW057: YAHTZ title/your exact slogan, Dan/Amber credits, player/venue/settings/theme ribbon, deliberate four-mode slot-machine choices and larger Resume. Avatar is clickable on the flat neon cover. Tournament opens Create/Join/Return; profile opens name/stats and persona controls. Lab statistics remain explicitly fictional. See SW057 plan for the17 annotation mapping and manual mobile/contrast review still required.
+
 **Open http://192.168.1.148:8475/lab/**. This is a real, playable source copy, not the frozen SW053 gallery. Use **Play full screen** for normal game testing. The ROG must be awake and reachable on the same LAN. No new firewall change is made by this setup.
 
 Current review: SW055 enlarges all four Home category titles, adds a tournament trophy counter/detail, and opens past opponents through Online multiplayer / People you've played. The lab explicitly labels a fictional Alex profile (three wins, three opponents); these are not real account statistics. Normal production entry does not load this fixture. The three requests are saved as Testing for Amber's visual decision. See `docs/plans/SW-055-home-readability-trophies-people.md`.

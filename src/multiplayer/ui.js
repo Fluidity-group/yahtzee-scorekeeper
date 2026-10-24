@@ -138,7 +138,7 @@ async function sessions(view='open'){
 async function accountDestination(){
  if(landingView==='invitations'){home();await(await import('./social-ui.js')).openSocial();return;}
  if(landingView==='return-table'&&invite){await mutate({operation:'read',code:invite});(await import('./social-links.js')).clearSocialDestination();invite='';return;}
- if(landingView==='voice-signin'){await callbacks?.voiceReady?.(user);return;}if(invite)joinForm();else if(landingView==='host-tournament'){hostForm();const select=root.querySelector('[name=tableType]');select.value='tournament';select.dispatchEvent(new Event('change',{bubbles:true}));}else if(landingView==='sessions')await sessions();else if(landingView==='tournaments')await tournaments();else home();
+ if(landingView==='voice-signin'){await callbacks?.voiceReady?.(user);return;}if(invite||landingView==='join')joinForm();else if(landingView==='host-tournament'){hostForm();const select=root.querySelector('[name=tableType]');select.value='tournament';select.dispatchEvent(new Event('change',{bubbles:true}));}else if(landingView==='sessions')await sessions();else if(landingView==='tournaments')await tournaments();else home();
 }
 export async function openOnline(element,handlers,joinCode='',view='home'){
  leaveOnline();onlineOpen=true;const ticket=generation;root=element;callbacks=handlers;invite=joinCode;displayName=recall('clubhouse-name');landingView=view;

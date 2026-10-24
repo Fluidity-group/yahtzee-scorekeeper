@@ -1,5 +1,7 @@
 # Software project control
 
+23 October SW057 YAHTZ mobile Home redesign from17 browser notes: consolidated title/credits/exact slogan, compact ribbon and slot-machine modes, readable Resume, profile stats and explicit tournament navigation implemented.Stable Node24 gate1,168passed/13optional camera skips/all configured builds;51 focused checks passed. No rule/backend-authority changes; visual/device and owner acceptance remain open. See `../plans/SW-057-yahtz-mobile-home.md`.
+
 23 October SW056 phase1: Midnight Casino shared theme/original city and portrait assets, device-only appearance/avatar/mute controls and honest four-style photo/provider fallback implemented on UI lab branch.1,163 tests passed/13 optional camera skips and all configured builds; stable development gate passed. Existing scoring rules, ready flow and SW055 additions preserved; positive acceptance made silent. Later synchronized event/room location/provider phases remain open. See `../plans/SW-056-midnight-casino.md`.
 
 23 October SW055: larger Home category titles, account-owned tournament trophy breakdown and past-opponent list implemented on the lab branch.53 focused checks, lab/standard web compilation and HMR passed; lab profile is explicitly fictional. Existing member-scoped reads only; no backend schema/authority changes. Review queue file-lock defect repaired and3 requests saved as Testing. Visual, live-account and release qualification remain open. See `../plans/SW-055-home-readability-trophies-people.md`.

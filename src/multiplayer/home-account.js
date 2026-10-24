@@ -25,7 +25,7 @@ export function summarizeHomeAccount(userId,tables){
   if(prior){prior.games++;if(lastPlayed>=prior.lastPlayed){prior.name=player.name;prior.lastPlayed=lastPlayed;}}
   else people.set(player.id,{userId:player.id,name:player.name,games:1,lastPlayed});
  }
- return {trophies:{total,points,wins,completed},people:[...people.values()].sort((a,b)=>b.lastPlayed.localeCompare(a.lastPlayed)||a.name.localeCompare(b.name))};
+ return {gamesPlayed:games.size,trophies:{total,points,wins,completed},people:[...people.values()].sort((a,b)=>b.lastPlayed.localeCompare(a.lastPlayed)||a.name.localeCompare(b.name))};
 }
 
 export async function loadHomeAccount({client:provided}={}){
