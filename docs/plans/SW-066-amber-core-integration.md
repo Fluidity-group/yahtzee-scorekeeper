@@ -2,7 +2,7 @@
 
 24 October 2026. Owner: Dan/Amber. Lead architect and implementation: Codex.
 Independent agent reviewer: `/root/expert_ui_review`.
-State: implemented; qualification and main promotion pending.
+State: implemented and automatically verified; local main promoted; remote publication awaiting explicit owner approval. Physical acceptance remains open.
 
 ## Purpose and requirements
 
@@ -15,8 +15,8 @@ Owner requested expert review and merging Amber's updates into the core codebase
 | SW066-1 | Integrate the complete qualified product baseline and Amber UI without disturbing old root changes | Isolated branch from master e599b71; merge Amber 7cd7b6c | Clean merge a34ebce; tree initially identical to Amber | Implemented |
 | SW066-2 | Independent review of UI consistency/navigation/account summaries and preserved authority | Frozen Amber review versus SW052 1283973 | Expert reviewer: 15 focused files / 66 tests passed; one P2 queued-close bug found | Independently verified: 30 tests / 8 files |
 | SW066-3 | Replacement avatar/venue/settings panels remain interactive after native queued close | Failing-before/passing-after DOM regression | New midnight-navigation-close test failed character-1 vs character-4 before fix; 4 focused files passed after fix | Verified |
-| SW066-4 | Full configured Node24 tests and all builds pass with stable source | engineering-check verify | Pending | Open |
-| SW066-5 | Future chats find one authoritative source, current manual-only scope and honest device evidence | Skills/memory/status/handover reconciliation | Pending | Open |
+| SW066-4 | Full configured Node24 tests and all builds pass with stable source | engineering-check verify | Clean db094a4 gate: 1,192 passed/13 optional skips/all builds/source stable; artifacts/engineering/2026-10-24T17-18-53-062Z-00d440ed/report.json | Verified |
+| SW066-5 | Future chats find one authoritative source, current manual-only scope and honest device evidence | Skills/memory/status/handover reconciliation | Six skills byte-identical across integrated/root/Amber; synchronized status/memory/handover | Verified |
 | SW066-6 | Both physical phones complete manual scoring, Undo, reconnect/background, Home/Resume and tournament continuation | Owner test of identified Android/iOS builds | Versions running confirmed; full played-game matrix not supplied | Open |
 
 ## Design and impact
@@ -36,3 +36,9 @@ The dialog close event is queued. Navigation closes and reopens the shared dialo
 ## Completion and decision
 
 Independent fix recheck passed (30 tests / 8 files). Six skills and current routing reconciled across root, Amber and integrated checkouts. Initial full run c8bfc89a passed all 1,192 tests/13 optional camera skips and all builds, but correctly failed source stability after generated server files changed CRLF to LF. Repeat clean gate pending. No new handset installation or public/backend deployment performed by SW066.
+
+### Final result
+
+24 October SW066 completed locally: Amber history merged into core; independent expert found/fix-rechecked queued dialog-close navigation (30 tests/8 files). Clean Node24.19.0 gate at db094a4: 1,192 tests passed/13 optional camera skips/all configured builds/source stable. Evidence artifacts/engineering/2026-10-24T17-18-53-062Z-00d440ed/report.json. Android APK built and signature verified;46public assets match Android APK/synced iOS. iOS project/assets prepared, new Xcode signing/install pending. Owner confirms Android/iOS versions running; full manual played-game acceptance remains open. Camera/voice deferred until manual core works. Local master promoted; remote master remains e599b71. Automatic approval review rejected remote publishing (default-branch impact and unverified egress authorization); explicit owner publishing approval is required. No new device install/public/backend/database deployment or table command. Current source artifacts/sw066/source; skills/routing synchronized.
+
+Native build attempts: initial default SDK path was absent in this tool environment; explicit SDK path worked. Fresh Gradle download was network-blocked, then cached offline build was sandbox-daemon-blocked; approved unsandboxed cached build succeeded (216 tasks). Capacitor-generated machine-specific dependency references were restored to their original portable paths before qualification. No source code changes followed the final gate.
