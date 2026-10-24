@@ -1,7 +1,9 @@
 import {installLabUuid} from './uuid.js';
-import {setHomeAccountPreview} from '../src/multiplayer/home-account.js';
-import {homePreview} from './home-preview.js';
-installLabUuid();
-setHomeAccountPreview(homePreview);
-// Only this laboratory entry adds an HTTP-compatible UUID helper. Production entry is untouched.
-import('../src/bootstrap.js').catch(error=>{delete document.documentElement.dataset.booting;document.body.textContent='The development game could not load: '+error.message;});
+// Install before evaluating ANY game/preview dependency, including during hot reloads.
+async function boot(){
+ installLabUuid();
+ const [{setHomeAccountPreview},{homePreview}]=await Promise.all([import('../src/multiplayer/home-account.js'),import('./home-preview.js')]);
+ setHomeAccountPreview(homePreview);
+ await import('../src/bootstrap.js');
+}
+boot().catch(error=>{delete document.documentElement.dataset.booting;document.body.textContent='The development game could not load: '+error.message;});

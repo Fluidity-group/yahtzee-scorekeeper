@@ -6,6 +6,15 @@ import {join} from 'node:path';
 import {webcrypto} from 'node:crypto';
 import {labApi,validateFeedback,replaceReviewFile} from '../lab/server.js';
 import {installLabUuid} from '../lab/uuid.js';
+import {rewriteLabEntry} from '../lab/html.js';
+it('keeps the UUID entry on timestamped hot-reload bootstrap URLs and leaves the workbench alone',()=>{
+ for(const source of ['/src/bootstrap.js','/src/bootstrap.js?t=1792799741740','/src/bootstrap.js?t=12&x=1#reload'])for(const quote of ['"',"'"]){
+  const html=`<script type="module" src=${quote}${source}${quote}></script>`;
+  expect(rewriteLabEntry(html,'/')).toContain(`src=${quote}/lab/entry.js${quote}`);
+ }
+ const shell='<script type="module" src="/lab/workbench.js"></script>';
+ expect(rewriteLabEntry(shell,'/lab/index.html')).toBe(shell);
+});
 it('supports LAN UUID generation without replacing native randomUUID',()=>{
  const target={getRandomValues:array=>webcrypto.getRandomValues(array)};installLabUuid(target);
  const values=new Set(Array.from({length:100},()=>target.randomUUID()));expect(values.size).toBe(100);
