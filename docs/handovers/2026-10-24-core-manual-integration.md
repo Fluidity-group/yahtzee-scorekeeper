@@ -1,5 +1,7 @@
 # Core manual-game integration — 24 October 2026
 
+24 October SW066 publication completed: owner explicitly authorized GitHub master publication. Normal fast-forward push e599b71 → fae7670358a7445a4d6de34140c9d46f402194cb succeeded and remote tip was independently read back. This supersedes the earlier remote-approval-pending statements below. Subsequent publication-record commit changes documentation only; reviewed application code, clean 1,192-test gate and native candidate bytes remain unchanged. No new handset installation or public web/backend/database deployment. Updated iOS signing/build and complete two-phone manual-game acceptance remain open; camera/voice deferred.
+
 ## Authoritative source and scope
 
 SW066 supersedes the separate-sample-only routing in older handovers. Owner explicitly requested Amber's updates merged into the core and Codex to act as lead architect. Current integration checkout: `C:/Codex/Yahtzee Game/artifacts/sw066/source`, branch `codex/sw066-amber-core-integration`. The dirty root remains preserved; never replace its app files or reset it. Amber's `artifacts/sw054/source` remains the previous phone/sample source, not the destination for new core changes. Local master promoted to the verified integration. Remote master remains e599b71: automatic approval review rejected publication, pending explicit owner authorization. See SW066 and current status for exact evidence.

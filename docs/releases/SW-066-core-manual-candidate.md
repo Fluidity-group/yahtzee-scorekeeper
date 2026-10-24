@@ -1,5 +1,7 @@
 # SW066 core manual-game test candidate
 
+24 October SW066 publication completed: owner explicitly authorized GitHub master publication. Normal fast-forward push e599b71 → fae7670358a7445a4d6de34140c9d46f402194cb succeeded and remote tip was independently read back. This supersedes the earlier remote-approval-pending statements below. Subsequent publication-record commit changes documentation only; reviewed application code, clean 1,192-test gate and native candidate bytes remain unchanged. No new handset installation or public web/backend/database deployment. Updated iOS signing/build and complete two-phone manual-game acceptance remain open; camera/voice deferred.
+
 24 October 2026. Coordinator/lead architect: Codex. Independent UI review: expert_ui_review agent. Scope: merge Amber UI into core, repair queued-close navigation, manual-game Android/iOS readiness and project continuity. Camera/voice development deferred by owner.
 
 ## Identities and verification
