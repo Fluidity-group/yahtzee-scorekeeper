@@ -1,0 +1,38 @@
+/* SW058: readable play surfaces; keep display lettering in the Home artwork. */
+#coreApp .phone-category-col{width:40%}
+#coreApp .phone-own-col{width:40%}
+#coreApp .phone-comparison-col{width:20%}
+#coreApp .phone-score-table tbody th:first-child{overflow-wrap:normal;word-break:normal;padding:6px 8px}
+#coreApp .upper-category-label{align-items:flex-start;flex-direction:column;gap:3px}
+#coreApp .upper-category-indicator{flex:0 0 auto;width:70px;height:22px;max-width:100%}
+#coreApp .phone-scorecard-caption{flex-wrap:wrap;font-size:var(--score-meta);line-height:1.5}
+#coreApp .phone-scorecard .player-summary{min-width:0;column-gap:5px}
+#coreApp .phone-scorecard .player-summary>*{min-width:0}
+#coreApp .phone-peer-controls{margin-left:auto}
+html[data-art=midnight] .core-dialog{box-sizing:border-box;overscroll-behavior:contain}
+html[data-art=midnight] .core-dialog p{line-height:1.5}
+html[data-art=midnight] .core-dialog label{font-size:14px;line-height:1.5}
+html[data-art=midnight] .core-dialog input:not([type=checkbox]):not([type=radio]),
+html[data-art=midnight] .core-dialog select,
+html[data-art=midnight] .core-dialog textarea,
+html[data-art=midnight] .mp-screen input,
+html[data-art=midnight] .mp-screen select{font-size:16px;max-width:100%;box-sizing:border-box}
+html[data-art=midnight] .history-row{min-height:48px;overflow-wrap:anywhere}
+html[data-art=midnight] .history-row small{line-height:1.5}
+html[data-art=midnight] .yahtz-home .home-game-card strong{overflow-wrap:normal;word-break:normal}
+html[data-art=midnight] .yahtz-home .home-game-card small{font-size:13px;line-height:1.45}
+html[data-art=midnight] .home-account-links .home-account-footer,
+html[data-art=midnight] .home-quick-links button{font-size:13px}
+#coreApp .compact-setup .setup-option-fields label{font-size:14px;line-height:1.5}
+html[data-art=midnight] .mp-screen{box-sizing:border-box;width:100%}
+html[data-art=midnight] .mp-screen h1{overflow-wrap:anywhere;line-height:1.15}
+html[data-art=midnight] .mp-entry small{font-size:14px;line-height:1.5}
+html[data-art=midnight] .hosted-ready-roster strong{white-space:normal;overflow-wrap:anywhere}
+html[data-art=midnight] .core-dialog button:focus-visible,
+html[data-art=midnight] .mp-screen button:focus-visible{outline:3px solid var(--club-second);outline-offset:2px}
+@media(max-width:380px){
+ #coreApp .phone-scorecard .player-summary{display:flex;flex-direction:column;align-items:center;gap:3px}
+ #coreApp .phone-scorecard .player-name{text-align:center}
+ #coreApp.playing .play-header{padding-inline:6px}
+}
+@media(min-width:600px){#coreApp .upper-category-label{flex-direction:row;align-items:center}}

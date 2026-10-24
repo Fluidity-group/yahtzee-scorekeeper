@@ -1,3 +1,4 @@
+import {renderLocalSetup} from './ui/local-setup.js';
 import {initializeMidnight} from './ui/midnight-profile.js';
 import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midnight-panels.js';
 import {loadHomeAccount,watchHomeAccount} from './multiplayer/home-account.js';
@@ -33,6 +34,8 @@ import { AutomaticCapture } from './dice/automatic-capture.js';
 import { celebration,celebrationMessage } from './game/celebrations.js';
 import {pulseAccepted,cancelPulse,refreshPulse} from './ui/pulse.js';
 import './ui/phone-scorecard.css';
+import './ui/local-setup.css';
+import './ui/mobile-polish.css';
 import {applyScorecardSize,saveScorecardSize,renderScorecardDisplay} from './ui/scorecard-display.js';
 import {renderPhoneScorecard,bindPhoneScorecard} from './ui/phone-scorecard.js';
 import { getDiceStatus, subscribeDiceStatus, subscribeDiceEvents } from './dice/live-status.js';
@@ -149,16 +152,17 @@ async function launchLocalVoice(created,players,{resume=false}={}){const launchT
 async function prepareHostedStart(){if(iosManualTest)return true;const prefs=readCommentaryPreferences(),yes=await askGameCommentary(dialog,prefs);const session=await ensureHostedCommentary();if(session)await session.configure({profile:prefs.profile,enabled:yes,listenerMuted:yes?false:prefs.listenerMuted});pendingWelcome=yes;if(yes){view='welcome';root.innerHTML='<main class="launch-progress"><div class="launch-pulse" aria-hidden="true">⚄</div><h1>Opening your table.</h1><p>Getting the welcome ready…</p></main>';}return true;}
 function startHostedWelcome(metadata){if(iosManualTest)return;if(!pendingWelcome){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata));return;}pendingWelcome=false;view='welcome';void ensureHostedCommentary().then(session=>{if(!session){view='game';render();return;}welcomeGate=showWelcomeGate({root,session,metadata,onDone:()=>{welcomeGate=null;view='game';render();},onSkip:reason=>{welcomeGate=null;session.muteForGame();void session.configure({profile:readCommentaryPreferences().profile,enabled:false,listenerMuted:true}).catch(()=>{});view='game';render();if(['timeout','unavailable'].includes(reason))notice('The welcome could not connect. Your game is ready without commentary.');}});}).catch(()=>{view='game';render();notice('Welcome unavailable. You can keep playing.');});}
 
-function newScreen({players=2}={}){view='setup';cancelPulse(root);clearCelebration();phoneCleanup();
- root.classList.remove('playing');
- root.innerHTML=header()+`<main class="new-core"><div class="intro-kicker">YOUR TABLE. YOUR RULES.</div><h1>Make it a game.</h1><p class="core-muted">Local game · All players score on this device. Use Host / join online to play on separate phones.</p><button class="all-scores" data-action="online">Host / join online ↗</button>${Capacitor.getPlatform()==='android'?'<button class="all-scores" data-action="camera-test">Dice identification test</button>':''}<form id="createCore"><label>Game mode<select name="mode" id="modeSelect">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><p id="modeDescription" class="core-muted">${descriptions.standard}</p><div class="core-form-row"><label>Players<select id="playerCount" name="count">${Array.from({length:8},(_,i)=>`<option ${i===1?'selected':''}>${i+1}</option>`).join('')}</select></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${Capacitor.getPlatform()==='android'?'<option value="camera">C121 camera · review each roll</option>':''}${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · Bluetooth dice</option>':''}</select></label></div><label class="game-option"><input type="checkbox" name="hideTotals"><span>Hide score totals until the end<small>Keep category scores visible; reveal totals when the game finishes.</small></span></label><div id="nameInputs"></div><button class="bigbtn score core-primary" type="submit">Create game</button>${game?'<button type="button" class="all-scores" data-action="resume">Back to current game</button>':''}</form></main>`;
- root.querySelector('#playerCount').value=String(players);nameInputs(players);root.querySelector('.new-core h1').textContent=players===1?'Your solo session.':'Bring your people.';
- root.querySelector('.new-core h1').insertAdjacentHTML('afterend',renderResumeEntry({local:true}));
+function newScreen({players=2}={}){view='setup';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');
+ root.innerHTML=header()+renderLocalSetup({players,modes:MODES,description:descriptions.standard,camera:Capacitor.getPlatform()==='android',connectedDice:import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled,hasGame:!!game});
+ root.querySelector('[data-setup-saved]').innerHTML=renderResumeEntry({local:true});nameInputs(players);
 }
+function updateSetupSummary(){const form=root.querySelector('#createCore');if(!form)return;const mode=form.querySelector('[name="mode"]'),source=form.querySelector('[name="source"]'),count=Number(form.querySelector('#playerCount').value);root.querySelector('.setup-title').textContent=count===1?'Solo game':'Local game';root.querySelector('.setup-intro').textContent=count===1?'Roll your dice. Enter your scores.':'One phone for your table. Take turns entering scores.';root.querySelector('[data-setup-summary]').textContent=(MODES[mode.value]?.name||'Game')+' · '+source.selectedOptions[0].textContent+' · '+count+(count===1?' player':' players')+(form.querySelector('[name="hideTotals"]').checked?' · Totals hidden':'');}
 function nameInputs(n){
  const old=[...root.querySelectorAll('[name="player"]')].map(x=>x.value);
  const prior=root.querySelector('#createCore')?new FormData(root.querySelector('#createCore')):null;
- root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>Player ${i+1}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||readLocalPlayerDefaults()[i]?.displayName||(i===0?localStorage.getItem('clubhouse-name'):'')||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label><details><summary>Personalize commentary (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?.has(`player${i}Blurb`)?readPlayerProfileFields(prior,`player${i}`):readLocalPlayerDefaults()[i]||{})}</details>`).join('');
+ root.querySelector('#nameInputs').innerHTML=Array.from({length:n},(_,i)=>`<label>${n===1?'Your name':'Player '+(i+1)}<input name="player" aria-label="Player ${i+1} name" maxlength="24" required value="${esc(old[i]||readLocalPlayerDefaults()[i]?.displayName||(i===0?localStorage.getItem('clubhouse-name'):'')||['Dan','Amber','Sam'][i]||`Player ${i+1}`)}"></label>`).join('');
+ root.querySelector('#playerPersonalization').innerHTML=Array.from({length:n},(_,i)=>`<details><summary>Player ${i+1} commentary details (optional)</summary>${renderPlayerProfileFields(`player${i}`,prior?.has(`player${i}Blurb`)?readPlayerProfileFields(prior,`player${i}`):readLocalPlayerDefaults()[i]||{})}</details>`).join('');
+ updateSetupSummary();
 }
 function latest(){return game.turn?.rolls.filter(r=>!r.excluded).at(-1);}
 function options(){
@@ -525,6 +529,7 @@ async function analytics(){
 function rollInsights(){openDialog(`<h2>Roll insights</h2><p class="core-muted">${esc(game.rules.name)} · This game only. Camera, GoDice, simulated and corrected rolls retain their source in the exported history. Missing manual rolls are not counted as failed combinations.</p>${game.players.map((p,i)=>{const a=rollAnalytics(game,i);return `<h3>${esc(p.name)}</h3><p>${a.recordedRolls} recorded rolls · ${a.corrected} corrected</p>${a.recordedRolls?`<table><thead><tr><th>Combination</th><th>Rolls</th><th>Turns</th></tr></thead><tbody>${Object.keys({threeKind:0,fourKind:0,fullHouse:0,smallStraight:0,largeStraight:0,yahtzee:0}).map(k=>`<tr><td>${META[k].name}</td><td>${a.counts[k]||0}</td><td>${a.turns[k]||0}</td></tr>`).join('')}</tbody></table>`:'<p class="core-muted">No dice-level data recorded.</p>'}`;}).join('')}<p class="core-muted">Natural full houses are exactly 3 + 2. Kind and straight counts are inclusive; a Yahtzee also counts as three/four of a kind.</p>`);}
 document.addEventListener('change',e=>{
  if(e.target.id==='playerCount')nameInputs(Number(e.target.value));
+ if(e.target.closest('#createCore'))updateSetupSummary();
  if(e.target.id==='modeSelect'||e.target.matches('#createCore [name="source"]'))root.querySelector('#modeDescription').textContent=setupDescription(root.querySelector('#modeSelect').value,root.querySelector('#createCore [name="source"]').value);
  
  if(e.target.matches('[data-hardware-held]'))hardwareHeld[Number(e.target.dataset.hardwareHeld)]=e.target.checked;
