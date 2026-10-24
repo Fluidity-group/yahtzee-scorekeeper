@@ -55,13 +55,23 @@ html[data-art=midnight] .core-dialog .trophy-dialog-title span{display:block;mar
 .trophy-stat-marquee{display:flex;justify-content:space-around;align-items:center;gap:8px;min-height:57px;border:1px solid var(--club-accent);border-radius:13px 13px 3px 3px;padding:8px;box-sizing:border-box;background:radial-gradient(circle,var(--club-accent) 1.5px,transparent 2px) 4px 3px/13px 13px repeat-x,var(--club-bg)}
 .trophy-stat-marquee b{font:500 clamp(25px,7vw,36px)/1.2 Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.045em;color:var(--club-accent);padding-top:4px}
 .trophy-stat-marquee>span{font-size:24px;color:var(--club-second)}
-.trophy-stat-machine .home-trophy-hero{position:relative;gap:5px;padding:16px 0 12px}
+.trophy-stat-machine .home-trophy-hero{position:relative;display:grid;grid-template-columns:70px minmax(0,1fr);gap:5px 13px;align-items:center;max-width:280px;margin:auto;padding:16px 0 12px}
 .trophy-stat-machine .home-trophy-hero svg{width:30px;height:30px;color:var(--club-accent)}
 .trophy-stat-machine .home-trophy-hero strong{display:block;min-width:1.5em;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;padding:4px 15px 6px;border:1px solid var(--club-line);border-block:3px solid var(--club-accent);border-radius:6px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft));box-shadow:inset 0 4px 5px #0003;line-height:1.1;font:800 clamp(48px,14vw,68px)/1.1 system-ui,sans-serif;text-align:center;font-variant-numeric:tabular-nums;color:var(--club-text);animation:trophy-reel-land .45s ease-out both}
 .trophy-stat-machine .home-trophy-hero>span{font:650 15px/1.4 system-ui,sans-serif;color:var(--club-text)}
+.trophy-stat-machine .home-trophy-hero>.trophy-prize-emblem{grid-row:span 2;display:grid;place-items:center;position:relative;box-sizing:border-box;width:70px;height:70px;border:4px double var(--club-accent);border-radius:50%;background:var(--club-second-soft);color:var(--club-accent);box-shadow:3px 3px 0 var(--midnight-ink);transform:rotate(-8deg)}
+.trophy-stat-machine .trophy-prize-emblem svg{width:39px;height:39px;transform:rotate(8deg)}
+.trophy-prize-emblem i{position:absolute;font-style:normal;color:var(--club-second);font-size:21px;text-shadow:1px 1px 0 var(--club-bg)}
+.trophy-prize-emblem i:first-of-type{top:-12px;right:-7px}.trophy-prize-emblem i:last-of-type{bottom:-7px;left:-7px;font-size:15px}
+.trophy-stat-machine .home-trophy-hero>span:last-child{text-align:center}
+.trophy-counting-guide{margin:14px 0 20px;border-bottom:1px solid var(--club-line)}
+.trophy-counting-guide>summary{display:flex;align-items:center;min-height:48px;gap:12px;font:650 14px/1.5 system-ui,sans-serif;color:var(--club-text);cursor:pointer}
+.trophy-counting-guide>summary::after{content:'+';margin-left:auto;color:var(--club-accent);font-size:22px}.trophy-counting-guide[open]>summary::after{content:'−'}
+.trophy-counting-guide>summary:focus-visible{outline:3px solid var(--club-second);outline-offset:2px}
+.core-dialog[data-home-account-panel=trophies]>.sheet-close{position:sticky;top:0;right:auto;float:right;margin:-8px -8px -36px 0;z-index:10;background:var(--club-panel);color:var(--club-text);border-color:var(--club-second);box-shadow:0 2px 0 var(--midnight-ink)}
 .trophy-stat-machine .home-trophy-breakdown{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 0;padding:7px;border:1px solid var(--club-line);border-radius:5px;background:var(--club-bg)}
 .trophy-stat-machine .home-trophy-breakdown>div{display:flex;flex-direction:column-reverse;justify-content:flex-end;align-items:center;gap:9px;min-width:0;padding:13px 5px 10px;border:1px solid var(--club-line);border-block:2px solid var(--club-second);border-radius:4px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft));text-align:center;box-shadow:inset 0 3px 4px #0003}
-.trophy-stat-machine .home-trophy-breakdown dt{font:550 12px/1.4 system-ui,sans-serif;color:var(--club-muted);overflow-wrap:normal;hyphens:auto}
+.trophy-stat-machine .home-trophy-breakdown dt{font:550 13px/1.4 system-ui,sans-serif;color:var(--club-muted);overflow-wrap:normal;hyphens:auto}
 .trophy-stat-machine .home-trophy-breakdown dd{font:800 clamp(26px,8vw,38px)/1.1 system-ui,sans-serif;color:var(--club-accent);font-variant-numeric:tabular-nums;max-width:100%;overflow-wrap:anywhere;animation:trophy-reel-land .45s ease-out both}
 .trophy-stat-tray{display:flex;justify-content:center;align-items:center;gap:16px;height:34px;color:var(--club-second)}
 .trophy-stat-tray i{width:45%;height:12px;border:1px solid var(--club-line);border-top:3px solid var(--midnight-ink);border-radius:1px 1px 6px 6px;background:var(--club-bg)}
