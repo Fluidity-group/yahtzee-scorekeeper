@@ -1,0 +1,187 @@
+import{mkdirSync,writeFileSync}from'node:fs';
+import{it,expect,vi}from'vitest';
+import{createRoom,joinRoom,startRoom,playRoom}from'../src/multiplayer/room.js';
+import{acceptedOutbox}from'../server/commentary/accepted-outbox.js';
+import{openingFacts}from'../src/commentary/opening-facts.js';
+const{createLiveCommentaryEndpoint}=await import(process.env.COMMENTARY_ENDPOINT_UNDER_TEST||'../server/commentary/endpoint.js');
+const host='00000000-0000-4000-8000-000000000001',guest='00000000-0000-4000-8000-000000000002',roomId='00000000-0000-4000-8000-000000000009',scope='d1ce0000-0000-4000-8000-000000000026';
+const collections=['settings','jobs','moments','leases','attempts','budgets','exposure','memoryRecords','feedback','playerProfiles','playerProfileVersions','preferenceSharing','memorySummaries','memoryCaches'];
+const clone=value=>structuredClone(value),json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json'}});
+function fixture(patch={}){
+ const time=new Date().toISOString(),before=startRoom(joinRoom(createRoom({id:roomId,code:'ABCDEFGH',userId:host,name:'Dan',time}),{userId:guest,name:'Amber',time}),{userId:host,time});
+ const commandId='accepted-score-001',room=playRoom(before,{userId:host,action:{type:'score',category:'chance',value:25},commandId,expectedRevision:before.revision,gameId:before.game.id,time});
+ const moment=acceptedOutbox({before,after:room,actorId:host,commandId,operation:'command',acceptedAt:time,openingFacts})[0];
+ const rows=[{idempotency_key:moment.idempotencyKey,payload:{...moment,moment,beforeRoom:before,acceptedRoom:room,receipt:{room_id:roomId,command_id:commandId,actor_id:host,fingerprint:'fixture-accepted-score'}}}];
+ let state=Object.fromEntries(collections.map(k=>[k,{}])),version=0,limit=null;const pending=[],acks=[],calls=[],telemetry=[];
+ const env={SUPABASE_URL:'https://supabase.fixture.invalid',SUPABASE_SERVICE_ROLE_KEY:'fixture-service-key',COMMENTARY_LIVE_ENABLED:'true',COMMENTARY_ALLOWANCE_ID:'fixture-approved-test',COMMENTARY_ALLOWANCE_EXPIRES_AT:new Date(Date.now()+3600000).toISOString(),ANTHROPIC_API_KEY:'sk-ant-'+ 'a'.repeat(32),ELEVENLABS_API_KEY:'b'.repeat(64),...patch};
+ const fetchImpl=vi.fn(async(input,options={})=>{
+  const url=new URL(input);let body=options.body?JSON.parse(options.body):null;calls.push({url:url.href,options,body});
+  if(url.hostname==='supabase.fixture.invalid'){
+   expect(options.headers.apikey).toBe(env.SUPABASE_SERVICE_ROLE_KEY);
+   if(url.pathname==='/auth/v1/user'){const auth=options.headers.Authorization;if(patch.authResult)return json(patch.authResult);return auth==='Bearer host-token'?json({id:host,email_confirmed_at:time,is_anonymous:false}):auth==='Bearer guest-token'?json({id:guest,email_confirmed_at:time,is_anonymous:false}):json({error:'invalid'},401);}
+   expect(options.headers.Authorization).toBe('Bearer '+env.SUPABASE_SERVICE_ROLE_KEY);
+   if(url.pathname==='/rest/v1/clubhouse_rooms'){const rooms=[room,...(patch.sourceRooms||[])],filter=url.searchParams.get('id');return json(rooms.filter(r=>filter==='eq.'+r.id||filter?.startsWith('in.(')&&filter.slice(4,-1).split(',').includes(r.id)).map(state=>({state})));}
+   if(url.pathname==='/rest/v1/clubhouse_commentary_limits')return json(limit?[limit]:[]);
+   if(url.pathname==='/rest/v1/clubhouse_commentary_outbox')return patch.failOutbox?json({private:'backend-secret'},500):json(rows.filter(r=>!r.processed_at&&(!url.searchParams.get('room_id')||url.searchParams.get('room_id')==='eq.'+r.payload.roomId)));
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_load_changed'&&body.p_known_version===version)return json({version,notModified:true,databaseNowMs:Date.now()});
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_load'||url.pathname==='/rest/v1/rpc/clubhouse_commentary_load_changed'){expect(body.p_scope).toBe(scope);return json({version,state:clone(state),databaseNowMs:Date.now()});}
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_batch'){
+    if(patch.rejectBatch)return json({committed:false,version});if(patch.bumpRoom&&!patch.bumped){patch.bumped=true;room.revision++;}if(body.p_expected_version!==version||body.p_rooms.some(r=>r.revision!==(r.id===roomId?room.revision:(patch.sourceRooms||[]).find(source=>source.id===r.id)?.revision??null)))return json({committed:false,version,databaseNowMs:Date.now()});
+    if(!Object.keys(body.p_changes).length&&!Object.keys(body.p_deleted).length)return json({committed:true,version,databaseNowMs:Date.now()});url.pathname='/rest/v1/rpc/clubhouse_commentary_patch';
+   }
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_finish'){const a=state.attempts[body.p_id];if(!a?.providerDispatchedAt)return json({},400);Object.assign(a,{providerResult:body.p_metadata,providerFinishedAt:Date.now()});version++;return json(true);}
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_dispatch'){
+    const i=body.p_input,a=state.attempts[i.requestId],job=state.jobs[i.jobId],budget=state.budgets[i.roomId],lease=state.leases[i.roomId];const used=Object.values(state.attempts).filter(a=>a.allowanceId===i.allowanceId&&a.stage===i.stage&&a.providerDispatchedAt);
+    const invalid=!a||!job||!budget||!limit||Date.parse(limit.expires_at)<=Date.now()||a.status!=='submitted'||a.providerDispatchedAt||job.roomId!==i.roomId||!job.profile.enabled||['cancelled','silent','failed'].includes(job.status)||a.stage!==i.stage||a.jobId!==i.jobId||used.length>=200||(i.stage==='tts'&&used.reduce((n,a)=>n+a.submittedCharacters,0)+i.submittedCharacters>36000)||(i.stage==='writer'&&(job.status!=='generating'||job.workerToken!==i.requestId))||(i.stage==='tts'&&(job.status!=='streaming'||job.activeTtsAttemptId!==i.requestId||!lease||lease.epoch!==job.claim.epoch||lease.owner!==job.claim.owner||lease.device!==job.claim.device||lease.expiresAt<=Date.now()));
+    if(invalid)return json({},400);const delta=Math.max(0,i.submittedCharacters-a.characters);if(budget.requests>limit.max_requests||budget.characters+delta>limit.max_characters)return json({},400);
+    budget.characters+=delta;Object.assign(a,{allowanceId:i.allowanceId,providerDispatchedAt:Date.now(),provider:i.provider,model:i.model,submittedCharacters:i.submittedCharacters,maxOutputTokens:i.maxOutputTokens??null});version++;return json({id:a.id,requestId:i.requestId,stage:i.stage,allowanceId:i.allowanceId,committed:true});
+   }
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_patch'){
+    const next=clone(state);for(const [c,items]of Object.entries(body.p_changes))next[c]={...(next[c]||{}),...items};for(const[c,keys]of Object.entries(body.p_deleted))for(const key of keys)delete next[c][key];body={...body,p_state:next};url.pathname='/rest/v1/rpc/clubhouse_commentary_commit';
+   }
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_commit'){
+    expect(body.p_scope).toBe(scope);if(body.p_expected_version!==version)return json({committed:false,version,databaseNowMs:Date.now()});
+    for(const[id,a]of Object.entries(body.p_state.attempts)){if(!state.attempts[id])expect(a.status).toBe('submitted');if(a.providerDispatchedAt&&!state.attempts[id]?.providerDispatchedAt){expect(limit).not.toBeNull();expect(a.allowanceId).toBe(env.COMMENTARY_ALLOWANCE_ID);const job=body.p_state.jobs[a.jobId];expect(job.roomId===roomId||body.p_state.localSessions?.[job.roomId]?.ownerId===host).toBe(true);expect(job.profile.enabled).toBe(true);if(a.stage==='tts'){expect(job.status).toBe('streaming');expect(job.activeTtsAttemptId).toBe(id);expect(body.p_state.leases[roomId].epoch).toBe(job.claim.epoch);}}}
+    state=clone(body.p_state);version++;return json({committed:true,version,databaseNowMs:Date.now()});
+   }
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_set_limit'){expect(body).toMatchObject({p_scope:scope,p_max_requests:400,p_max_characters:4000000});expect(body.p_room).toMatch(/^[0-9a-f-]{36}$/);limit={max_requests:body.p_max_requests,max_characters:body.p_max_characters,expires_at:body.p_expires_at};return json(true);}
+   if(url.pathname==='/rest/v1/rpc/clubhouse_commentary_ack_outbox'){expect(Object.keys(body).sort()).toEqual(['p_idempotency_key','p_job_id','p_scope','p_status']);expect(body.p_scope).toBe(scope);const row=rows.find(r=>r.idempotency_key===body.p_idempotency_key);expect(row).toBeDefined();if(body.p_status==='enqueued'){const job=state.jobs[body.p_job_id];expect(job).toBeDefined();expect(job.facts.gameId).toBe(row.payload.gameId);expect(job.facts.commandId).toBe(row.payload.commandId);row.processed_at=Date.now();}acks.push(body);return json(true);}
+   throw Error('Unexpected fake database route '+url.pathname);
+  }
+  if(url.hostname==='api.anthropic.com'){
+   expect(options.headers['x-api-key']).toBe(env.ANTHROPIC_API_KEY);expect(JSON.stringify(options.headers)).not.toContain(env.SUPABASE_SERVICE_ROLE_KEY);expect(body.max_tokens).toBe(512);
+   expect(Object.values(state.attempts).some(a=>a.stage==='writer'&&a.providerDispatchedAt)).toBe(true);
+   return json({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({spokenText:'The paperwork has acquired a yacht.',mechanism:'misdirection',subject:'bureaucracy',containsProfanity:false,usesTargetProfile:false})}],usage:{input_tokens:1500,output_tokens:25}});
+  }
+  if(url.hostname==='api.elevenlabs.io'){
+   expect(options.headers['xi-api-key']).toBe(env.ELEVENLABS_API_KEY);expect(JSON.stringify(options.headers)).not.toContain(env.SUPABASE_SERVICE_ROLE_KEY);expect(body.model_id).toBe('eleven_flash_v2_5');expect(Object.values(state.attempts).some(a=>a.stage==='tts'&&a.providerDispatchedAt)).toBe(true);
+   return new Response(new ReadableStream({start(c){c.enqueue(new Uint8Array([1,2]));c.enqueue(new Uint8Array([3]));c.close();}}),{headers:{'content-type':'audio/mpeg'}});
+  }
+  throw Error('External network forbidden in test');
+ });
+ const endpoint=createLiveCommentaryEndpoint({env,fetchImpl,waitUntil:promise=>pending.push(promise),onTelemetry:e=>telemetry.push(e)});
+ const request=(body,token='host-token')=>endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify({roomId,...body})}));
+ return{env,request,endpoint,fetchImpl,calls,acks,rows,room,telemetry,state:()=>state,seedDispatches:(stage,count,characters=1)=>{for(let i=0;i<count;i++)state.attempts['persisted-'+stage+'-'+i]={id:'persisted-'+stage+'-'+i,stage,status:'succeeded',allowanceId:env.COMMENTARY_ALLOWANCE_ID,providerDispatchedAt:Date.now(),submittedCharacters:characters};version++;},limit:()=>limit,flush:async()=>{while(pending.length)await pending.shift();}};
+}
+it('offline actual endpoint authenticates, enables profile CAS + intro, drains accepted outbox, writes captions, streams claimed audio and records feedback',async()=>{
+ const f=fixture();const profile=await(await f.request({operation:'profile-read'})).json();expect(profile.result).toMatchObject({enabled:false,voiceOption:'rachel',frequency:'balanced',profanityAllowed:true,humorIntensity:'dark'});
+ const enabled=await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true,frequency:'balanced'}})).json();expect(enabled.result.greetingJobId).toMatch(/^[0-9a-f-]{36}$/);await f.flush();
+ expect(f.acks).toContainEqual(expect.objectContaining({p_status:'enqueued',p_job_id:expect.any(String)}));const jobs=await(await f.request({operation:'jobs-read'})).json();await f.flush();expect(jobs.result).toHaveLength(2);expect(jobs.result.every(j=>j.status==='ready'&&j.caption.endsWith('The paperwork has acquired a yacht.'))).toBe(true);
+ const job=jobs.result.find(j=>j.id===enabled.result.greetingJobId);expect(job.lifecycleVerified).toBe(true);const device='host-native-device';const lease=(await(await f.request({operation:'playback-acquire',device})).json()).result;const claim=(await(await f.request({operation:'playback-claim',device,epoch:lease.epoch,jobId:job.id})).json()).result;expect(claim.claimed).toBe(true);
+ const audio=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/audio/'+job.id,{headers:{Authorization:'Bearer host-token','X-Commentary-Claim':claim.token,'X-Commentary-Epoch':String(lease.epoch),'X-Commentary-Device':device}}));expect(audio.status).toBe(200);expect([...new Uint8Array(await audio.arrayBuffer())]).toEqual([1,2,3]);
+ for(const[sequence,status]of[[1,'started'],[2,'completed']])expect((await f.request({operation:'playback-event',device,epoch:lease.epoch,jobId:job.id,claimToken:claim.token,status,sequence})).status).toBe(200);
+ expect(f.state().exposure[claim.token].heardBy).toEqual([host]);expect((await f.request({operation:'feedback',jobId:job.id,value:'like',basis:'caption'},'guest-token')).status).toBe(200);expect(f.state().feedback[job.id+':'+guest].basis).toBe('caption');expect(f.state().exposure[claim.token].heardBy).toEqual([host]);
+ expect(f.state().budgets[roomId].requests).toBe(3);expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(2);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(1);
+});
+it('unauthenticated or anonymous identity causes no database/provider call',async()=>{const f=fixture();expect((await f.request({operation:'profile-read'},'invalid-token')).status).toBe(401);expect(f.calls).toHaveLength(1);expect(f.calls[0].url).toContain('/auth/v1/user');});
+it('guest enable, stale CAS and forged request cannot provision usage',async()=>{const f=fixture();expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}},'guest-token')).status).toBe(503);expect(f.limit()).toBeNull();expect((await f.request({operation:'profile-update',expectedVersion:99,changes:{enabled:true}})).status).toBe(409);expect(f.limit()).toBeNull();expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true},maxRequests:999999})).status).toBe(400);expect(f.limit()).toBeNull();expect(f.state().settings[roomId]).toBeUndefined();});
+it.each([{COMMENTARY_LIVE_ENABLED:'false'},{COMMENTARY_ALLOWANCE_EXPIRES_AT:'invalid'},{COMMENTARY_ALLOWANCE_EXPIRES_AT:'2020-01-01T00:00:00.000Z'}])('absent/invalid/expired server allowance cannot enable paid runtime %s',async patch=>{const f=fixture(patch);expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).status).toBe(503);expect(f.limit()).toBeNull();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);});
+it('failed background outbox processing leaves profile response and authoritative scores intact',async()=>{const f=fixture({failOutbox:true});expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).status).toBe(200);await f.flush();expect(f.room.game.sheets[0].chance).toBe(25);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);expect(f.rows[0].processed_at).toBeUndefined();});
+it('preflight is secretless and has no Auth/DB/provider traffic',async()=>{const f=fixture();expect((await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'OPTIONS'}))).status).toBe(204);expect(f.fetchImpl).not.toHaveBeenCalled();});
+it.each([{id:host,email_confirmed_at:null,is_anonymous:false},{id:host,email_confirmed_at:new Date().toISOString(),is_anonymous:true},{id:'unverified-name',email_confirmed_at:new Date().toISOString(),is_anonymous:false}])('confirmed account UUID is mandatory before any database load %s',async authResult=>{const f=fixture({authResult});expect((await f.request({operation:'profile-read'})).status).toBe(401);expect(f.calls).toHaveLength(1);expect(f.calls[0].url).toContain('/auth/v1/user');});
+it('persisted global 200-writer ceiling survives per-request runtime construction and ignores client/env cap inflation',async()=>{const f=fixture({COMMENTARY_MAX_WRITER_REQUESTS:'999999'});f.seedDispatches('writer',200);expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).status).toBe(200);await f.flush();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);await f.request({operation:'jobs-read'});await f.flush();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);expect(Object.values(f.state().jobs).every(j=>j.status==='failed')).toBe(true);});
+it.each([{count:200,characters:1},{count:1,characters:35999}])('persisted global voice ceiling rejects dispatch even on a newly constructed endpoint runtime %s',async({count,characters})=>{const f=fixture();const enabled=await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).json();await f.flush();f.seedDispatches('tts',count,characters);const jobId=enabled.result.greetingJobId,device='host-native-device';const lease=(await(await f.request({operation:'playback-acquire',device})).json()).result,claim=(await(await f.request({operation:'playback-claim',device,epoch:lease.epoch,jobId})).json()).result;const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/audio/'+jobId,{headers:{Authorization:'Bearer host-token','X-Commentary-Claim':claim.token,'X-Commentary-Epoch':String(lease.epoch),'X-Commentary-Device':device}}));expect(response.status).toBe(200);await expect(response.arrayBuffer()).rejects.toThrow();expect(f.calls.some(c=>c.url.includes('api.elevenlabs.io'))).toBe(false);expect(f.state().jobs[jobId].status).toBe('failed');});
+it('only the current host device/epoch/one-time claim may reach voice transport',async()=>{const f=fixture(),enabled=await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).json();await f.flush();const jobId=enabled.result.greetingJobId,device='host-native-device',lease=(await(await f.request({operation:'playback-acquire',device})).json()).result,claim=(await(await f.request({operation:'playback-claim',device,epoch:lease.epoch,jobId})).json()).result;const get=(token,epoch,claimToken=claim.token)=>f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/audio/'+jobId,{headers:{Authorization:'Bearer '+token,'X-Commentary-Claim':claimToken,'X-Commentary-Epoch':String(epoch),'X-Commentary-Device':device}}));expect((await get('guest-token',lease.epoch)).status).toBe(403);expect((await get('host-token',lease.epoch+1)).status).toBe(409);expect((await get('host-token',lease.epoch,'forged-claim-token')).status).toBe(409);expect(f.calls.some(c=>c.url.includes('api.elevenlabs.io'))).toBe(false);});
+
+it('actual live endpoint permits 17-second setup but expires unheard commentary after 30 seconds',async()=>{
+ const f=fixture();const enabled=await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).json();await f.flush();const jobId=enabled.result.greetingJobId,device='host-native-device',start=Date.now();const clock=vi.spyOn(Date,'now').mockReturnValue(start+17000);
+ try{const lease=(await(await f.request({operation:'playback-acquire',device})).json()).result;const claim=(await(await f.request({operation:'playback-claim',device,epoch:lease.epoch,jobId})).json()).result;expect(claim.claimed).toBe(true);clock.mockReturnValue(start+31000);const jobs=(await(await f.request({operation:'jobs-read'})).json()).result;expect(jobs.find(j=>j.id===jobId)).toMatchObject({status:'cancelled',reason:'stale'});expect(f.calls.some(c=>c.url.includes('api.elevenlabs.io'))).toBe(false);}finally{clock.mockRestore();await f.flush();}
+});
+
+it('actual endpoint replays a shared-phone session under one Auth owner and atomically claims its introduction',async()=>{
+ const f=fixture(),localId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',gameId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';const before=JSON.stringify(f.room.game);const started=await(await f.request({operation:'local-start',roomId:localId,commandId:'local_start_fixture',config:{gameId,names:['Alex','Sam'],mode:'standard'},settings:{enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'lively',voiceOption:'rachel'}})).json();expect(started.result.room.members).toHaveLength(1);expect(started.result.room.game.players[1].id).toBe(gameId+':p1');await f.flush();const jobs=(await(await f.request({operation:'jobs-read',roomId:localId})).json()).result;await f.flush();const welcome=jobs.find(j=>j.id===started.result.greetingJobId);expect(welcome.caption).toMatch(/^I'm Rachel\./);const claimed=(await(await f.request({operation:'playback-start',roomId:localId,jobId:welcome.id,device:'fixture-local-phone'})).json()).result;expect(claimed.claim.claimed).toBe(true);expect(claimed.lease.owner).toBe(host);expect((await f.request({operation:'local-read',roomId:localId},'guest-token')).status).toBe(403);expect(JSON.stringify(f.room.game)).toBe(before);
+});
+it('local starts cannot shadow an existing hosted room or provision its allowance',async()=>{const f=fixture();const response=await f.request({operation:'local-start',commandId:'collision_start_001',config:{gameId:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',names:['Alex'],mode:'standard'},settings:{enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'lively',voiceOption:'rachel'}});expect(response.status).toBe(409);expect(f.limit()).toBeNull();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);});
+
+it('ready caption polling performs no durable write and warm requests use version-checked snapshots',async()=>{
+ const f=fixture();await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});await f.flush();
+ const start=f.calls.length;await f.request({operation:'jobs-read'});await f.flush();const calls=f.calls.slice(start);expect(calls.some(c=>/_patch$|_commit$/.test(c.url))).toBe(false);expect(calls.filter(c=>c.url.includes('clubhouse_commentary_load_changed')).every(c=>Number.isInteger(c.body.p_known_version))).toBe(true);expect(calls.some(c=>c.url.includes('/auth/v1/user'))).toBe(true);
+});
+
+it('atomic request retries a changed room without consuming the request body or dispatching before commit',async()=>{const f=fixture({bumpRoom:true});const r=await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});expect(r.status).toBe(200);await f.flush();expect(f.calls.filter(c=>c.url.endsWith('clubhouse_commentary_batch')).length).toBeGreaterThan(1);});
+it('failed atomic commit cannot create a provider dispatch or provision usage',async()=>{const f=fixture({rejectBatch:true});expect((await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).status).toBe(503);await f.flush();expect(f.limit()).toBeNull();expect(f.calls.some(c=>c.url.includes('api.anthropic.com')||c.url.includes('api.elevenlabs.io'))).toBe(false);});
+it('ready polling uses one snapshot and one atomic room-fenced check instead of repeated refreshes',async()=>{const f=fixture();await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}});await f.flush();await f.request({operation:'jobs-read'});await f.flush();const metric=f.telemetry.filter(e=>e.operation==='jobs-read'&&e.stage==='response').at(-1);expect(metric.upstreamCounts.clubhouse_commentary_batch).toBe(1);expect(metric.upstreamCounts.clubhouse_commentary_load_changed).toBeLessThanOrEqual(2);expect(metric.upstreamCounts['database-resource']).toBeLessThanOrEqual(1);});
+
+it('records reduced critical-path RPC counts through the actual endpoint and stream',async()=>{
+ const f=fixture();const started=(await(await f.request({operation:'profile-update',expectedVersion:1,changes:{enabled:true}})).json()).result;await f.flush();
+ const jobs=(await(await f.request({operation:'jobs-read'})).json()).result;await f.flush();const job=jobs.find(j=>j.id===started.greetingJobId);const acquired=(await(await f.request({operation:'playback-start',jobId:job.id,device:'benchmark-phone'})).json()).result;
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/audio/'+job.id,{headers:{Authorization:'Bearer host-token','X-Commentary-Claim':acquired.claim.token,'X-Commentary-Epoch':String(acquired.lease.epoch),'X-Commentary-Device':'benchmark-phone'}}));await response.arrayBuffer();
+ const records=f.telemetry.filter(e=>e.stage==='stream-first-byte'||e.stage==='background-complete'&&e.upstreamCounts.writer||e.stage==='response'&&['playback-start','jobs-read'].includes(e.operation));mkdirSync('artifacts/sw031',{recursive:true});writeFileSync('artifacts/sw031/request-count-benchmark.json',JSON.stringify({source:'actual endpoint with synthetic database/providers; no live timing claim',records},null,2));
+ const first=records.find(e=>e.stage==='stream-first-byte');expect(first.upstreamCounts.clubhouse_commentary_dispatch).toBe(1);expect(first.upstreamCounts.clubhouse_commentary_load_changed).toBeLessThanOrEqual(3);expect(first.upstreamCounts.clubhouse_commentary_batch).toBeLessThanOrEqual(3);
+});
+
+async function directFixture(){
+ const f=fixture();
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({roomId,operation:'profile-update',expectedVersion:1,changes:{enabled:true}})}));
+ const profile=(await response.json()).result;
+ f.reaction=(headers={},token='host-token')=>f.endpoint(new Request('https://game.fixture.invalid/commentary/'+roomId+'/reaction/'+f.room.game.id,{headers:{Authorization:'Bearer '+token,'X-Commentary-Device':'host-native-device','X-Commentary-Profile':String(profile.version),'X-Commentary-Event':f.room.game.events.find(e=>e.type==='score').id,...headers}}));
+ return {f,profile};
+}
+it('direct accepted reaction streams with server binding, without discovery or playback-start round trips',async()=>{
+ const {f}=await directFixture();expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+ const response=await f.reaction();expect(response.status).toBe(200);
+ const binding=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString('utf8'));
+ expect(binding).toMatchObject({job:{status:'streaming',gameId:f.room.game.id,caption:expect.any(String)},claim:{roomId,deviceId:'host-native-device',epoch:1,token:expect.any(String)},lease:{owner:host,remainingMs:15000}});
+ expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1,2,3]);
+ expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(1);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(1);
+ expect(Object.keys(f.state().exposure)).toHaveLength(0);
+ const metric=f.telemetry.find(e=>e.operation==='reaction'&&e.stage==='stream-first-byte');expect(metric.upstreamCounts.clubhouse_commentary_batch).toBe(4);expect(metric.upstreamCounts.clubhouse_commentary_load_changed).toBe(4);
+ mkdirSync('artifacts/sw033',{recursive:true});writeFileSync('artifacts/sw033/cold-reaction-benchmark.json',JSON.stringify({basis:'synthetic composed endpoint; not live latency',metric},null,2));
+ const duplicate=await f.reaction();expect(duplicate.status).toBe(204);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(1);
+});
+it.each([{'X-Commentary-Event':'fabricated-event-001'},{'X-Commentary-Profile':'99'},{'X-Commentary-Device':'bad'},{'X-Commentary-Job':'00000000-0000-4000-8000-000000000099'}])('direct invalid selector cannot dispatch writer or voice %s',async headers=>{
+ const {f}=await directFixture();expect((await f.reaction(headers)).status).toBeGreaterThanOrEqual(400);expect(f.calls.some(c=>/api\.(anthropic|elevenlabs)/.test(c.url))).toBe(false);
+});
+it('direct route rejects guests before outbox ingestion or provider dispatch',async()=>{const {f}=await directFixture();const before=f.calls.length;expect((await f.reaction({},'guest-token')).status).toBe(403);expect(f.calls.slice(before).some(c=>c.url.includes('outbox')||c.url.includes('api.anthropic.com'))).toBe(false);});
+it('direct explicitly armed welcome binds selected commentator caption from persisted greeting',async()=>{const {f,profile}=await directFixture();const response=await f.reaction({'X-Commentary-Event':'','X-Commentary-Job':profile.greetingJobId});expect(response.status).toBe(200);const b=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString());expect(b.job).toMatchObject({id:profile.greetingJobId,lifecycleVerified:true});expect(b.job.purpose).toBe('return');await response.arrayBuffer();});
+it('direct paid ceilings remain enforced with no automatic provider retry',async()=>{const {f}=await directFixture();f.seedDispatches('writer',200);expect((await f.reaction()).status).toBe(204);expect(f.calls.some(c=>c.url.includes('api.anthropic.com')||c.url.includes('api.elevenlabs.io'))).toBe(false);});
+
+it('direct ownership conflict dispatches no second writer and Undo invalidates a pending reaction',async()=>{
+ const {f}=await directFixture();await f.reaction({'X-Commentary-Event':'fabricated-event-001'});const job=Object.values(f.state().jobs).find(j=>j.facts.eventId===f.room.game.events.find(e=>e.type==='score').id);
+ await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({roomId,operation:'playback-acquire',device:'another-device'})}));
+ expect((await f.reaction()).status).toBeGreaterThanOrEqual(400);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+ f.room.game.events.push({id:'undo-event-001',type:'score-undo',target:f.room.game.events.find(e=>e.type==='score').id});f.room.revision++;
+ expect((await f.reaction()).status).toBeGreaterThanOrEqual(400);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);
+});
+
+it('direct local welcome uses one request, speaks Rachel intro and avoids the hosted outbox',async()=>{
+ const f=fixture(),localId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',gameId='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+ const start=await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({operation:'local-start',roomId:localId,commandId:'direct-local-start',config:{gameId,names:['Alex','Sam'],mode:'standard'},settings:{enabled:true,humorIntensity:'dark',profanityAllowed:true,frequency:'lively',voiceOption:'rachel'}})}));
+ const result=(await start.json()).result;expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);const before=f.calls.length;
+ const response=await f.endpoint(new Request('https://game.fixture.invalid/commentary/'+localId+'/reaction/'+gameId,{headers:{Authorization:'Bearer host-token','X-Commentary-Device':'host-native-device','X-Commentary-Profile':String(result.profile.version),'X-Commentary-Job':result.greetingJobId}}));expect(response.status).toBe(200);
+ const binding=JSON.parse(Buffer.from(response.headers.get('X-Commentary-Binding'),'base64').toString());expect(binding.job.caption).toMatch(/^I'm Rachel\./);await response.arrayBuffer();
+ expect(f.calls.slice(before).some(c=>c.url.includes('clubhouse_commentary_outbox'))).toBe(false);
+ const metric=f.telemetry.find(e=>e.operation==='reaction'&&e.stage==='stream-first-byte');expect(metric.upstreamCounts.writer).toBe(1);expect(metric.upstreamCounts.voice).toBe(1);
+ mkdirSync('artifacts/sw032',{recursive:true});writeFileSync('artifacts/sw032/direct-request-benchmark.json',JSON.stringify({basis:'actual composed endpoint with synthetic providers; not live latency',records:f.telemetry.filter(e=>e.operation==='reaction')},null,2));
+});
+
+const prepare=(f,profile,extra={},token='host-token')=>f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer '+token,'X-Commentary-Direct':'1'},body:JSON.stringify({operation:'reaction-prepare',roomId,gameId:f.room.game.id,profileVersion:profile.version,device:'host-native-device',eventId:f.room.game.events.find(e=>e.type==='score').id,...extra})}));
+it('preparation writes once while another line is claimed, without claiming or generating voice',async()=>{
+ const {f,profile}=await directFixture();
+ // Prepare/claim the explicit return remark as current speech.
+ const current=await f.reaction({'X-Commentary-Event':'','X-Commentary-Job':profile.greetingJobId});expect(current.status).toBe(200);await current.arrayBuffer();
+ const currentJob=JSON.parse(Buffer.from(current.headers.get('X-Commentary-Binding'),'base64').toString());
+ const writerBefore=f.calls.filter(c=>c.url.includes('api.anthropic.com')).length,voiceBefore=f.calls.filter(c=>c.url.includes('api.elevenlabs.io')).length;
+ const prepared=await prepare(f,profile);expect(prepared.status).toBe(200);const result=(await prepared.json()).result;expect(result.prepared).toBe(true);expect(result.jobId).not.toBe(currentJob.job.id);
+ expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(writerBefore+1);expect(f.calls.filter(c=>c.url.includes('api.elevenlabs.io'))).toHaveLength(voiceBefore);expect(f.state().leases[roomId].activeJobId).toBe(currentJob.job.id);expect(f.state().jobs[result.jobId].claim).toBeNull();
+ expect((await prepare(f,profile)).status).toBe(200);expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(writerBefore+1);
+ expect((await f.reaction()).status).toBe(409);
+ for(const [sequence,status]of [[1,'started'],[2,'completed']])await f.request({operation:'playback-event',device:'host-native-device',epoch:currentJob.claim.epoch,jobId:currentJob.job.id,claimToken:currentJob.claim.token,status,sequence});
+ const start=f.calls.length,response=await f.reaction();expect(response.status).toBe(200);await response.arrayBuffer();const calls=f.calls.slice(start);expect(calls.some(c=>c.url.includes('api.anthropic.com')||c.url.includes('outbox'))).toBe(false);
+ const metrics=f.telemetry.filter(e=>e.operation==='reaction'&&e.stage==='stream-first-byte').at(-1);expect(metrics.upstreamCounts.clubhouse_commentary_batch).toBe(2);expect(metrics.upstreamCounts.clubhouse_commentary_load_changed).toBe(2);
+ mkdirSync('artifacts/sw033',{recursive:true});writeFileSync('artifacts/sw033/prepared-handoff-benchmark.json',JSON.stringify({basis:'synthetic composed endpoint; not live latency',metric:metrics},null,2));
+});
+it.each([{profileVersion:99},{eventId:'forged-score-0001'},{device:'another-device'},{text:'client invented joke'}])('preparation rejects stale, fabricated, foreign-device or text input %s',async extra=>{
+ const {f,profile}=await directFixture();await f.request({operation:'playback-acquire',device:'host-native-device'});const before=f.calls.filter(c=>c.url.includes('api.anthropic.com')).length;expect((await prepare(f,profile,extra)).status).toBeGreaterThanOrEqual(400);expect(f.calls.filter(c=>c.url.includes('api.anthropic.com'))).toHaveLength(before);
+});
+it('preparation denies a guest and never prepares Undo-invalidated facts',async()=>{const {f,profile}=await directFixture();expect((await prepare(f,profile,{},'guest-token')).status).toBe(403);f.room.game.events.push({id:'undo-prepare-01',type:'score-undo',target:f.room.game.events.find(e=>e.type==='score').id});f.room.revision++;expect((await prepare(f,profile)).status).toBeGreaterThanOrEqual(400);expect(f.calls.some(c=>c.url.includes('api.anthropic.com'))).toBe(false);});
+
+it('historical permission reads are batched and every source revision stays in the writer-claim fence',async()=>{
+ const sources=[21,22,23].map(n=>({id:'00000000-0000-4000-8000-'+String(n).padStart(12,'0'),revision:7,members:[{userId:host},{userId:guest}]}));
+ const f=fixture({sourceRooms:sources});
+ const enabled=await f.endpoint(new Request('https://game.fixture.invalid/commentary',{method:'POST',headers:{Authorization:'Bearer host-token','X-Commentary-Direct':'1'},body:JSON.stringify({roomId,operation:'profile-update',expectedVersion:1,changes:{enabled:true}})}));const profile=(await enabled.json()).result;
+ const original=f.state().jobs[profile.greetingJobId];for(const source of sources)f.state().jobs['history-'+source.id]={...structuredClone(original),id:'history-'+source.id,roomId:source.id,status:'silent',facts:{...original.facts,gameId:source.id}};f.seedDispatches('writer',0);
+ expect((await prepare(f,profile)).status).toBe(200);
+ const bulk=f.calls.filter(c=>new URL(c.url).searchParams.get('id')?.startsWith('in.('));expect(bulk).toHaveLength(1);
+ const fenced=f.calls.filter(c=>c.url.endsWith('clubhouse_commentary_batch')).find(c=>sources.every(source=>c.body.p_rooms.some(r=>r.id===source.id&&r.revision===7)));expect(fenced).toBeDefined();
+});

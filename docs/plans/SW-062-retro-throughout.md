@@ -1,0 +1,9 @@
+# SW-062: Retro detailing throughout the review app
+
+24 October 2026. Owner Amber/Dan; developer/reviewer Codex self-review. Baseline9b4c4cc, review branch codex/amber-ui-lab. No main/native/backend promotion.
+
+User asks for the chooser's flashy retro aesthetic throughout. Extend shared gold/pink cabinet details into setup, navigation, profile/people, menu panels, multiplayer entry/lobby and results. Keep numeric score cells/category text unchanged, existing surplus glow unchanged and gameplay feedback truthful. Theme tokens preserve light/dark contrast; body text and action labels remain readable. Styling is static outside the previously approved slow Home marquee; no new motion, sound or timed interactions. Forced-colors drops decorative shadows/images.
+
+Acceptance: existing route/actions/controls and data unchanged; primary buttons retain legible text/48px minimum from prior theme; no decorative overlay intercepts clicks. Focus outlines visible. Existing Home/account/setup/scorecard/hosted tournament/rematch checks and full configured gate required. Preview build and live delivery checked separately. Source/DOM evidence cannot establish actual phone geometry; prior desktop observation approval timed out, so manual phone visual/touch acceptance remains open.
+
+Implementation: one scoped shared stylesheet imported after cabinet/mobile styles; no game/controller/backend changes. 50 focused checks, phone-preview build and HTTP passed. Clean d8a8118 Node24 gate1,186passed/13optional camera skips/all configured builds/source stable: artifacts/engineering/2026-10-24T16-00-16-402Z-931ecb45/report.json. Subsequent SW063 findings/fixes are recorded separately; that initial gate does not qualify later fixes. Source review should verify no specificity override of trophy special title, scorecard labels or positive-score indicators. Rollback: revert this stylesheet/import; do not clear app storage or alter tournament history.

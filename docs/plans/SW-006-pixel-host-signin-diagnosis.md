@@ -1,0 +1,11 @@
+# SW-006 Pixel hosting/sign-in diagnosis — 3 October 2026
+
+Historical initial observation, superseded by [SW-007](SW-007-multiplayer-camera-test-readiness.md): workstation DNS/health recovered; user-approved dashboard inspection found the confirmed existing game account. Updated recovery app installed; backend source fixes prepared but not deployed. Signed-in room/Pixel reachability still need actual testing.
+
+User reported Host game not opening, then clarified that it displays a login/password screen headed “Your seat is waiting.” The password screen is expected: hosted play requires game-account authentication, and this build uses existing-password sign-in because email-code delivery is disabled. These are game credentials, not C121 local camera credentials. No authentication credentials were read, printed or submitted by Codex.
+
+Fresh inventory: connected Pixel11 Pro XL, package com.fluiditygroup.diceclubhouse.dev, identified installed APK from [installation record](SW-006-pixel-test-install.md). Read-only WebView inspection showed password form, heading and “Failed to fetch” status. Existing user auth requests had status0. A separate unauthenticated GET to the public /auth/v1/health endpoint failed with net::ERR_NAME_NOT_RESOLVED on the Pixel. Workstation Resolve-DnsName independently reported DNS name does not exist for ezgawsdmvuoqrxlfbgen.supabase.co. Current native public configuration points to that hostname, matching the historical deployment record.
+
+Evidence retained without passwords/tokens under ignored artifacts/pixel-host-bug/state-before.json,network-state.json,reachability.json. Observation establishes DNS/reachability failure, not whether the project is paused, deleted or its address changed. Project-dashboard state was not inspected and no backend deployment/resume/configuration change was performed. No room/game was created. No app source change or new APK/test success is claimed.
+
+Next: establish whether the user already has a game account, then inspect the existing backend/project state or obtain the current valid public endpoint configuration. Online hosting cannot be qualified until sign-in and room creation succeed against the real backend. Local camera/manual games remain a separate path. Phone left running on the user's existing screen; diagnostic adb forward removed.

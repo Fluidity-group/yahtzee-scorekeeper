@@ -1,37 +1,71 @@
 # Yahtzee Scorekeeper
 
-A two-player Yahtzee **scorekeeper** PWA. Players roll physical dice; the app records scores only.
-See `yahtzee-build-spec.md` for the full spec and `CLAUDE.md` for how we work.
+Engineering entry point: [AGENTS.md](AGENTS.md), [current status](docs/status.md),
+and [repeatable verification](docs/engineering-workflow.md). Older milestone
+statements below are historical; current acceptance and deployment gates live in
+the status record and linked domain evidence.
 
-## Run (from WSL — Node lives in WSL only)
+A Yahtzee scorekeeper PWA evolving into an Android-first, connected-dice game.
+See [the current prototype specification](docs/prototype-development-spec.md). The original
+two-player implementation and its specification remain available for legacy saves.
+
+## Current review version
+
+Amber's YAHTZ Midnight Casino UI is on `codex/amber-ui-lab`. Read the
+[current handover](docs/handovers/2026-10-24-amber-ui-review.md) and
+[SW061 sample record](docs/releases/SW-061-amber-phone-sample.md).
+The separate phone-browser sample uses existing accounts/backend; the offline workbench
+uses an explicitly fictional profile. Main remains unchanged. Reviewed Pixel/iPhone installs are recorded in SW064/SW065; owner confirmed Home and existing tournament return on both.
+Real phone visual/gameplay acceptance and later portrait/shared-venue phases remain open.
+
+The current implementation supports manual local and authoritative hosted games,
+saved-table return, versioned rules, Undo, history, profiles and device text-size settings.
+Camera/Bluetooth/commentary interfaces have separate qualification records; their presence
+in source does not establish current device availability. Preserve saved tables and account ownership.
+
+## Run (Node 24)
 
 ```bash
-cd "/mnt/c/Yahtzee game"
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # production build into dist/ (PWA service worker + manifest)
-npm run preview  # serve the built app
-npm test         # Vitest (from phase 2 on)
-npm run icons    # regenerate PWA icons in public/icons/
+npm ci
+npm ci --prefix device/pi
+npm run dev
+node scripts/engineering-check.mjs verify
 ```
 
-## Testing on your phone (WSL2 networking)
+Use the configured Node24 runtime. For the separate ROG review surfaces use the startup
+scripts in `lab/` and `preview/`, not an old WSL Node22 path. Standard dev/preview ports are
+8473/8474; review surfaces8475/8476. Check process ownership before stopping a server.
+Camera assets are optional and skipped checks must be reported.
+
+### Responsive UI checks
+
+- Test widths 360, 390, 430, 768, 1024 and 1280px, including short landscape windows.
+- Start a game, record upper/fixed/sum scores, and confirm totals and turn highlighting.
+- Resize with an unfinished numeric entry; its value should remain intact.
+- Close a scoring panel using × or Escape; the score must not change and keyboard focus
+  should return to the control that opened it.
+- Check Settings, Stats, and both scorecard sections remain reachable on a phone.
+- Physical phone/tablet feedback is still required before the next implementation slice.
+
+## Historical WSL2 phone-networking guidance
 
 WSL2 has its own virtual IP, so the dev server's `Network:` URL is usually **not** reachable from
 your phone directly. Easiest paths:
 
 - **Windows port proxy (one-time, in an elevated Windows PowerShell):**
   ```powershell
-  netsh interface portproxy add v4tov4 listenport=5173 listenaddress=0.0.0.0 connectport=5173 connectaddress=(wsl hostname -I).Trim()
+  netsh interface portproxy add v4tov4 listenport=8473 listenaddress=0.0.0.0 connectport=8473 connectaddress=(wsl hostname -I).Trim()
   ```
-  Then open `http://<your-windows-LAN-ip>:5173/` on your phone (same Wi-Fi). Allow the port
+  First restart this project's dev server with `--host 0.0.0.0` instead of `--host 127.0.0.1`.
+  Then open `http://<your-windows-LAN-ip>:8473/` on your phone (same Wi-Fi). Allow the port
   through Windows Firewall if prompted.
 - Or build and `npm run preview -- --host`, or push to any static host for a quick install test.
 
-To **install** (Add to Home Screen): Android Chrome shows an install prompt / menu item;
+For installation/service-worker testing, use an HTTPS deployment (ordinary LAN HTTP is
+only a UI preview). To **install** (Add to Home Screen): Android Chrome shows an install prompt / menu item;
 iOS Safari → Share → *Add to Home Screen* (works, with iOS's usual PWA quirks).
 
-## Status — phased build (see spec §11)
+## Historical legacy build milestones (see original spec §11)
 
 - [x] **Phase 1** — Scaffold (Vite + vite-plugin-pwa) and port the v3 mockup UI with in-memory state.
 - [x] **Phase 2** — Pure `categories`/`scoring`/`rules`, Vitest + jsdom tests (24), UI wired to them.

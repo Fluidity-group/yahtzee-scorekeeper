@@ -5,7 +5,7 @@ import { allFinished } from '../db.js';
 import { computeStats } from '../game/stats.js';
 import { BASE_KEYS, META } from '../game/categories.js';
 
-const COLORS = ['#2E7CF6', '#FF5A47', '#7C5CFC', '#22C9A0'];
+const COLORS = ['#30bfa0', '#9682eb', '#dbac63', '#6aabd3'];
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let charts = [];
 
@@ -50,25 +50,31 @@ const emptyHTML = () => `<div class="statsempty"><div class="se-glyph">🎲📊<
 async function drawCharts(s) {
   const { Chart, registerables } = await import('chart.js');
   Chart.register(...registerables);
+  const theme = getComputedStyle(document.documentElement);
+  const ink = theme.getPropertyValue('--club-muted').trim() || '#a1b2bf';
+  const line = theme.getPropertyValue('--club-line').trim() || '#2a3b47';
+  Chart.defaults.color = ink;
+  Chart.defaults.borderColor = line;
+  Chart.defaults.font.family = 'system-ui, sans-serif';
   const animation = reduced() ? false : undefined;
-  const base = { responsive: true, maintainAspectRatio: false, animation, plugins: { legend: { labels: { font: { family: 'Fredoka' }, boxWidth: 12 } } } };
+  const base = { responsive: true, maintainAspectRatio: false, animation, plugins: { legend: { labels: { color: ink, font: { family: 'system-ui' }, boxWidth: 12 } } } };
   const C = (el, cfg) => { const node = document.getElementById(el); if (node) charts.push(new Chart(node, cfg)); };
 
   C('winDonut', { type: 'doughnut', options: base, data: {
     labels: s.winShare.labels,
-    datasets: [{ data: s.winShare.data, backgroundColor: [...s.names.map(n => colorFor(s, n)), '#cbc3b0'], borderColor: '#1A1B26', borderWidth: 2 }],
+    datasets: [{ data: s.winShare.data, backgroundColor: [...s.names.map(n => colorFor(s, n)), '#91a3ad'], borderColor: line, borderWidth: 2 }],
   } });
   C('totalsLine', { type: 'line', options: base, data: {
     labels: s.totalsOverTime.map(r => 'G' + r.n),
     datasets: s.names.map(n => ({ label: n, data: s.totalsOverTime.map(r => r[n] ?? null), borderColor: colorFor(s, n), backgroundColor: colorFor(s, n), tension: 0.25, spanGaps: true })),
   } });
-  C('catBar', { type: 'bar', options: { ...base, scales: { x: { ticks: { font: { size: 9 } } } } }, data: {
+  C('catBar', { type: 'bar', options: { ...base, scales: { x: { ticks: { font: { size: 11 } } } } }, data: {
     labels: BASE_KEYS.map(k => META[k].name),
     datasets: s.names.map(n => ({ label: n, data: BASE_KEYS.map(k => s.avgByCategory[n][k]), backgroundColor: colorFor(s, n) })),
   } });
   C('histo', { type: 'bar', options: { ...base, plugins: { legend: { display: false } } }, data: {
     labels: s.finalScoreHistogram.labels,
-    datasets: [{ label: 'final scores', data: s.finalScoreHistogram.data, backgroundColor: '#7C5CFC' }],
+    datasets: [{ label: 'final scores', data: s.finalScoreHistogram.data, backgroundColor: COLORS[0] }],
   } });
 }
 

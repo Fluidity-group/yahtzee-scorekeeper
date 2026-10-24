@@ -1,0 +1,22 @@
+[Unit]
+Description=Dice table camera relay
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/dice-table/camera.json
+
+[Service]
+User=dice
+Group=dice
+SupplementaryGroups=video render
+WorkingDirectory=/opt/dice-table/current
+ExecStart=/usr/bin/node device/pi/agent.mjs /etc/dice-table/camera.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

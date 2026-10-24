@@ -1,8 +1,35 @@
 node_modules/
+.venv-cad/
+hardware/**/__pycache__/
 dist/
+dist-native/
+.gradle-local/
+artifacts/
+*.jks
+*.keystore
 dev-dist/
 *.log
 .DS_Store
 .env
 .env.local
 .env.*.local
+supabase/.temp/
+# Local GoDice evaluation sources and generated native assets are not public source.
+local-evaluation/
+public/camera-assets/
+android/app/src/main/assets/public/
+
+# iOS generated web assets and machine-local Xcode state
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/**/xcuserdata/
+ios/**/DerivedData/
+ios/**/Package.resolved
+dist-ios-test/
+android/app/google-services.json
+android/.kotlin/
+.private/
+dist-lab/
+dist-phone-preview/
+*.p8

@@ -1,0 +1,18 @@
+# SW-040: real tournament insights, distinct scratches and last-turn Undo
+
+16 October2026. Owner extends active SW039 work before deployment. Authorized: read/analyse seven real games of the12game two-player tournament; implement animated game/tournament analytics, clearly distinct scratched frames, and Undo in every game form. Owner clarified Undo closes when the next player records a score. SW039 checkpoint56fc5e3 remains preserved; same isolated checkout/branch, sequential implementation, no new UI direction. No deployment authorization inferred.
+
+## Requirements and design gates
+
+- Read-only bounded snapshot of the identified tournament's archive, accepted score events and sheets. Keep raw private data under ignored artifacts; exclude account secrets, profiles and unrelated games. Establish actual completed count and history completeness freshly; do not assume game7of12 means seven completed games.
+- Derive corrected/undone-aware category scores, upper-bonus conversion, scratches, game margins, cumulative points/wins and chronological lead changes. Accepted score timestamps are entry chronology, not physical roll duration. Same-room stable account/seat identity, frozen aliases for display; no name-keyed merging across unrelated accounts.
+- Animated accessible charts in existing results/standings navigation, with reduced-motion static equivalents, text/table alternatives, completed/in-progress separation and small-sample caveats. No invented roll odds, luck metric, speed judgments or statistical significance from seven games.
+- Scratch state uses explicit0/SCRATCH and a filled distinct surface; open state remains+ or open dash. Maintain edit controls and descriptive accessible labels, including opponent cells.
+- Extend last-turn Undo across Standard, Competition, Accumulative, local/hosted and supported input sources. Preserve only the latest eligible own completed turn, disallow history rewinds/second consecutive undo, preserve append-only audit and revision/seat checks. The next completed scoring/bonus turn supersedes eligibility. Following unscored observations are retained but their cancelled turn is excluded from analytics; require a fresh turn/capture, explain cancellation in confirmation, and never reuse old sensor evidence.
+- Explicitly cover extra-turn bonuses and Competition final-chain state, finished-game reopening/readiness clearing, fresh source recapture, commentary invalidation and analytics exclusions. Do not leave a stale finalChain or replay sensor evidence after Undo.
+
+## Verification
+
+Pure analytics fixtures with corrections/Undo/bonus/ties/missing chronology; live-data reconciliation against authoritative final totals and standings; meaningful core and hosted authority/race tests for each mode/source/bonus chain; UI accessibility/responsive/motion checks; full Node24 gate and packaged asset validation before review. No live game mutation for testing. If additional server changes/migrations are needed, prepare them locally and qualify; live deployment stays a separate gate. Preserve existing games/accounts/settings.
+
+Implementation prepared for review. Seven authoritative completed games were read only; every accepted-entry timeline reconciled. Phone analytics320/390px and actual-app scratch/Undo/menu checks completed with synthetic local games, no live mutation. Core/source/bonus/final-chain and hosted authority/race tests added. Final gate/artifact identities are retained in ignored artifacts/sw039/sw040-manifest.json; release record separates local checks from deployment/physical acceptance. No deployment or Pixel update performed. See docs/releases/SW-040-tournament-insights-and-undo.md and docs/reviews/2026-10-16-seven-game-tournament-analysis.md.

@@ -1,0 +1,184 @@
+/* Smartphone surface: one full-size actionable seat, a shared read-only comparison rail. */
+#coreApp.playing .phone-scorecard{display:flex;flex-direction:column;flex:1 1 auto;min-height:200px;min-width:0;--peer-width:68px;}
+.phone-scorecard-caption{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:48px;color:var(--club-muted);font-size:12px;}
+.phone-peer-controls{display:flex;align-items:center;gap:4px;}
+.phone-peer-controls button{min-width:44px;min-height:44px;border:1px solid var(--club-line);border-radius:12px;background:var(--club-soft);color:var(--club-accent);font:inherit;font-size:24px;touch-action:manipulation;}
+.phone-peer-controls button:focus-visible{outline:2px solid var(--club-accent);outline-offset:2px;}
+.phone-peer-controls [role=status]{font-variant-numeric:tabular-nums;min-width:28px;text-align:center;}
+#coreApp.playing .phone-scorecard .score-table-wrap{overflow-x:hidden;flex:1 1 auto;min-height:140px;}
+#coreApp .phone-scorecard .phone-score-table{table-layout:fixed;width:100%;}
+.phone-category-col{width:38%;}.phone-own-col{width:82px;}
+#coreApp .phone-score-table th,#coreApp .phone-score-table td{min-width:0;max-width:none;height:52px;padding:4px;}
+#coreApp .phone-score-table th:first-child{min-width:0;width:auto;padding-left:8px;position:static;font-size:12px;overflow-wrap:anywhere;}
+#coreApp .phone-score-table thead th{position:sticky;top:0;height:96px;z-index:3;}
+#coreApp .phone-score-table thead th:first-child{position:sticky;}
+#coreApp .phone-score-table tr>:nth-child(2){--player-hue:var(--featured-hue,162);}
+#coreApp .phone-score-table .phone-comparison-cell,#coreApp .phone-score-table .phone-comparison-heading{padding:0;overflow:hidden;background:var(--club-panel);box-shadow:none;}
+.phone-peer-window{width:100%;overflow:hidden;}
+.phone-peer-track{display:flex;width:max-content;transform:translateX(calc(var(--peer-offset) * var(--peer-width) * -1));}
+.phone-peer-slot{box-sizing:border-box;flex:0 0 var(--peer-width);width:var(--peer-width);padding:4px;min-height:44px;display:flex;align-items:center;justify-content:center;--player-color:hsl(var(--player-hue) 65% 76%);--player-border:var(--club-line);--player-tile:var(--club-soft);}
+.phone-peer-headings .phone-peer-slot{display:block;min-height:96px;padding-top:10px;}
+#coreApp .phone-scorecard .player-name{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;}
+#coreApp .phone-scorecard .phone-peer-headings strong{display:block;font-size:16px;line-height:26px;}
+#coreApp .phone-scorecard .phone-peer-headings small{display:block;font-size:8px;line-height:14px;white-space:nowrap;color:var(--club-muted);}
+#coreApp .phone-scorecard .phone-peer-headings .hidden-total{display:block;font-size:8px;line-height:26px;}
+#coreApp .phone-scorecard .phone-peer-score{font-size:14px;min-height:32px;line-height:32px;border-radius:8px;color:var(--club-muted);width:100%;}
+#coreApp .phone-scorecard .phone-peer-score.score-placeholder{border-style:dashed;font-size:12px;}
+#coreApp .phone-scorecard .phone-own-heading strong{font-size:24px;}
+#coreApp .phone-scorecard .phone-peer-slot.turn-column{background:var(--club-soft);}
+#coreApp .phone-scorecard .phone-peer-slot.turn-column .player-name{color:var(--club-accent);}
+@media(min-width:600px){.phone-category-col{width:35%;}.phone-own-col{width:100px;}#coreApp.playing .phone-scorecard{--peer-width:80px;}}
+.phone-peer-window{touch-action:pan-y;}
+/* SW039: use the full comparison column rather than a narrow fixed-width tile. */
+#coreApp{--score-label:1rem;--score-number:1.7rem;--peer-number:1.2rem;--score-meta:.75rem;}
+#coreApp[data-scorecard-size=compact]{--score-label:.9rem;--score-number:1.45rem;--peer-number:1.05rem;--score-meta:.7rem;}
+#coreApp[data-scorecard-size=large]{--score-label:1.125rem;--score-number:1.95rem;--peer-number:1.4rem;--score-meta:.85rem;}
+.phone-category-col{width:38%;}.phone-own-col{width:36%;}.phone-comparison-col{width:26%;}
+.phone-peer-track{width:100%;transform:translateX(calc(var(--peer-offset) * -100%));}
+.phone-peer-slot{flex:0 0 100%;width:100%;min-width:0;}
+.phone-peer-slot>span[data-score-seat]{display:block;width:100%;}
+#coreApp .phone-score-table th:first-child{font-size:var(--score-label);line-height:1.25;}
+#coreApp .phone-scorecard .player-name{font-size:var(--score-label);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.2;}
+#coreApp .phone-scorecard .phone-peer-headings strong{font-size:var(--peer-number);}
+#coreApp .phone-scorecard .phone-peer-headings small{font-size:var(--score-meta);white-space:normal;line-height:1.35;}
+#coreApp .phone-scorecard .phone-own-heading strong{font-size:calc(var(--score-number) * 1.15);}
+#coreApp .phone-scorecard .phone-own-heading small{font-size:var(--score-meta);line-height:1.35;}
+#coreApp .phone-scorecard .phone-peer-score{font-size:var(--peer-number);min-height:44px;line-height:44px;}
+#coreApp .phone-scorecard .phone-peer-score.score-placeholder{font-size:var(--peer-number);}
+#coreApp .phone-score-table td>button,#coreApp .phone-score-table td>.recorded-score{font-size:var(--score-number);min-height:48px;}
+#coreApp .phone-score-table th,#coreApp .phone-score-table td{height:auto;min-height:52px;}
+#coreApp .phone-score-table thead th{height:auto;padding-top:10px;padding-bottom:10px;vertical-align:top;}
+.phone-peer-headings .phone-peer-slot{min-height:0;padding-top:0;}
+.phone-scorecard-caption{font-size:.9rem;min-height:48px;flex-wrap:wrap;}
+.scorecard-display-button,.bonus-guide{min-width:44px;min-height:44px;background:transparent;color:var(--club-accent);border:1px solid var(--club-line);border-radius:10px;font:inherit;cursor:pointer;}
+.scorecard-display-button{margin-left:auto;}
+#coreApp .phone-score-table .score-section th{font-size:.85rem;letter-spacing:.03em;color:var(--club-accent);font-weight:650;background:var(--club-panel);}
+.score-section td{background:var(--club-panel)!important;box-shadow:none!important;}
+#coreApp .phone-score-table .score-section th{padding:6px 8px;}
+.bonus-guide{vertical-align:middle;}
+.upper-progress{display:grid;gap:4px;text-align:center;padding:6px 2px;font-variant-numeric:tabular-nums;min-width:0;}
+.upper-progress strong{font-size:var(--peer-number);}.upper-progress strong small{font-size:.75rem;color:var(--club-muted);}
+.upper-progress progress{display:block;width:100%;height:8px;accent-color:var(--club-accent);}
+.upper-progress span,.upper-progress b,.upper-progress>small,.bonus-hidden{font-size:var(--score-meta);line-height:1.3;overflow-wrap:anywhere;}
+.upper-progress b{font-weight:650;color:var(--club-accent);}.upper-progress.unreachable b{color:var(--club-warm);}
+.upper-progress>small{color:var(--club-muted);}
+.bonus-progress-row .phone-peer-slot{align-items:stretch;}
+#coreApp .phone-score-table .summary-row td{font-size:var(--peer-number);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+#coreApp .phone-score-table .summary-row th{font-size:var(--score-meta);}
+.grand-total-row{font-weight:700;border-top:2px solid var(--club-accent);}
+#coreApp .phone-score-table .score-section th{white-space:normal;}
+#coreApp .phone-score-table .score-section .bonus-guide{display:inline-block;width:44px;min-width:44px;min-height:44px;margin-left:10px;padding:0;background:transparent;vertical-align:middle;}
+#coreApp.playing .compact-game>.phone-scorecard{flex:1 1 0;min-height:240px;}
+/* A saved scratch is one cross across its frame; its accessible label retains zero points. */
+.recorded-score.scratched-score{position:relative;}
+.scratch-value{position:absolute;inset:6px;width:calc(100% - 12px);height:calc(100% - 12px);pointer-events:none;overflow:visible;}
+.scratch-value path{fill:none;stroke:currentColor;stroke-width:2.5;vector-effect:non-scaling-stroke;stroke-linecap:round;}
+#coreApp .phone-score-table .phone-peer-score.scratched-score{display:flex;align-items:center;justify-content:center;line-height:1;}
+.scorecard-size-options{border:1px solid var(--club-line);border-radius:12px;padding:12px;}
+.core-dialog .scorecard-size-options label{display:flex;align-items:center;gap:12px;min-height:48px;font-size:1rem;}
+.core-dialog .scorecard-size-options input{width:22px;min-height:22px;margin:0;}
+body:has(dialog[open]){overflow:hidden;}
+@media(min-width:600px){.phone-category-col{width:38%;}.phone-own-col{width:36%;}}
+/* SW041: the owner's actionable scores lead; opponents remain a narrow reference. */
+#coreApp .phone-category-col{width:46%;}#coreApp .phone-own-col{width:36%;}#coreApp .phone-comparison-col{width:18%;}
+#coreApp .phone-score-table thead th{height:68px;padding:6px 4px;vertical-align:middle;}
+#coreApp .phone-own-heading .player-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 6px;text-align:left;}
+#coreApp .phone-own-heading .player-summary strong{grid-column:2;grid-row:1/3;font-size:var(--score-number);}
+#coreApp .phone-scorecard .phone-own-heading .player-name{font-size:var(--score-label);margin:0;}
+#coreApp .phone-own-heading .seat-status,#coreApp .phone-peer-headings .seat-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+#coreApp .phone-scorecard .phone-peer-headings .player-name{font-size:.72rem;line-height:1.15;}
+#coreApp .phone-scorecard .phone-peer-headings strong{font-size:1.05rem;line-height:1.2;}
+#coreApp .phone-scorecard .phone-peer-headings small{font-size:.65rem;line-height:1.1;}
+#coreApp .phone-scorecard .phone-peer-headings .phone-peer-slot{min-height:0;padding:4px 2px;}
+#coreApp .phone-scorecard .phone-peer-score{font-size:1rem;min-height:32px;line-height:32px;}
+#coreApp .phone-comparison-cell .phone-peer-slot{background:transparent;box-shadow:none;padding:2px;}
+#coreApp .phone-score-table .category-heading{font-size:.8rem;display:inline-block;vertical-align:middle;margin-right:4px;}
+#coreApp .phone-score-table .scorecard-display-button{width:44px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;}
+#coreApp.playing .compact-header{min-height:44px;padding:0 12px;}#coreApp.playing .compact-logo{font-size:20px;}
+#coreApp.playing .game-strip{min-height:24px;padding:0 12px;font-size:.7rem;gap:6px;}
+#coreApp.playing .tournament-banner{padding:0 2px;margin:0 0 4px;border:0;background:transparent;}
+#coreApp.playing .tournament-compact-heading>div{display:flex;align-items:baseline;gap:4px 10px;flex-wrap:wrap;}
+#coreApp.playing .tournament-compact-heading strong{font-size:.9rem;}#coreApp.playing .tournament-compact-heading span{font-size:.7rem;margin:0;}
+#coreApp.playing .phone-scorecard-caption{min-height:44px;justify-content:flex-end;}
+.core-dialog[aria-busy=true] [data-score-save-status]{color:var(--club-accent);}
+.own-bonus-summary{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;}
+.own-bonus-summary>span{font-size:var(--score-meta);color:var(--club-muted);font-weight:500;}
+.own-bonus-summary .upper-progress{display:grid;grid-template-columns:auto minmax(0,1fr);text-align:left;gap:2px 8px;padding:4px 0;}
+.own-bonus-summary .upper-progress strong{grid-row:1/3;align-self:center;font-size:var(--score-label);white-space:nowrap;}
+.own-bonus-summary .upper-progress progress{grid-column:2;align-self:center;}
+.own-bonus-summary .upper-progress span{grid-column:2;}
+.own-bonus-summary .upper-progress b,.own-bonus-summary .upper-progress>small{grid-column:1/3;}
+#coreApp .bonus-progress-row .phone-peer-slot .upper-progress{gap:2px;padding:2px 0;}
+#coreApp .bonus-progress-row .phone-peer-slot .upper-progress b,#coreApp .bonus-progress-row .phone-peer-slot .upper-progress>small{display:none;}
+.bonus-projection{min-width:0;}
+#coreApp .phone-score-table .bonus-graphic{display:block;width:100%;height:68px;min-height:44px;min-width:0;border:0;background:transparent;padding:0;cursor:pointer;touch-action:manipulation;color:var(--club-accent);}
+#coreApp .phone-score-table .bonus-graphic.compact{width:44px;height:58px;margin:auto;}
+.bonus-graphic svg{display:block;width:100%;height:100%;overflow:visible;}
+.bonus-graphic .bonus-ring-track{fill:none;stroke:var(--club-line);stroke-width:4;}
+.bonus-graphic .bonus-ring-fill{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;animation:bonus-ring-show .4s ease-out both;}
+.bonus-graphic.possible{color:var(--club-accent);}.bonus-graphic.unreachable{color:var(--club-warm,#e6b46a);}.bonus-graphic.secured{color:#9ee9d4;}
+.bonus-graphic text{fill:var(--club-text);font-family:inherit;text-anchor:middle;dominant-baseline:middle;}.bonus-meter-number{font-size:18px;font-weight:750;}.bonus-graphic .bonus-meter-target{font-size:9px;fill:var(--club-muted);}
+.bonus-state-symbol{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.bonus-three-line{stroke:var(--club-muted);stroke-width:.8;stroke-dasharray:2 2;opacity:.7;}
+.bonus-face rect.empty{fill:transparent;stroke:var(--club-muted);stroke-width:.6;opacity:.35;}.bonus-face rect.filled{fill:var(--club-accent);transform-box:fill-box;transform-origin:bottom;animation:bonus-level-pop .35s ease-out both;}.bonus-face.behind rect.filled{fill:var(--club-warm,#e6b46a);}
+.bonus-face .bonus-die{fill:var(--club-text);}.bonus-pip{fill:var(--club-panel);}.bonus-scratch{stroke:var(--club-warm,#e6b46a);stroke-width:2;stroke-linecap:round;}
+.own-bonus-summary{grid-template-columns:50px minmax(0,1fr);gap:4px;}.own-bonus-summary>span{font-size:.7rem;}
+.bonus-graphic:focus-visible{outline:2px solid var(--club-accent);outline-offset:2px;border-radius:8px;}
+@keyframes bonus-level-pop{from{transform:scaleY(.2);opacity:.3}to{transform:scaleY(1);opacity:1}}@keyframes bonus-ring-show{from{opacity:.3}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.bonus-graphic *{animation:none!important;transition:none!important;}}
+.upper-category-label{display:flex;align-items:center;justify-content:space-between;gap:3px 5px;flex-wrap:wrap;}
+.upper-category-indicator{display:block;flex:0 0 70px;width:70px;height:22px;overflow:visible;}
+.upper-category-indicator .filled{fill:var(--club-accent);}.upper-category-indicator.behind .filled{fill:var(--club-warm,#e6b46a);}
+.upper-category-indicator .empty{fill:transparent;stroke:var(--club-muted);stroke-width:.6;opacity:.4;}
+.upper-category-indicator .bonus-three-line{stroke:var(--club-muted);stroke-width:1;stroke-dasharray:2 1;}
+.upper-category-indicator .bonus-scratch{stroke:var(--club-warm,#e6b46a);stroke-width:1.5;stroke-linecap:round;}
+.upper-category-indicator rect.filled{transform-box:fill-box;transform-origin:left;animation:upper-level-fill .3s ease-out both;}
+.upper-category-indicator.behind rect.filled{fill:var(--club-accent);}.upper-category-indicator rect.surplus{fill:#91c8f0;}.upper-category-indicator rect.deficit{stroke:var(--club-warm,#e6b46a);opacity:.9;}
+.upper-category-indicator text{font:750 9px sans-serif;text-anchor:middle;dominant-baseline:middle;fill:var(--club-muted);}.upper-category-indicator .positive,.bonus-graphic .bonus-net-pace.positive{fill:#91c8f0;}.upper-category-indicator .negative,.bonus-graphic .bonus-net-pace.negative{fill:var(--club-warm,#e6b46a);}.upper-category-indicator .upper-yahtzee-star{fill:#edc66b;font-size:11px;}.bonus-graphic .bonus-net-pace{font-size:11px;font-weight:750;}
+#coreApp .phone-score-table .bonus-graphic:not(.compact){width:96px;height:44px;max-width:100%;}
+#coreApp .phone-score-table .bonus-graphic.compact{width:36px;height:36px;min-height:0;}
+@keyframes upper-level-fill{from{transform:scaleX(.1);opacity:.4}to{transform:scaleX(1);opacity:1}}
+@media(prefers-reduced-motion:reduce){.upper-category-indicator *{animation:none!important;}}
+
+#coreApp .phone-scorecard button.phone-peer-score{min-height:44px;line-height:1.2;border:1px solid var(--club-line);border-radius:10px;touch-action:manipulation;}
+
+/* SW049: compact phone play, one subtotal and a useful horizontal bonus graphic. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important;}
+#coreApp.playing .play-header{display:flex;gap:4px;min-height:56px;padding:4px 10px;}
+#coreApp .play-header .play-title{flex:1;min-width:0;text-align:left;padding:4px 0;}
+.play-title strong{display:block;font-size:1rem;line-height:1.2;overflow-wrap:anywhere;}.play-title small{display:block;font-size:.72rem;line-height:1.5;color:var(--club-muted);}
+.connection-indicator{width:44px;min-height:44px;color:var(--club-accent)!important;}.connection-indicator.reconnecting{color:var(--club-warm)!important;}
+#coreApp .phone-score-table .upper-section>tr>th{background:color-mix(in srgb,var(--club-accent) 7%,var(--club-panel));}
+#coreApp .phone-score-table .lower-section>tr>th{background:color-mix(in srgb,var(--club-warm,#dfaa78) 9%,var(--club-panel));}
+#coreApp .phone-score-table .lower-section>tr:first-child>*{border-top:3px solid var(--club-line);}
+#coreApp .own-bonus-summary{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;}
+#coreApp .compact-upper-total .upper-total-guide{display:flex;align-items:center;gap:8px;min-height:44px;width:100%;padding:4px;background:transparent;border:0;color:var(--club-text);font:inherit;cursor:pointer;}
+.upper-total-guide strong{font-size:1.25rem;font-variant-numeric:tabular-nums;}.upper-total-track{height:8px;flex:1;min-width:12px;border-radius:6px;background:var(--club-line);overflow:hidden;}.upper-total-track i{display:block;height:100%;background:var(--club-accent);border-radius:inherit;transition:width .35s ease;}
+.upper-bonus-ribbon{font-size:.7rem;white-space:nowrap;color:var(--club-accent);font-weight:750;}
+.phone-comparison-cell .upper-total-guide{flex-wrap:wrap;justify-content:center;gap:2px!important;}.phone-comparison-cell .upper-total-track{flex-basis:100%;height:5px;}.phone-comparison-cell .upper-total-guide strong{font-size:1rem;}
+@media(prefers-reduced-motion:reduce){.upper-total-track i{transition:none;}}
+
+.upper-total-guide[data-bonus-state="unreachable"] .upper-total-track i{background:var(--club-warm);}
+.playform-bonus-awarded .upper-bonus-ribbon{animation:pf-award-ribbon .6s ease-out both;}
+@keyframes pf-award-ribbon{from{transform:translateY(-6px) scale(.85);opacity:0}to{transform:none;opacity:1}}
+@media(prefers-reduced-motion:reduce){.playform-bonus-awarded .upper-bonus-ribbon{animation:none;}}
+
+/* SW050: animated upper-bonus dashboard in the category header. */
+#coreApp .phone-score-table thead th:first-child{padding:2px 6px;vertical-align:middle;}
+#coreApp .header-bonus-dashboard{width:100%;max-width:220px;margin:auto;}
+#coreApp .header-bonus-graphic{display:block;width:100%;min-width:0;height:72px;min-height:44px;padding:0;border:0;background:transparent;color:var(--club-accent);font:inherit;touch-action:manipulation;cursor:pointer;}
+.header-bonus-graphic svg{display:block;width:100%;height:100%;overflow:visible;}.header-bonus-graphic text{font-family:inherit;fill:var(--club-text);dominant-baseline:middle;}
+.header-bonus-track{fill:none;stroke:var(--club-line);stroke-width:4;}.header-bonus-fill{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;}
+.header-bonus-needed{font-size:21px;font-weight:800;text-anchor:middle;}.header-bonus-target{font-size:9px;text-anchor:middle;fill:var(--club-muted)!important;letter-spacing:.5px;}
+.header-bonus-pace{font-size:22px;font-weight:800;}.header-bonus-pace-label{font-size:9px;fill:var(--club-muted)!important;}.header-bonus-status{font-size:13px;font-weight:650;}
+.header-pace-track{fill:none;stroke:var(--club-line);stroke-width:6;stroke-linecap:round;}.header-pace-zero{stroke:var(--club-muted);stroke-width:1;}.header-pace-balance{fill:var(--club-accent);}
+.header-bonus-graphic.under .header-pace-balance{fill:var(--club-warm);}.header-bonus-graphic.needs-five{color:var(--club-warm);}.header-bonus-graphic.unreachable{color:var(--club-muted);}.header-bonus-graphic.secured{color:var(--club-second,var(--club-accent));}
+.header-open-tile.still-open{fill:transparent;stroke:currentColor;stroke-width:1;}.header-open-tile.closed{fill:currentColor;opacity:.3;}
+.header-bonus-updated .header-bonus-fill{animation:header-bonus-pulse .6s ease-out both;}.header-bonus-updated .header-bonus-pace{animation:pf-total-land .5s ease-out both;}
+.playform-bonus-awarded .header-open-tile{transform-box:fill-box;transform-origin:center;animation:pf-bonus-assemble .65s ease-out both;animation-delay:calc(var(--tile-index)*40ms);}.playform-bonus-awarded .header-bonus-needed{animation:pf-total-land .65s ease-out both;}
+.header-bonus-graphic:focus-visible{outline:2px solid var(--club-accent);outline-offset:1px;border-radius:12px;}
+@keyframes header-bonus-pulse{0%{stroke-width:4;opacity:.5}45%{stroke-width:7;opacity:1}100%{stroke-width:4;opacity:1}}
+@media(prefers-reduced-motion:reduce){.header-bonus-dashboard *{animation:none!important;transition:none!important;}}
+
+#coreApp .compact-upper-total .upper-total-guide{justify-content:center;flex-direction:column;gap:0;line-height:1.1;}
+.header-bonus-graphic.needs-five .header-bonus-fill{stroke:var(--club-warm);}.header-bonus-graphic.needs-five .header-bonus-status{fill:var(--club-warm);}.header-bonus-graphic.unreachable .header-bonus-fill{stroke:var(--club-muted);}.header-bonus-graphic.secured .header-bonus-fill{stroke:var(--club-second);}

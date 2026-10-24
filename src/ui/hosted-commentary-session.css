@@ -1,0 +1,18 @@
+.hosted-commentary-drawer{position:fixed;inset:0 0 0 auto;margin:0;box-sizing:border-box;width:min(100vw,480px);max-width:100vw;height:100dvh;max-height:100dvh;padding:16px;background:var(--club-panel,#0b2022);color:var(--club-text,#f4fffa);border:1px solid var(--club-line,#6ce5c466);overflow:auto;}
+.hosted-commentary-drawer::backdrop{background:#041214b8;}
+.hosted-commentary-drawer button{min-height:44px;min-width:44px;border:1px solid var(--club-line);border-radius:10px;padding:8px 12px;background:var(--club-soft);color:var(--club-text);font:inherit;}
+.hosted-commentary-drawer form{display:grid;gap:10px;}
+.hosted-commentary-drawer [data-hosted-personal-root]{padding:16px 0;border-block:1px solid var(--club-line);margin-block:16px;}
+.hosted-commentary-drawer input:not([type=checkbox]),.hosted-commentary-drawer textarea,.hosted-commentary-drawer select{box-sizing:border-box;width:100%;min-height:44px;}
+.hosted-commentary-share{display:flex;gap:8px;align-items:start;}
+.hosted-commentary-share small,.hosted-commentary-retention{display:block;font-size:12px;color:var(--club-muted);line-height:1.5;}
+.hosted-commentary-drawer .commentary-settings{max-height:none;overflow:visible;}
+
+.hosted-commentary-inline{margin:10px 0;padding:10px 12px;border:1px solid var(--club-line,#6ce5c466);border-radius:14px;background:var(--club-panel,#0b2022);color:var(--club-text,#f4fffa);}
+.hosted-commentary-inline p{margin:0 0 6px;font-size:14px;line-height:1.45;overflow-wrap:anywhere;}
+.hosted-commentary-inline-controls,.hosted-commentary-inline .caption-feedback{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.hosted-commentary-inline-controls{justify-content:space-between;}
+.hosted-commentary-inline button{min-height:44px;min-width:44px;padding:8px 10px;border:1px solid var(--club-line,#6ce5c466);border-radius:10px;background:var(--club-soft,#163637);color:inherit;font:inherit;font-size:12px;}
+.hosted-commentary-inline button[aria-pressed=true]{border-color:var(--club-accent,#6ce5c4);background:#276257;}
+.hosted-commentary-inline button:disabled{opacity:.45;}
+.hosted-commentary-inline [data-caption-feedback-status]{font-size:12px;}

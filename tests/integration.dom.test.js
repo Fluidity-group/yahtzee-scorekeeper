@@ -98,3 +98,39 @@ describe('bonus Yahtzee make-up turn', () => {
     expect($('#statusLine').classList.contains('makeup')).toBe(false);
   });
 });
+
+describe('accessible responsive score entry', () => {
+  it('switches and saves appearance without changing scores or turn', () => {
+    const total = $('#tot0').textContent;
+    const turn = $('#device').className;
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    $('#themeBtn').click();
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('yz_theme')).toBe('light');
+    expect($('#themeBtn').getAttribute('aria-label')).toBe('Switch to dark theme');
+    expect($('#tot0').textContent).toBe(total);
+    expect($('#device').className).toBe(turn);
+    $('#themeBtn').click();
+  });
+  it('labels score buttons and both section headers after a player is renamed', () => {
+    const name = $('.pname[data-p="0"]');
+    name.value = 'Taylor';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    expect([...document.querySelectorAll('[data-score-player="0"]')].map(el => el.textContent)).toEqual(['Taylor', 'Taylor']);
+    expect(cell(0, 'threes').tagName).toBe('BUTTON');
+    expect(cell(0, 'threes').getAttribute('aria-label')).toBe('Taylor, Threes: 9 points, edit score');
+  });
+
+  it('can dismiss a scoring panel without changing the score and restores focus', () => {
+    const trigger = cell(0, 'threes');
+    trigger.focus(); trigger.click();
+    expect($('#entry').getAttribute('role')).toBe('dialog');
+    expect(document.activeElement.getAttribute('aria-label')).toBe('Close panel');
+    expect($('.stage').inert).toBe(true);
+    $('#entry').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect($('#scrim').classList.contains('open')).toBe(false);
+    expect($('.stage').inert).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute('aria-label')).toContain('9 points');
+  });
+});

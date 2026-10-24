@@ -1,0 +1,144 @@
+/* A static casino cabinet: each reel window remains a direct game button. */
+html[data-art=midnight] .yahtz-home .home-slot-machine{
+ position:relative;padding:9px 22px 0 9px;margin-top:18px;
+ border:2px solid var(--club-accent);border-radius:24px 24px 10px 10px;
+ background:var(--club-raised);box-shadow:inset 0 0 0 4px var(--club-bg),0 5px 0 var(--midnight-ink);
+}
+.yahtz-home .slot-machine-top{
+ display:flex;align-items:center;justify-content:space-around;gap:8px;
+ min-height:76px;padding:12px 14px;margin:0 0 9px;box-sizing:border-box;
+ border:1px solid var(--club-accent);border-radius:16px 16px 5px 5px;
+ background:radial-gradient(circle,var(--club-accent) 1.5px,transparent 2px) 4px 4px/14px 14px repeat-x,var(--club-bg);
+ box-shadow:inset 0 -3px 0 var(--club-second-soft);
+}
+.yahtz-home .slot-marquee-copy{text-align:center;min-width:0;padding-top:5px}
+.yahtz-home .slot-machine-top h2{font:500 clamp(22px,6vw,30px)/1.1 Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.025em;color:var(--club-accent);margin:3px 0 0}
+.yahtz-home .slot-machine-top .slot-marquee-kicker{font:700 9px/1.4 ui-monospace,monospace;letter-spacing:.15em;color:var(--club-muted)}
+.yahtz-home .slot-machine-top .slot-marquee-star{font-size:27px;letter-spacing:0;color:var(--club-second);flex-shrink:0}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{
+ padding:7px;margin:0;gap:9px;background:var(--club-bg);border:1px solid var(--club-line);
+ border-radius:5px;box-shadow:inset 0 3px 6px #0005;
+}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card{
+ min-height:145px;align-items:center;justify-content:center;text-align:center;gap:6px;
+ padding:24px 7px 14px;border:1px solid var(--club-line);border-block:3px solid var(--club-accent);
+ border-radius:7px!important;
+ background:linear-gradient(var(--club-soft),var(--club-panel) 24%,var(--club-panel) 76%,var(--club-soft))!important;
+ box-shadow:inset 0 5px 5px #0003,inset 0 -4px 5px #0003;
+}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card strong{font-size:clamp(19px,4.9vw,25px);line-height:1.12}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card small{font-size:13px;line-height:1.4}
+.yahtz-home .home-slot-machine .slot-mode-symbol{width:35px;height:36px;margin:0;color:var(--club-accent)}
+.yahtz-home .home-slot-machine .slot-mode-local .slot-mode-symbol,
+.yahtz-home .home-slot-machine .slot-mode-online .slot-mode-symbol{color:var(--club-second)}
+.yahtz-home .home-slot-machine .home-card-number{font-size:10px;top:7px;left:8px}
+.yahtz-home .home-slot-machine .home-card-arrow{font-size:17px;top:4px;right:6px}
+.yahtz-home .slot-cabinet-lever{position:absolute;right:5px;top:111px;width:9px;height:96px;pointer-events:none;border-radius:5px;background:var(--club-line);box-shadow:inset 2px 0 0 var(--club-muted)}
+.yahtz-home .slot-cabinet-lever i{position:absolute;left:-3px;top:-8px;width:15px;height:19px;border-radius:50%;background:var(--club-second);box-shadow:inset 2px 2px 0 #fff5,0 2px 0 var(--midnight-ink)}
+.yahtz-home .slot-machine-base{height:42px;gap:15px;justify-content:center}
+.yahtz-home .slot-machine-base>span{width:auto;height:auto;background:none;color:var(--club-second);font-size:16px}
+.yahtz-home .slot-payout-tray{width:44%;max-width:190px;height:20px;border:1px solid var(--club-line);border-top:3px solid var(--midnight-ink);border-radius:2px 2px 8px 8px;background:var(--club-bg);box-shadow:0 2px 0 var(--club-muted)}
+.yahtz-home .slot-payout-tray i{display:block;width:75%;height:3px;margin:6px auto 0;border:0;border-radius:0;background:var(--club-line)}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card:focus-visible{outline:3px solid var(--club-second);outline-offset:2px}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card:active{transform:translateY(1px);border-color:var(--club-second)}
+@media(max-width:340px){
+ html[data-art=midnight] .yahtz-home .home-slot-machine{padding-left:7px;padding-right:20px}
+ html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{gap:7px;padding:5px}
+ .yahtz-home .slot-machine-top{padding-inline:7px;gap:4px}
+ .yahtz-home .slot-machine-top .slot-marquee-star{font-size:19px}
+}
+
+/* The trophy cabinet presents account facts, without simulated winnings. */
+html[data-art=midnight] .core-dialog .trophy-dialog-title{font:750 clamp(23px,6vw,29px)/1.2 system-ui,sans-serif;letter-spacing:0;color:var(--club-text);margin:4px 0 17px;padding:2px 44px 13px 0;border-bottom:3px solid var(--club-accent);overflow-wrap:normal}
+html[data-art=midnight] .core-dialog .trophy-dialog-title span{display:block;margin-top:4px;font:500 clamp(38px,10vw,52px)/1.08 Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.035em;text-transform:uppercase;color:var(--club-accent);text-shadow:2px 2px 0 var(--club-second-soft),3px 3px 0 var(--club-second)}
+.trophy-stat-machine{margin:20px 0 16px;padding:8px 10px 0;border:2px solid var(--club-accent);border-radius:20px 20px 8px 8px;background:var(--club-raised);box-shadow:inset 0 0 0 3px var(--club-bg),0 4px 0 var(--midnight-ink)}
+.trophy-stat-marquee{display:flex;justify-content:space-around;align-items:center;gap:8px;min-height:57px;border:1px solid var(--club-accent);border-radius:13px 13px 3px 3px;padding:8px;box-sizing:border-box;background:radial-gradient(circle,var(--club-accent) 1.5px,transparent 2px) 4px 3px/13px 13px repeat-x,var(--club-bg)}
+.trophy-stat-marquee b{font:500 clamp(25px,7vw,36px)/1.2 Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.045em;color:var(--club-accent);padding-top:4px}
+.trophy-stat-marquee>span{font-size:24px;color:var(--club-second)}
+.trophy-stat-machine .home-trophy-hero{position:relative;display:grid;grid-template-columns:70px minmax(0,1fr);gap:5px 13px;align-items:center;max-width:280px;margin:auto;padding:16px 0 12px}
+.trophy-stat-machine .home-trophy-hero svg{width:30px;height:30px;color:var(--club-accent)}
+.trophy-stat-machine .home-trophy-hero strong{display:block;min-width:1.5em;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;padding:4px 15px 6px;border:1px solid var(--club-line);border-block:3px solid var(--club-accent);border-radius:6px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft));box-shadow:inset 0 4px 5px #0003;line-height:1.1;font:800 clamp(48px,14vw,68px)/1.1 system-ui,sans-serif;text-align:center;font-variant-numeric:tabular-nums;color:var(--club-text);animation:trophy-reel-land .45s ease-out both}
+.trophy-stat-machine .home-trophy-hero>span{font:650 15px/1.4 system-ui,sans-serif;color:var(--club-text)}
+.trophy-stat-machine .home-trophy-hero>.trophy-prize-emblem{grid-row:span 2;display:grid;place-items:center;position:relative;box-sizing:border-box;width:70px;height:70px;border:4px double var(--club-accent);border-radius:50%;background:var(--club-second-soft);color:var(--club-accent);box-shadow:3px 3px 0 var(--midnight-ink);transform:rotate(-8deg)}
+.trophy-stat-machine .trophy-prize-emblem svg{width:39px;height:39px;transform:rotate(8deg)}
+.trophy-prize-emblem i{position:absolute;font-style:normal;color:var(--club-second);font-size:21px;text-shadow:1px 1px 0 var(--club-bg)}
+.trophy-prize-emblem i:first-of-type{top:-12px;right:-7px}.trophy-prize-emblem i:last-of-type{bottom:-7px;left:-7px;font-size:15px}
+.trophy-stat-machine .home-trophy-hero>span:last-child{text-align:center}
+.trophy-counting-guide{margin:14px 0 20px;border-bottom:1px solid var(--club-line)}
+.trophy-counting-guide>summary{display:flex;align-items:center;min-height:48px;gap:12px;font:650 14px/1.5 system-ui,sans-serif;color:var(--club-text);cursor:pointer}
+.trophy-counting-guide>summary::after{content:'+';margin-left:auto;color:var(--club-accent);font-size:22px}.trophy-counting-guide[open]>summary::after{content:'−'}
+.trophy-counting-guide>summary:focus-visible{outline:3px solid var(--club-second);outline-offset:2px}
+.core-dialog[data-home-account-panel=trophies]>.sheet-close{position:sticky;top:0;right:auto;float:right;margin:-8px -8px -36px 0;z-index:10;background:var(--club-panel);color:var(--club-text);border-color:var(--club-second);box-shadow:0 2px 0 var(--midnight-ink)}
+.trophy-stat-machine .home-trophy-breakdown{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:8px 0 0;padding:7px;border:1px solid var(--club-line);border-radius:5px;background:var(--club-bg)}
+.trophy-stat-machine .home-trophy-breakdown>div{display:flex;flex-direction:column-reverse;justify-content:flex-end;align-items:center;gap:9px;min-width:0;padding:13px 5px 10px;border:1px solid var(--club-line);border-block:2px solid var(--club-second);border-radius:4px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft));text-align:center;box-shadow:inset 0 3px 4px #0003}
+.trophy-stat-machine .home-trophy-breakdown dt{font:550 13px/1.4 system-ui,sans-serif;color:var(--club-muted);overflow-wrap:normal;hyphens:auto}
+.trophy-stat-machine .home-trophy-breakdown dd{font:800 clamp(26px,8vw,38px)/1.1 system-ui,sans-serif;color:var(--club-accent);font-variant-numeric:tabular-nums;max-width:100%;overflow-wrap:anywhere;animation:trophy-reel-land .45s ease-out both}
+.trophy-stat-tray{display:flex;justify-content:center;align-items:center;gap:16px;height:34px;color:var(--club-second)}
+.trophy-stat-tray i{width:45%;height:12px;border:1px solid var(--club-line);border-top:3px solid var(--midnight-ink);border-radius:1px 1px 6px 6px;background:var(--club-bg)}
+@keyframes trophy-reel-land{from{transform:translateY(-5px);opacity:.65}to{transform:none;opacity:1}}
+@media(prefers-reduced-motion:reduce){.trophy-stat-machine .home-trophy-hero strong,.trophy-stat-machine .home-trophy-breakdown dd{animation:none}}
+.home-razzies{margin:22px 0 18px;padding:16px 13px;border:1px solid var(--club-second);border-top:4px solid var(--club-second);border-radius:4px;background:var(--club-panel);color:var(--club-text)}
+.razzie-heading{display:flex;align-items:center;gap:12px}.razzie-heading>span{font-size:42px;color:var(--club-second)}
+.razzie-heading h3{margin:0;font:700 13px/1.5 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.05em;color:var(--club-muted)}
+.razzie-heading h3 span{display:block;font:500 clamp(26px,7vw,35px)/1.15 Impact,'Arial Black',system-ui,sans-serif;letter-spacing:.02em;color:var(--club-second)}
+.home-razzies p{font-size:14px;line-height:1.5;margin:12px 0}.home-razzies>small{display:block;font-size:12px;line-height:1.5;color:var(--club-muted)}
+.home-razzies ul{list-style:none;display:grid;gap:9px;margin:15px 0;padding:0}.home-razzies li{display:flex;align-items:center;gap:13px;padding:12px 9px;border:1px solid var(--club-line);background:var(--club-bg)}
+.razzie-score{font:800 36px/1 system-ui,sans-serif;color:var(--club-second);font-variant-numeric:tabular-nums;min-width:65px;text-align:center;overflow-wrap:anywhere}.razzie-score small{display:block;font:500 12px/1.5 system-ui,sans-serif;color:var(--club-muted)}
+.home-razzies li>div{min-width:0}.home-razzies li b{display:block;font-size:14px;line-height:1.5;overflow-wrap:anywhere}.home-razzies li div>span{display:block;font-size:12px;line-height:1.5;color:var(--club-muted)}
+.home-personal-bests{margin:20px 0;padding:15px 12px;border:1px solid var(--club-accent);border-top:4px solid var(--club-accent);border-radius:4px;background:var(--club-raised);color:var(--club-text)}
+.home-personal-bests h3{margin:0 0 14px;font:500 30px/1.15 Impact,'Arial Black',system-ui,sans-serif;color:var(--club-accent)}
+.home-personal-bests h4{font:650 14px/1.4 system-ui,sans-serif;margin:15px 0 8px;overflow-wrap:anywhere}
+.personal-best-reels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.personal-best-reels>div{display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:9px;min-width:0;text-align:center;padding:13px 7px;border:1px solid var(--club-line);border-block:2px solid var(--club-accent);border-radius:5px;background:linear-gradient(var(--club-soft),var(--club-panel) 25%,var(--club-panel) 75%,var(--club-soft))}
+.personal-best-reels span{font:650 14px/1.35 system-ui,sans-serif}.personal-best-reels strong{font:800 clamp(32px,10vw,46px)/1.1 system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--club-accent);max-width:100%;overflow-wrap:anywhere}
+.personal-best-reels small{font:400 12px/1.5 system-ui,sans-serif;color:var(--club-muted)}
+.home-personal-bests .personal-best-note{font:400 12px/1.5 system-ui,sans-serif;color:var(--club-muted);margin:14px 0 0}
+
+/* Amber's full-cabinet pass: bright physical reel drums and slow marquee chase. */
+html[data-art=midnight] .yahtz-home .home-slot-machine{
+ --reel-paper:#f6e8c9;--reel-ink:#241b35;--reel-pink:#9b285c;
+ padding:15px 27px 0 15px;border:3px solid #f2c76b;border-radius:32px 32px 12px 12px;
+ background:linear-gradient(120deg,#6b285d,#352447 48%,#63264f);
+ box-shadow:inset 0 0 0 4px #25182f,inset 0 0 0 7px #ed79a7,0 6px 0 #080e1b,0 0 20px #ed79a733;
+}
+.yahtz-home .home-slot-machine::before{content:'';position:absolute;inset:8px;border:2px dotted #ffdf8e;border-radius:24px 24px 6px 6px;pointer-events:none}
+.yahtz-home .home-slot-machine .slot-machine-top{
+ position:relative;min-height:99px;margin-bottom:12px;padding:17px 10px;
+ border:2px solid #f2c76b;border-radius:19px 19px 5px 5px;background:#111122;
+ box-shadow:inset 0 0 0 4px #542b54,0 0 12px #f2c76b35;
+}
+.yahtz-home .home-slot-machine .slot-machine-top::before{
+ content:'';position:absolute;inset:5px;border-radius:13px 13px 2px 2px;pointer-events:none;
+ background:radial-gradient(circle,#ffe6a1 2px,#f2c76b99 3px,transparent 4px) 0 0/18px 9px repeat-x,
+ radial-gradient(circle,#ed79a7 2px,transparent 4px) 9px 100%/18px 9px repeat-x;
+ animation:slot-bulb-chase 6s linear infinite;
+}
+.yahtz-home .home-slot-machine .slot-machine-top h2{font-size:clamp(26px,6.8vw,37px);color:#ffe5a0;text-shadow:2px 2px 0 #9b285c,0 0 12px #f2c76b44}
+.yahtz-home .home-slot-machine .slot-marquee-kicker{color:#f2c9df;font-size:10px}
+.yahtz-home .home-slot-machine .slot-marquee-star{color:#ff89bd;text-shadow:0 0 13px #ed79a777}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{padding:8px;gap:10px;border:2px solid #f2c76b;background:#100f20;box-shadow:inset 0 5px 8px #0008}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card{
+ min-height:173px;padding:22px 8px 15px;color:var(--reel-ink);border:2px solid #c59e59;border-block:5px solid #ad8545;
+ background:linear-gradient(#ad9b86,#f6e8c9 19%,#fff5db 48%,#f6e8c9 81%,#ad9b86)!important;
+ box-shadow:inset 0 8px 10px #241b3540,inset 0 -8px 10px #241b3540,0 2px 0 #000;
+}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card strong{color:var(--reel-ink);font-size:clamp(20px,5.2vw,28px);text-shadow:0 1px 0 #fff}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card small{color:#51415d;font-size:13px}
+.yahtz-home .home-slot-machine .slot-mode-symbol{width:54px;height:57px;color:#775019;filter:drop-shadow(0 2px 0 #fff9)}
+.yahtz-home .home-slot-machine .slot-mode-local .slot-mode-symbol,.yahtz-home .home-slot-machine .slot-mode-online .slot-mode-symbol{color:var(--reel-pink)}
+.yahtz-home .home-slot-machine .home-card-number{color:#65482a;font-weight:750}
+.yahtz-home .home-slot-machine .home-card-arrow{color:var(--reel-pink)}
+.yahtz-home .home-slot-machine .slot-cabinet-lever{right:7px;top:135px;width:10px;height:115px;background:#a498ae;box-shadow:inset 3px 0 0 #e7ddea,2px 0 0 #100f20}
+.yahtz-home .home-slot-machine .slot-cabinet-lever i{width:19px;height:24px;left:-5px;background:#ed79a7;box-shadow:inset 3px 3px 0 #ffc4de,0 0 10px #ed79a755,0 3px 0 #100f20}
+.yahtz-home .home-slot-machine .slot-machine-base{height:47px;color:#f2c76b}
+.yahtz-home .home-slot-machine .slot-machine-base>span{color:#f2c76b;font-size:22px}
+.yahtz-home .home-slot-machine .slot-payout-tray{height:22px;border-color:#b6a8b8;border-top-color:#0c0b18;background:#161322;box-shadow:0 3px 0 #e1d1d4}
+@keyframes slot-bulb-chase{to{background-position:36px 0,-27px 100%}}
+@media(hover:hover){html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card:hover{border-color:#ed79a7;box-shadow:inset 0 8px 10px #241b3540,inset 0 -8px 10px #241b3540,0 0 0 2px #ed79a7}}
+@media(max-width:340px){
+ html[data-art=midnight] .yahtz-home .home-slot-machine{padding:12px 23px 0 10px}
+ html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{padding:5px;gap:7px}
+ html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card{padding-inline:5px;min-height:180px}
+ .yahtz-home .home-slot-machine .slot-machine-top{padding-inline:5px}
+}
+@media(prefers-reduced-motion:reduce){.yahtz-home .home-slot-machine .slot-machine-top::before{animation:none}}

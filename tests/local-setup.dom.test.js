@@ -1,0 +1,31 @@
+// @vitest-environment jsdom
+import {it,expect,vi} from 'vitest';
+vi.mock('../src/core-store.js',()=>({saveCore:vi.fn(async()=>{}),loadCore:vi.fn(async()=>null),listCore:vi.fn(async()=>[])}));
+vi.mock('../src/multiplayer/client.js',()=>({auth:null,configured:false,webUrl:'https://example.test/'}));
+vi.mock('../src/dice/camera-panel.js',()=>({disconnectCamera:vi.fn(async()=>{})}));
+import {saveCore} from '../src/core-store.js';
+it('keeps solo setup simple and submits advanced choices while collapsed without losing names or profiles',async()=>{
+ vi.stubEnv('MODE','ios-test');localStorage.clear();
+ HTMLDialogElement.prototype.showModal=function(){this.open=true;};HTMLDialogElement.prototype.close=function(){this.open=false;};
+ await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.yahtz-home')).not.toBeNull());
+ document.querySelector('[data-action="home-solo"]').click();
+ const form=document.querySelector('#createCore'),options=form.querySelector('.setup-options');
+ expect(options.open).toBe(false);expect(document.querySelector('.setup-online-options').open).toBe(false);
+ expect(form.querySelectorAll('#nameInputs input')).toHaveLength(1);
+ expect(form.querySelector('.setup-start').closest('details')).toBeNull();
+ expect(form.querySelector('[name=player]').closest('details')).toBeNull();
+ form.querySelector('[name=player]').value='Amber';options.open=true;
+ form.querySelector('[name=player0Blurb]').value='Neon dice fan';
+ const count=form.querySelector('#playerCount');count.value='2';count.dispatchEvent(new Event('change',{bubbles:true}));
+ expect(form.querySelector('[name=player]').value).toBe('Amber');expect(form.querySelector('[name=player0Blurb]').value).toBe('Neon dice fan');
+ expect(document.querySelector('.setup-title').textContent).toBe('Local game');
+ form.querySelectorAll('[name=player]')[1].value='Dan';
+ const mode=form.querySelector('[name=mode]');mode.value='competition';mode.dispatchEvent(new Event('change',{bubbles:true}));
+ const totals=form.querySelector('[name=hideTotals]');totals.checked=true;totals.dispatchEvent(new Event('change',{bubbles:true}));
+ expect(form.querySelector('[data-setup-summary]').textContent).toContain('Totals hidden');options.open=false;
+ form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+ await vi.waitFor(()=>expect(document.querySelector('.phone-scorecard')).not.toBeNull());
+ const game=saveCore.mock.calls.at(-1)[0];
+ expect(game.players.map(p=>p.name)).toEqual(['Amber','Dan']);expect(game.mode).toBe('competition');
+ expect(game.rules.version).toBe(2);expect(game.source).toBe('manual');expect(game.hideTotals).toBe(true);
+});

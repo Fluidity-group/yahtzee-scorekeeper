@@ -1,0 +1,197 @@
+{
+  "assumptions": {
+    "die_mm": 16.0,
+    "nominal_span_mm": 290.0,
+    "model": "ideal level cube; no occlusion, distortion, focus or recognition"
+  },
+  "height_rows": [
+    {
+      "lens_height_mm": 40,
+      "centre_top_elevation_deg": 9.398232995926023,
+      "far_top_elevation_deg": 4.730938623779238,
+      "centre_top_foreshortened_depth_mm": 2.6127285798404682,
+      "floor_centreline_required_vertical_fov_deg": 82.14668669802178
+    },
+    {
+      "lens_height_mm": 75,
+      "centre_top_elevation_deg": 22.14123812013435,
+      "far_top_elevation_deg": 11.499778629857243,
+      "centre_top_foreshortened_depth_mm": 6.030256420056672,
+      "floor_centreline_required_vertical_fov_deg": 75.49983323344743
+    },
+    {
+      "lens_height_mm": 100,
+      "centre_top_elevation_deg": 30.084156558775202,
+      "far_top_elevation_deg": 16.153932849100894,
+      "centre_top_foreshortened_depth_mm": 8.020343778123891,
+      "floor_centreline_required_vertical_fov_deg": 70.97439396243132
+    },
+    {
+      "lens_height_mm": 120,
+      "centre_top_elevation_deg": 35.64965637157622,
+      "far_top_elevation_deg": 19.728883988274927,
+      "centre_top_foreshortened_depth_mm": 9.325239027068896,
+      "floor_centreline_required_vertical_fov_deg": 67.52056560289688
+    },
+    {
+      "lens_height_mm": 150,
+      "centre_top_elevation_deg": 42.74219601132757,
+      "far_top_elevation_deg": 24.800193378565897,
+      "centre_top_foreshortened_depth_mm": 10.85921152993846,
+      "floor_centreline_required_vertical_fov_deg": 62.65012421993012
+    },
+    {
+      "lens_height_mm": 180,
+      "centre_top_elevation_deg": 48.518611465337194,
+      "far_top_elevation_deg": 29.48890781227256,
+      "centre_top_foreshortened_depth_mm": 11.98673473657613,
+      "floor_centreline_required_vertical_fov_deg": 58.17255342332689
+    }
+  ],
+  "coverage": [
+    {
+      "height_mm": 40,
+      "cameras": 1,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 0.9033432191965489,
+      "point_in_two_fovs_fraction": 0.0,
+      "point_in_fov_at_30deg_fraction": 0.006605554057697492
+    },
+    {
+      "height_mm": 40,
+      "cameras": 2,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 0.8066864383930978,
+      "point_in_fov_at_30deg_fraction": 0.013211108115394984
+    },
+    {
+      "height_mm": 40,
+      "cameras": 4,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.02642221623078997
+    },
+    {
+      "height_mm": 40,
+      "cameras": 8,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.0477217578862227
+    },
+    {
+      "height_mm": 100,
+      "cameras": 1,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 0.892423833917498,
+      "point_in_two_fovs_fraction": 0.0,
+      "point_in_fov_at_30deg_fraction": 0.2895659207333513
+    },
+    {
+      "height_mm": 100,
+      "cameras": 2,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 0.7848476678349959,
+      "point_in_fov_at_30deg_fraction": 0.5791318414667026
+    },
+    {
+      "height_mm": 100,
+      "cameras": 4,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.7101644648153141
+    },
+    {
+      "height_mm": 100,
+      "cameras": 8,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.9366406039363709
+    },
+    {
+      "height_mm": 120,
+      "cameras": 1,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 0.892423833917498,
+      "point_in_two_fovs_fraction": 0.0,
+      "point_in_fov_at_30deg_fraction": 0.4675114586141817
+    },
+    {
+      "height_mm": 120,
+      "cameras": 2,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 0.7848476678349959,
+      "point_in_fov_at_30deg_fraction": 0.7632785117282286
+    },
+    {
+      "height_mm": 120,
+      "cameras": 4,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.9560528444324616
+    },
+    {
+      "height_mm": 120,
+      "cameras": 8,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 0.998651927743327
+    },
+    {
+      "height_mm": 150,
+      "cameras": 1,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 0.905230520355891,
+      "point_in_two_fovs_fraction": 0.0,
+      "point_in_fov_at_30deg_fraction": 0.7367214882717714
+    },
+    {
+      "height_mm": 150,
+      "cameras": 2,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 0.8104610407117822,
+      "point_in_fov_at_30deg_fraction": 0.8104610407117822
+    },
+    {
+      "height_mm": 150,
+      "cameras": 4,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 1.0
+    },
+    {
+      "height_mm": 150,
+      "cameras": 8,
+      "sample_points": 14836,
+      "point_in_one_fov_fraction": 1.0,
+      "point_in_two_fovs_fraction": 1.0,
+      "point_in_fov_at_30deg_fraction": 1.0
+    }
+  ],
+  "centre_height_for_30deg_mm": 99.71578903249574,
+  "centre_height_for_45deg_mm": 161.0,
+  "far_height_for_30deg_mm": 183.43157806499147,
+  "overhead_lens_height_min_290_floor_mm": 278.54240841081906,
+  "overhead_lens_height_min_290_die_top_mm": 294.54240841081906,
+  "overhead_lens_height_min_310_die_top_mm": 313.7522296805307,
+  "dice_orientation": {
+    "proper_rotations": 24,
+    "known_map_ordered_1_2_top": [
+      3
+    ],
+    "unknown_handedness_possible_tops": [
+      3,
+      4
+    ]
+  }
+}

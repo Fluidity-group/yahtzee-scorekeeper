@@ -1,0 +1,22 @@
+{
+  "appId": "com.fluiditygroup.diceclubhouse.dev",
+  "appName": "Dice Clubhouse Dev",
+  "webDir": "dist-native",
+  "android": {
+    "backgroundColor": "#0b141c"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "disable"
+    }
+  },
+  "ios": {
+    "backgroundColor": "#0b141c",
+    "includePlugins": [
+      "@capacitor/app",
+      "@capacitor/push-notifications",
+      "@capacitor/status-bar"
+    ],
+    "contentInset": "never"
+  }
+}

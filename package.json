@@ -9,18 +9,37 @@
     "preview": "vite preview",
     "test": "vitest",
     "icons": "node scripts/gen-icons.mjs",
-    "gen-sounds": "node scripts/gen-sounds.mjs"
+    "gen-sounds": "node scripts/gen-sounds.mjs",
+    "build:native": "vite build --mode native --outDir dist-native",
+    "android:sync": "npm run build:native && cap sync android",
+    "build:rooms": "node scripts/build-room-function.mjs",
+    "build:native:evaluation": "vite build --mode native-evaluation --outDir dist-native",
+    "android:sync:evaluation": "npm run build:native:evaluation && cap sync android",
+    "ios:check": "node scripts/prepare-ios-test.mjs --check",
+    "ios:sync": "node scripts/prepare-ios-test.mjs",
+    "ios:open": "cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
-    "vite": "^5.4.0",
-    "vite-plugin-pwa": "^0.20.0",
-    "vitest": "^2.1.0"
+    "supabase": "^2.117.0",
+    "vite": "7.3.7",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "4.1.11"
   },
   "dependencies": {
+    "@capacitor-community/bluetooth-le": "8.3.0",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/push-notifications": "8.1.3",
+    "@capacitor/status-bar": "8.0.4",
+    "@supabase/supabase-js": "^2.116.0",
     "canvas-confetti": "^1.9.4",
     "chart.js": "^4.5.1",
-    "dexie": "^4.0.0"
+    "dexie": "^4.0.0",
+    "qrcode": "^1.5.4"
   }
 }

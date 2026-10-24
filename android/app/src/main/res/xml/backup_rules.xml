@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content><exclude domain="sharedpref" path="c121-secrets.xml"/><exclude domain="file" path="c121-frames/"/></full-backup-content>
