@@ -4,7 +4,7 @@
 
 Use branch `codex/amber-ui-lab`. On the ROG its active checkout is `C:/Codex/Yahtzee Game/artifacts/sw054/source`. The old `C:/Codex/Yahtzee Game` checkout is dirty and retained; its documentation routes here. Do not reset it or copy its old app files over the review branch. The SW052 worktree and Mac build are historical native candidates, not this UI runtime.
 
-Latest owner decision: test Amber's version separately, then promote or hand to Dan after acceptance. Once a confident build is accepted, Dan will update the Pixel from the ROG and then provide Amber the Mac/Xcode iPhone update instructions. This is a future owner-led rollout sequence; no automatic installation is currently requested. Source is pushed to the review branch; default `master` remains e599b71. No new native install, public web/backend deployment or live tournament command has been performed. Existing games/accounts/history must be preserved.
+Latest owner decision: test Amber's version separately, then promote or hand to Dan after acceptance. Owner subsequently explicitly authorized both phone updates, Pixel first. SW064 records the reviewed Pixel APK installed and launched from the ROG on24October; iPhone is next and requires fresh Mac/device/signing checks. Source is pushed to the review branch; default `master` remains e599b71. Pixel native update is recorded in SW064; no new iPhone install, public web/backend deployment or live tournament command has been performed. Existing games/accounts/history must be preserved.
 
 ## Run and test surfaces
 
@@ -37,3 +37,5 @@ No current full visual/touch acceptance: desktop observation approval timed out,
 Read AGENTS.md, docs/status.md and project-memory.md first; then only the needed domain contract/skill. Six project skills under `.agents/skills` are reusable workflows, not live device or deployment evidence. Node24 is required; older Node22/legacy README instructions are historical. Keep source and audit evidence distinct, report remaining gates, and obtain task-specific authorization for any future main/native/public deployment.
 
 Native owner instructions are in 2026-10-24-native-owner-rollout.md. No Supabase functions/schema/RLS/migrations were deployed for the UI work; server/supabase source has no diff from recorded phone source1283973.
+
+Latest Pixel runtime: SW064 APK90465fe14bae6c6dd922b19821758dff10fb42eb4747d7d52986587d26647640, source a73676b,46assets matched, same certificate/UID/first-install date, install-r Success and MainActivity launch Status ok. User account/tournament/visual acceptance pending. iPhone unchanged.
