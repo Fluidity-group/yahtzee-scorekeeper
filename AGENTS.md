@@ -1,6 +1,6 @@
 # Yahtzee engineering entry point
 
-Current SW066 core integration: use `C:/Codex/Yahtzee Game/artifacts/sw066/source` and read `docs/handovers/2026-10-24-core-manual-integration.md` plus `docs/status.md`. Owner requests core promotion and lead-architect review. Manual scoring/local/online tournaments on Android and iOS take priority; camera and voice are deferred until the manual core works. Both platform versions run per owner; complete cross-phone gameplay remains unverified. Preserve the dirty root checkout and existing accounts/tables. Older separate-sample/main-unchanged notes below are historical; SW066 records actual qualification/promotion.
+Current SW066 core integration: on Dan's Windows workstation only, the working source is at `C:/Codex/Yahtzee Game/artifacts/sw066/source`; agents on other machines or in the cloud work from this repository. Read `docs/handovers/2026-10-24-core-manual-integration.md` plus `docs/status.md`. Owner requests core promotion and lead-architect review. Manual scoring/local/online tournaments on Android and iOS take priority; camera and voice are deferred until the manual core works. Both platform versions run per owner; complete cross-phone gameplay remains unverified. Preserve the dirty root checkout and existing accounts/tables. Older separate-sample/main-unchanged notes below are historical; SW066 records actual qualification/promotion.
 
 Current YAHTZ UI/sample continuity: read docs/handovers/2026-10-24-amber-ui-review.md and docs/status.md before assuming a native, root-checkout or main deployment state.
 
@@ -42,3 +42,13 @@ Live comedic commentary, ElevenLabs Android audio and adaptive humor tasks use `
 ## Reusable workflows
 
 Repository skills live in `.agents/skills/`: `product-change`, `bug-investigation`, `release-qualification`, `hardware-validation`, `manual-multiplayer`, `live-commentary`. If this session does not list them, read the relevant `SKILL.md` directly. Use `docs/engineering-workflow.md` for records and evidence conventions.
+
+## Fluidity rules (all agents and collaborators)
+
+- Work on a branch, never directly on the default branch. Amber's branches start `amber/`; agent branches start `codex/` or `claude/`. Open a pull request, run the available checks and report what was and wasn't tested. Amber may merge her own pull requests in this repo; agents don't approve or merge their own work.
+- No secrets, keys, passwords, tokens or public IP addresses in the repository, prompts or logs. If you find one, stop and report it without copying it.
+- Never weaken TLS, certificate pinning or authentication to make something work.
+- Don't restart, reflash or reconfigure household devices or services unless a person asks for that specific operation.
+- No client data (for example school or pupil data) in this repository or its tests; use synthetic data.
+- Propose risky or irreversible actions and wait for a person's OK.
+- When stopping mid-task, leave a short handover: branch, what changed, checks run, what's left.
