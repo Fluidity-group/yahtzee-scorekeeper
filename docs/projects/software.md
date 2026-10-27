@@ -1,5 +1,7 @@
 # Software project control
 
+27 October SW068: repository-wide architecture/phone-readiness review completed against published d3d8037 (application identical to SW066/SW067). Clean Node24.15.0 gate1,192passed/13optional camera skips/all builds/source stable; fresh isolated PostgreSQL24+22checks passed. Three synthetic probes expose account-session invalidation, recovery-only stale-write and manual-push-flag gaps; fixes and full physical two-phone acceptance remain open. Skills/memory/architecture routing updated; no runtime/deployment change. See ../plans/SW-068-architecture-phone-readiness.md for the review and prioritized acceptance matrix. The active fg-dev source is this repository, not a Windows-only path.
+
 24 October SW067 both-phone update completed under explicit owner authorization. Integrated source06db45a/applicationdb094a4 installed and launched on Pixel11ProXL and iPhone17Pro; all46public assets match. Pixel installed APK f95f3e1114ef97bf42e26364486df90363dbb42e4d9e59402809aca7a2f28de9 read back exactly, same signer/UID10531/first-install date. iPhone same-ID/team signed Xcode build/profile/assets verified and devicectl install/launch succeeded; data-container metadata path changed, private contents not read. No uninstall/data clear or backend/DB/public web deployment/table command. iOS profile expires28October2026 at14:09America/Chicago. New-build account/tournament return and full manual game acceptance remain pending owner observation. Camera/voice stay deferred. See integrated docs/releases/SW-067-core-manual-phone-update.md and docs/plans/SW-067-core-manual-phone-update.md. This supersedes older native-update-pending notes below.
 
 24 October SW066 publication completed: owner explicitly authorized GitHub master publication. Normal fast-forward push e599b71 → fae7670358a7445a4d6de34140c9d46f402194cb succeeded and remote tip was independently read back. This supersedes the earlier remote-approval-pending statements below. Subsequent publication-record commit changes documentation only; reviewed application code, clean 1,192-test gate and native candidate bytes remain unchanged. No new handset installation or public web/backend/database deployment. Updated iOS signing/build and complete two-phone manual-game acceptance remain open; camera/voice deferred.
@@ -193,7 +195,7 @@ Preserve versioned rules and legacy saves. Hosted authority must check membershi
 
 ## Gate status
 
-G0 in progress: substantial uncommitted baseline; see `../baseline-review.md`. G1/G2 have component evidence but no aggregate pass recorded. G3 blocked by missing real-device acceptance. G4/G5 not started. Historical tests do not qualify the current checkout.
+The integrated source baseline is now committed/published (SW066/SW067; SW068 reviewed d3d8037); the older uncommitted-baseline inventory is historical. G0/G1/G2 retain component evidence without a new aggregate gate sign-off in this review. SW068 adds fresh clean automated evidence but exposes three open findings. G3 remains open for the exact manual Android/iOS played-game matrix. Camera/GoDice/Pi/hardware acceptance is separate and deferred from the current manual test. G4/G5 are not passed. Source verification, installation and physical acceptance remain separate.
 
 | ID | Priority / state | Next deliverable and closure |
 |---|---|---|

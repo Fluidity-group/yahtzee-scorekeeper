@@ -5,7 +5,7 @@ description: Design, implement or refine Dice Clubhouse live comedic score comme
 
 # Live comedic commentary
 
-Read `docs/status.md`, `docs/project-memory.md` and `docs/handovers/2026-10-14-live-ai-commentary.md`. Use `docs/plans/SW-021-live-comedic-commentary.md` for architecture/qualification and `docs/plans/SW-021-adaptive-humor-design.md` for settings/memory. The handover records planning, not a working current-game integration. Inspect source before claiming runtime behavior.
+Read `docs/status.md`, `docs/project-memory.md` and `docs/handovers/2026-10-14-live-ai-commentary.md`. SW021 records original intent/design; SW026–SW036 record later integrated server/native implementation, installations and unresolved physical latency/listening gates. Do not call the whole feature unimplemented based on the older handover, or treat historical installation as current acceptance. Commentary is deferred in the manual phone baseline. Inspect source before claiming runtime behavior.
 
 ## Product intent
 
@@ -24,6 +24,6 @@ Read `docs/status.md`, `docs/project-memory.md` and `docs/handovers/2026-10-14-l
 
 ## Execution and evidence
 
-Start with synthetic repeated-game replay/settings/memory contracts, then voice audition and an authenticated Android event-to-audio slice. `docs/plans/SW-021-commentary-expert-brief.md` supports an expert task when authorized; this skill grants no standing delegation, paid-provider, messaging or deployment authorization. Preserve concurrent work and existing games. Maintain SW-021/status evidence and distinguish authored samples, synthetic tests, provider measurements and physical listening acceptance.
+When the owner resumes this workstream, start from the existing implementation and unresolved measured failures; reuse synthetic replay/settings/memory tests before deciding whether a new audition or Android slice is needed. `docs/plans/SW-021-commentary-expert-brief.md` supports an expert task when authorized; this skill grants no standing delegation, paid-provider, messaging or deployment authorization. Preserve concurrent work and existing games. Maintain the current SW task/status evidence and distinguish authored samples, synthetic tests, provider measurements and physical listening acceptance.
 
-Current task routing: resolve SW066/core manual integration from docs/status.md and docs/handovers/2026-10-24-core-manual-integration.md. Manual scoring and tournament dependability on Android/iOS is the owner priority; camera and voice work stays deferred until the owner resumes it after manual-core acceptance. Preserve prior source/device evidence; a running app is not complete-game acceptance. Keep these repository skills and current memory/handover routing synchronized when promoting a build.
+Current routing: read docs/status.md and docs/project-memory.md for the active revision, host checkout and task; SW066/SW067 establish the integrated manual baseline, and docs/plans/SW-068-architecture-phone-readiness.md records the latest review and open findings. Windows paths in older handovers are workstation-specific. Manual Android/iOS reliability is the owner priority; camera, voice and push remain deferred. Preserve accounts/tables and distinguish automated verification, installation and complete-game acceptance.
