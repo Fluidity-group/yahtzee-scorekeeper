@@ -4,6 +4,7 @@ import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midn
 import {loadHomeAccount,watchHomeAccount} from './multiplayer/home-account.js';
 import {renderPeopleDialog,renderTrophyDialog,renderPlayerProfile} from './ui/home-account.js';
 import {socialLandingView} from './multiplayer/social-links.js';
+import {connectSocial} from './multiplayer/social-ui.js';
 import './styles.css';
 import './clubhouse.css';
 import './prototype.css';
@@ -255,6 +256,7 @@ function render(){
  applyScorecardSize(root);
  if(dialog.open&&dialog.dataset.tournamentMenu==='true')dialog.close();
  if(view==='welcome')return;
+ if(view==='online')return; // The multiplayer session owns this surface, including late save cleanup.
  if(view==='home'){showHome();return;}
  if(!game){newScreen();return;}
  root.classList.add('playing');
@@ -455,7 +457,7 @@ async function openMultiplayer(joinCode='',landing='home'){
   greeting:startHostedWelcome,
   commentary(){return openCommentary();},
   table(room,userId,connected){if(!room){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;}else{hostedCommentaryActive=true;onlineRoom=room;onlineUserId=userId;onlineConnected=connected;syncHostedCommentary();}},
-  account(user){import('./multiplayer/social-ui.js').then(m=>m.connectSocial(user)).catch(()=>{});if(!user||onlineUserId&&user.id!==onlineUserId){hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
+  account(user){void connectSocial(user).catch(()=>{});if(!user||onlineUserId&&user.id!==onlineUserId){view='online';game=localGame;dialog.close();pending=null;reportedFace=0;phoneCleanup();cancelPulse(root);clearCelebration();hostedCommentaryActive=false;resetHostedCommentary();onlineRoom=null;onlineUserId=null;onlineConnected=false;}},
   exit(){hostedCommentaryActive=false;resetHostedCommentary();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;showHome();},
   game(room,userId,connected,changed){
    hostedCommentaryActive=true;if(!pendingWelcome&&!welcomeGate)view='game';
