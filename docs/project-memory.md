@@ -8,7 +8,7 @@ Updated 27 October 2026 by SW069. This file holds current intent and durable con
 - Published baseline on 27 October: master d3d8037. Application code is identical to qualified SW066 db094a4 and SW067 installation source 06db45a. The subsequent commits record publication/phone updates and repository rules. Work on a scoped branch; never push to the default branch or merge/approve agent work.
 - On fg-dev use the repository at /srv/yahtzee/main. The Windows integration path C:/Codex/Yahtzee Game/artifacts/sw066/source applies only on that workstation. Its older dirty root and previous Amber sample remain preserved; do not copy old app files over current source. Read the core integration handover with its latest dated override.
 - Dependable manual scoring, solo/shared-phone games, authenticated online games and tournament continuity on Android/iOS come first. Camera, live voice, push delivery, shared venues/synchronized events and generated/account-synced portraits remain deferred. Historical commentary implementations/tests do not authorize reactivation or paid usage.
-- SW069 implements account-session invalidation (including dialogs and late results), immutable conflict-aware recovery journals, and forced push=false in public-only manual preparation. Focused regression checks passed; full final qualification is pending. No device or live service changed.
+- SW069 implements account-session invalidation (including dialogs and late results), immutable conflict-aware recovery journals, and forced push=false in public-only manual preparation. Clean b25b6d9 Node24.15.0 qualification passed: 1,216 tests/13 optional camera skips/all configured builds/source stable; 54 focused checks passed. No device or live service changed.
 
 ## Latest recorded evidence
 
