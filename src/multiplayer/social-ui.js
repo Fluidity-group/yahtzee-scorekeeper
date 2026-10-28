@@ -9,7 +9,7 @@ function frame(){
  if(dialog?.isConnected)return;
  dialog=document.createElement('dialog');dialog.className='social-dialog';dialog.setAttribute('aria-label','Tournament invitations and play requests');
  document.body.append(dialog);dialog.addEventListener('click',onClick);dialog.addEventListener('submit',onSubmit);
- dialog.addEventListener('close',()=>{activeRoom=null;});
+ dialog.addEventListener('close',()=>{if(!dialog.open)activeRoom=null;});
 }
 function render(){
  if(!dialog?.open||!inbox)return;
@@ -29,35 +29,37 @@ export async function refreshSocial(){
 export async function connectSocial(user){
  if(user?.id===userId)return;
  epoch++;stopWatch?.();stopWatch=null;userId=user?.id;inbox=null;known=new Set();clearTimeout(refreshTimer);
- if(!userId){dialog?.close();document.querySelector('.social-banner')?.remove();return;}
+ activeRoom=null;busy=false;dialog?.close();dialog?.replaceChildren();document.querySelector('.social-banner')?.remove();
+ if(!userId)return;
  const refresh=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{refreshSocial().catch(()=>{});},120);};
  stopWatch=watchSocial(refresh);await refreshSocial();syncNativeAccount(user).catch(()=>{});
 }
 export async function openSocial(room=null){
- const lookup=await auth?.getSession();const user=lookup?.data?.session?.user;
+ const lookupEpoch=epoch,lookup=await auth?.getSession();if(lookupEpoch!==epoch)return;const user=lookup?.data?.session?.user;
  if(!user)throw Error('Sign in to online games to open invitations.');
- await connectSocial(user);document.querySelector('.social-banner')?.remove();frame();activeRoom=room;dialog.showModal();dialog.innerHTML='<p data-social-status role="status">Opening tournament invitations…</p>';await refreshSocial();render();
+ const connecting=connectSocial(user),ticket=epoch;await connecting;if(ticket!==epoch)return;
+ document.querySelector('.social-banner')?.remove();frame();activeRoom=room;dialog.showModal();dialog.innerHTML='<p data-social-status role="status">Opening tournament invitations…</p>';await refreshSocial();if(ticket===epoch)render();
 }
 async function onClick(event){
  const button=event.target.closest('[data-social]');if(!button||busy)return;const action=button.dataset.social;
  if(action==='close'){dialog.close();return;}
  if(action==='open'){dialog.close();navigate(button.dataset.code);return;}
- busy=true;button.disabled=true;
+ busy=true;button.disabled=true;const ticket=epoch;
  try{
-  if(action==='play'){await requestSocial('play-create',{id:crypto.randomUUID(),code:activeRoom.code,gameId:activeRoom.game?.id??null,recipientId:button.dataset.user});await refreshSocial();render();status('Request saved. Their response will appear here; delivery depends on their phone alerts.');}
+  if(action==='play'){await requestSocial('play-create',{id:crypto.randomUUID(),code:activeRoom.code,gameId:activeRoom.game?.id??null,recipientId:button.dataset.user});if(ticket!==epoch)return;await refreshSocial();if(ticket!==epoch)return;render();status('Request saved. Their response will appear here; delivery depends on their phone alerts.');}
   else if(action==='share'){const link=new URL(webUrl);link.searchParams.set('join',activeRoom.code);if(navigator.share)await navigator.share({title:activeRoom.tournament.name,url:link.href});else{await navigator.clipboard.writeText(link.href);status('Tournament link copied.');}}
-  else if(action==='enable'){await enablePhoneNotifications();status('Registering this phone…');}
-  else if(action==='disable'){await disablePhoneNotifications();status('Phone alerts disabled on this installation.');}
-  else if(action==='refresh'){await refreshSocial();render();}
-  else {const data=await requestSocial(action,{id:button.dataset.id});await refreshSocial();render();if(action==='play-ready'){status('You’re marked ready. The tournament remains in its current state.');}}
- }catch(error){status(error.message);}finally{busy=false;if(button.isConnected)button.disabled=false;}
+  else if(action==='enable'){await enablePhoneNotifications();if(ticket===epoch)status('Registering this phone…');}
+  else if(action==='disable'){await disablePhoneNotifications();if(ticket===epoch)status('Phone alerts disabled on this installation.');}
+  else if(action==='refresh'){await refreshSocial();if(ticket===epoch)render();}
+  else {await requestSocial(action,{id:button.dataset.id});if(ticket!==epoch)return;await refreshSocial();if(ticket!==epoch)return;render();if(action==='play-ready'){status('You’re marked ready. The tournament remains in its current state.');}}
+ }catch(error){if(ticket===epoch)status(error.message);}finally{if(ticket===epoch){busy=false;if(button.isConnected)button.disabled=false;}}
 }
 async function onSubmit(event){
  const form=event.target.closest('[data-social-form]');if(!form)return;event.preventDefault();if(busy)return;
- busy=true;const data=new FormData(form);const submit=form.querySelector('button[type=submit]');submit.disabled=true;
- try{if(form.dataset.socialForm==='invite'){await requestSocial('invite-create',{id:crypto.randomUUID(),code:activeRoom.code,email:data.get('email')});await refreshSocial();render();status('Invitation saved. Share the tournament link if they’re not using the app yet.');}
- else{const result=await requestSocial('invite-accept',{id:form.dataset.id,name:data.get('name')});dialog.close();navigate(result.code);}}
- catch(error){status(error.message);}finally{busy=false;if(submit.isConnected)submit.disabled=false;}
+ busy=true;const ticket=epoch,data=new FormData(form);const submit=form.querySelector('button[type=submit]');submit.disabled=true;
+ try{if(form.dataset.socialForm==='invite'){await requestSocial('invite-create',{id:crypto.randomUUID(),code:activeRoom.code,email:data.get('email')});if(ticket!==epoch)return;await refreshSocial();if(ticket!==epoch)return;render();status('Invitation saved. Share the tournament link if they’re not using the app yet.');}
+ else{const result=await requestSocial('invite-accept',{id:form.dataset.id,name:data.get('name')});if(ticket!==epoch)return;dialog.close();navigate(result.code);}}
+ catch(error){if(ticket===epoch)status(error.message);}finally{if(ticket===epoch){busy=false;if(submit.isConnected)submit.disabled=false;}}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshSocial().catch(()=>{});});
 document.addEventListener('clubhouse-social-changed',()=>refreshSocial().catch(()=>{}));

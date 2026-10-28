@@ -11,7 +11,7 @@ import {renderOpenTournaments} from './tournament-list.js';
 
 const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let root,callbacks,user,room=null,timer,screen='home',working=false,connected=false,email='',invite='',displayName='';
-let generation=0;
+let generation=0,authGeneration=0;
 let landingView='home';
 let onlineOpen=false,silentGreetingHydration=true;
 const current=ticket=>onlineOpen&&ticket===generation;
@@ -104,7 +104,8 @@ async function rooms(){
  const ticket=generation,data=await requestRoom({operation:'list'});if(!current(ticket))return;screen='rooms';
  shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Your tables &amp; tournaments.</h1>${data.rooms.length?data.rooms.map(r=>`<button class="history-row" data-mp="resume" data-code="${esc(r.code)}"><strong>${esc(r.tournament?.name||r.members.map(m=>m.name).join(', '))}</strong><span>${esc(MODES[r.mode].name)} · ${esc(r.tournament?.status||r.status)}${r.tournament?` · Game ${r.gameSequence??1} of ${r.tournament.gameCount}`:''}</span>${r.tournament?`<small>${esc(r.members.map(m=>m.name).join(' · '))} · Progress saved</small>`:''}</button>`).join(''):'<p class="core-muted">Your hosted and joined games will appear here.</p>'}`);
 }
-export function leaveOnline(){silentGreetingHydration=true;callbacks?.table?.(null);stopAuthWatching?.();stopAuthWatching=null;generation++;onlineOpen=false;working=false;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;standingsKey='';standingsPending=null;}
+function invalidateTable(){silentGreetingHydration=true;generation++;working=false;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;standingsKey='';standingsPending=null;callbacks?.table?.(null);}
+export function leaveOnline(){authGeneration++;stopAuthWatching?.();stopAuthWatching=null;onlineOpen=false;invalidateTable();}
 async function tournaments(){
  const ticket=generation;screen='tournaments';
  shell('<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Your tournaments.</h1><p role="status">Finding your saved tournaments…</p>');
@@ -136,16 +137,28 @@ async function sessions(view='open'){
  shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Saved games &amp; tournaments.</h1><div class="tournament-actions" role="group" aria-label="Saved game filters"><button class="hbtn" data-mp="sessions-open" aria-pressed="${view==='open'}">Open · resume play</button><button class="hbtn" data-mp="sessions-completed" aria-pressed="${view==='completed'}">Completed · view results</button></div><p class="core-muted">Saved to your signed-in account. Open the same table to keep your seat, scores and current turn.</p>${renderSavedSessions([...saved.values()],user.id,{view})}`);
 }
 async function accountDestination(){
- if(landingView==='invitations'){home();await(await import('./social-ui.js')).openSocial();return;}
- if(landingView==='return-table'&&invite){await mutate({operation:'read',code:invite});(await import('./social-links.js')).clearSocialDestination();invite='';return;}
+ const ticket=generation;
+ if(landingView==='invitations'){home();const social=await import('./social-ui.js');if(current(ticket))await social.openSocial();return;}
+ if(landingView==='return-table'&&invite){const joined=await mutate({operation:'read',code:invite});if(current(ticket)&&joined){clearSocialDestination();invite='';}return;}
  if(landingView==='voice-signin'){await callbacks?.voiceReady?.(user);return;}if(invite||landingView==='join')joinForm();else if(landingView==='host-tournament'){hostForm();const select=root.querySelector('[name=tableType]');select.value='tournament';select.dispatchEvent(new Event('change',{bubbles:true}));}else if(landingView==='sessions')await sessions();else if(landingView==='tournaments')await tournaments();else home();
 }
 export async function openOnline(element,handlers,joinCode='',view='home'){
- leaveOnline();onlineOpen=true;const ticket=generation;root=element;callbacks=handlers;invite=joinCode;displayName=recall('clubhouse-name');landingView=view;
+ leaveOnline();onlineOpen=true;const ticket=generation,authTicket=authGeneration;root=element;callbacks=handlers;user=undefined;invite=joinCode;displayName=recall('clubhouse-name');landingView=view;
  if(auth?.onAuthStateChange){
   const watcher=auth.onAuthStateChange((event,session)=>{
-   if(!onlineOpen)return;callbacks?.account?.(session?.user||null);
-   if(event==='SIGNED_OUT'){user=null;clearTimeout(timer);stopWatching?.();stopWatching=null;watchingCode=null;room=null;connected=false;accountScreen();}
+   if(!onlineOpen||authTicket!==authGeneration)return;
+   const next=event==='SIGNED_OUT'?null:session?.user||null;
+   const changed=event==='SIGNED_OUT'||user?.id!==next?.id&&(user!==undefined||event!=='INITIAL_SESSION');
+   if(changed){
+    const hadAccount=!!user;invalidateTable();
+    if(hadAccount){invite='';landingView='home';clearSocialDestination();}
+   }
+   user=next;callbacks?.account?.(user);
+   if(!changed)return; // Same-UUID refresh keeps the current table and pending commands.
+   if(!user){accountScreen();return;}
+   const accountTicket=generation;
+   // Supabase auth callbacks must return before starting another auth-backed read.
+   setTimeout(()=>{if(current(accountTicket))void accountDestination().catch(error=>{if(current(accountTicket)){home();message(onlineErrorMessage(error));}});},0);
   });
   stopAuthWatching=()=>watcher?.data?.subscription?.unsubscribe();
  }
@@ -220,13 +233,13 @@ document.addEventListener('click',async e=>{
  if(working)return;const ticket=generation;
  try{
   const a=button.dataset.mp;
-  if(a==='home'){leaveOnline();onlineOpen=true;home();}
+  if(a==='home'){invalidateTable();home();}
   if(a==='social-inbox')await(await import('./social-ui.js')).openSocial();
   if(a==='social-players')await(await import('./social-ui.js')).openSocial(room);
   if(a==='host')hostForm();if(a==='join')joinForm();
   if(a==='change-email')accountScreen();
   if(a==='password')passwordScreen();
-  if(a==='signout'){try{await(await import('./social-native.js')).disablePhoneNotifications();}catch{}const {error}=await waitForOnline(auth.signOut());if(!current(ticket))return;if(error)throw error;user=null;callbacks?.account?.(null);accountScreen();}
+  if(a==='signout'){try{await(await import('./social-native.js')).disablePhoneNotifications();}catch{}if(!current(ticket))return;const {error}=await waitForOnline(auth.signOut());if(!current(ticket))return;if(error)throw error;user=null;callbacks?.account?.(null);accountScreen();}
   if(a==='rooms')await rooms();
   if(a==='sessions'||a==='sessions-open'||a==='sessions-completed')await sessions(a==='sessions-completed'?'completed':'open');
   if(a==='tournaments')await tournaments();
@@ -235,6 +248,7 @@ document.addEventListener('click',async e=>{
   if(a==='commentary')await callbacks?.commentary?.();
   if(a==='start'){
    if(callbacks?.beforeStart&&await callbacks.beforeStart()===false)return;
+   if(!current(ticket))return;
    const status=getDiceStatus();
    if(room.source==='godice'&&(status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected)))throw new Error('Connect five GoDice on this host before starting.');
    await mutate({operation:'start',code:room.code,rulesVersion:room.game?.rules.version??room.rulesVersion??1,expectedRevision:room.revision,commandId:crypto.randomUUID()});

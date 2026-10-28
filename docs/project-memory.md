@@ -1,14 +1,14 @@
 # Dice Clubhouse / YAHTZ project memory
 
-Updated 27 October 2026 by SW068. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
+Updated 27 October 2026 by SW069. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
 
 ## Current work and source
 
-- Owner asks Codex to act as project architect and review code/design before the next Android/iPhone test. SW068 is an advisory review and skills/memory maintenance task; application fixes are recommendations, not implemented changes. See [review and next-build checklist](plans/SW-068-architecture-phone-readiness.md).
+- Owner authorizes fixing the three SW068 findings, regression tests, full checks and a review PR (SW069). Phone updates are explicitly excluded. See [implementation/evidence](plans/SW-069-manual-core-reliability.md) and [architecture review/checklist](plans/SW-068-architecture-phone-readiness.md).
 - Published baseline on 27 October: master d3d8037. Application code is identical to qualified SW066 db094a4 and SW067 installation source 06db45a. The subsequent commits record publication/phone updates and repository rules. Work on a scoped branch; never push to the default branch or merge/approve agent work.
 - On fg-dev use the repository at /srv/yahtzee/main. The Windows integration path C:/Codex/Yahtzee Game/artifacts/sw066/source applies only on that workstation. Its older dirty root and previous Amber sample remain preserved; do not copy old app files over current source. Read the core integration handover with its latest dated override.
 - Dependable manual scoring, solo/shared-phone games, authenticated online games and tournament continuity on Android/iOS come first. Camera, live voice, push delivery, shared venues/synchronized events and generated/account-synced portraits remain deferred. Historical commentary implementations/tests do not authorize reactivation or paid usage.
-- SW068 reproduced three open gaps: cross-account room-session invalidation, stale writes during recovery-only persistence, and manual config accepting push enabled. Existing baseline checks pass despite these gaps. Fix and regress them before the next candidate; retain separate physical acceptance.
+- SW069 implements account-session invalidation (including dialogs and late results), immutable conflict-aware recovery journals, and forced push=false in public-only manual preparation. Clean b25b6d9 Node24.15.0 qualification passed: 1,216 tests/13 optional camera skips/all configured builds/source stable; 54 focused checks passed. No device or live service changed.
 
 ## Latest recorded evidence
 
@@ -21,7 +21,7 @@ Updated 27 October 2026 by SW068. This file holds current intent and durable con
 ## Manual phone packaging and data preservation
 
 - Both phones use the shared manual-test web assets currently selected by MODE=ios-test. That name also applies to the qualified Android manual package; ordinary build:native is a different behavior path.
-- Use scripts/prepare-ios-test.mjs and validated public-only phone configuration. On Android sync those prepared assets and preserve them with build-android.ps1 -SkipWebBuild. Freshly check the effective push flag is false and commentary endpoint empty; the validator's push gap is open in SW068. No real phone configuration was inspected during this review.
+- Use scripts/prepare-ios-test.mjs and validated public-only phone configuration. On Android sync those prepared assets and preserve them with build-android.ps1 -SkipWebBuild. Freshly check the effective push flag is false and commentary endpoint empty; SW069 forces both manual-build overrides. No real phone configuration was inspected during SW068/SW069.
 - Retain com.fluiditygroup.diceclubhouse.dev, existing signers, accounts, app storage, table UUIDs/seats/rules/history. Never uninstall or clear data to work around signing or login. iOS requires a fresh Mac/Xcode signing/build check; Linux web compilation is not a signed phone build.
 - Native installation, public web, backend/database and owner gameplay are separate targets. A review/build task does not authorize live deployment or scoring commands. Do not reinstall just because a new chat starts.
 
@@ -42,6 +42,10 @@ Updated 27 October 2026 by SW068. This file holds current intent and durable con
 - Cities, preset avatars and mute are device preferences; do not present them as shared tournament settings. Photo previews remain local and are not generated portraits. Fictional lab accounts/history must remain labelled and excluded from release startup.
 - Deferred commentary intent: optional player-blurb personalization, compact original dark/adult humor, independent profanity/intensity/frequency/voice, actual heard-line memory and feedback without automatic escalation or training. Latest recorded default is Rachel; older Victor/Gretchen auditions are historical.
 - Owner commentary retention policy is 90 days with expiry and Forget history for commentary derivatives, without score deletion. Respect UUID/audience/source permission and actual shared exposure. Provider request budgets, audio lifetime, audible latency and commercial clearance require their own evidence; prior audition allowances are not reusable authorization.
+
+## Two-user development
+
+Use GitHub source/design records and explicit commit/build identity across both users; see engineering-workflow.md for the shared-branch handoff and preferred per-task PR workflow. Fetch before work/handover, preserve dirty changes and avoid concurrent writers to one branch/checkout. Native version/build 1 labels do not identify the latest candidate. This does not authorize phone installation or credential/session sharing.
 
 ## Reading routes
 
