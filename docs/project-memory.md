@@ -1,9 +1,10 @@
 # Dice Clubhouse / YAHTZ project memory
 
-Updated 27 October 2026 by SW069. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
+Updated 30 October 2026 by SW070. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
 
 ## Current work and source
 
+- SW070: owner authorizes Pixel-only update from exact master9179f73 using fg-dev ADB and existing signer. Qualified APK prepared; installation pending fresh pairing and installed-signer comparison. iPhone/backend remain excluded. See [release manifest](releases/SW-070-fg-dev-pixel-update.md). This supersedes SW069's no-phone-update scope for this explicit Pixel task only.
 - Owner authorizes fixing the three SW068 findings, regression tests, full checks and a review PR (SW069). Phone updates are explicitly excluded. See [implementation/evidence](plans/SW-069-manual-core-reliability.md) and [architecture review/checklist](plans/SW-068-architecture-phone-readiness.md).
 - Published baseline on 27 October: master d3d8037. Application code is identical to qualified SW066 db094a4 and SW067 installation source 06db45a. The subsequent commits record publication/phone updates and repository rules. Work on a scoped branch; never push to the default branch or merge/approve agent work.
 - On fg-dev use the repository at /srv/yahtzee/main. The Windows integration path C:/Codex/Yahtzee Game/artifacts/sw066/source applies only on that workstation. Its older dirty root and previous Amber sample remain preserved; do not copy old app files over current source. Read the core integration handover with its latest dated override.
