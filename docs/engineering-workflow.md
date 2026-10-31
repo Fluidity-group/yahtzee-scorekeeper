@@ -57,3 +57,5 @@ SW074 recovery is stacked on safeguards PR #6 and design PR #5. Human integratio
 ## Active consolidated candidate (SW075)
 
 Until Android/iOS phone acceptance, codex/yahtzee-integration is the single candidate base for isolated developer/task branches. It includes the normally merged phone record and the full design/safeguard/recovery chain. Superseded PRs are closed only after the consolidated PR is published; their branches/history are preserved. Master remains the last accepted integration baseline until the owner-approved phone gate and promotion. Both accounts must fetch/check the selected candidate commit before starting, use independent working folders and review normal merges; never simultaneously edit the candidate checkout.
+
+Current onboarding/handoff: docs/next-chat-current.md. Consolidated draft PR #8 supersedes PRs4–7; no master promotion occurred. Shared root is the coordination candidate checkout, while independent task worktrees hold edits for each developer/account.

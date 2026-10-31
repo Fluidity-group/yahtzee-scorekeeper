@@ -126,3 +126,7 @@ Working integration branch is codex/yahtzee-integration, in the isolated SW075 w
 Clean integration commit4befc840da9f5365a7f8db562a23fa6e9e7ef6e8 passed Node24.15.0 full configured gate:1,318tests/13optional camera skips/all configured builds, clean stable source. Source digest05d71f79eec181e880b039243a3469c049f22d6efff9e923d78890ab498a3e6e; evidence artifacts/engineering/2026-10-31T18-13-35-715Z-0315ec48/report.json. An initial run passed all tests/builds but failed source stability because the generated game-room bundle was stale; output was committed and clean gate repeated. No checks were weakened.
 
 Android JDK21 testDebugUnitTest/assembleDebug passed19native tests. Prepared manual files matched APK assets and embedded clean4befc84 identity; this is an offline compile check, not a configured rollout package. Android evidence lives under ignored artifacts/sw075 outside this source checkout. iOS manual web build passed; native Xcode/signing, real avatar/video/reload/account tests, live Gemini trial and paired phone gameplay remain unperformed. No live provider/data/backend/device action occurred.
+
+### Published review and handoff
+
+Draft PR #8 is the single consolidated review targeting master. Superseded PRs #4–#7 were closed after publication; their branches/history were retained. docs/next-chat-current.md routes both accounts to the candidate and exact verification limits. Shared coordination checkout may follow codex/yahtzee-integration; master branch remains unchanged pending phone acceptance.
