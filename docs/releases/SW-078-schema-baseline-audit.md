@@ -6,7 +6,7 @@
 
 The administrator-approved yz-supabase wrapper `migrations-list` confirms16local versions and blank Remote entries for all16. Its `functions-list` reports game-roomv16, live-commentaryv13, portraitsv3 and portrait-cleanupv3 ACTIVE. This confirms running Edge Function metadata only; it does not establish any table/RPC/constraint/policy/ACL/body match.
 
-The wrapper currently exposes help, migration history, function listing/deployment and db push/dry run. It exposes no schema-only dump or catalog-query operation. The requested schema comparison cannot honestly be declared complete until the administrator provides an approved read-only path. No credentials or wrapper files have been read, no unsupported operation is attempted, and no database history is modified.
+The wrapper currently exposes help, migration history, function listing/deployment and db push/dry run. It initially exposed no schema-only dump/catalog-query operation. The administrator then added schema-dump; the agent invoked that approved read-only command, but the wrapper exited2 because gitleaks found secret-shaped values and explicitly released nothing. The agent has not read a blocked export or any secret. The requested schema comparison remains incomplete until an administrator-reviewed safe export or hash-only audit is released. No credentials or wrapper files have been read, no unsupported operation is attempted, and no database history is modified.
 
 ## Migration-by-migration verification status
 
@@ -42,3 +42,11 @@ Artifacts under artifacts/sw078/schema-audit/: expected-catalog.json, expected-o
 Obtain approved live schema snapshots, compare cumulative definitions and security metadata, then classify drift and post-deployment operational settings. Verify any relevant backfill/seed obligations separately; cron activation or provider-budget settings must never be reset to source defaults to make a comparison pass. PostgreSQL18-local versus live-major formatting differences need review, not automatic acceptance.
 
 Only after a supported baseline is established should the report propose the exact16IDs for Dan’s explicit history-repair approval. The administrator then adds the narrowly approved repair operation to yz-supabase. Recheck migration history afterwards. Do not run a db-push dry run expecting only Studio until history reconciliation is complete. Studio-only dry-run approval and live rollout follow as separate steps; no replay of all16 or destructive data rollback.
+
+## Audit preparation verification and current block
+
+Clean audit code e22686c passed the configured Node24 gate with1,393tests/13optional camera skips/all builds/source unchanged; report artifacts/engineering/2026-10-31T23-27-37-082Z-222048e9/report.json. The new comparator’s8regressions pass, and local expected-schema reconstruction runs all16project migrations successfully against inert platform boundaries. This is audit-tool verification, not live schema equality.
+
+The newly available approved schema-dump command was attempted once. Its gitleaks guard blocked release of secret-shaped content; no output locations were opened and no secret values were observed/copied. Request the administrator to review/redact the findings or run the committed hash-only catalog/operations audits, keeping secret checks enabled. Do not disable the scanner, inspect its withheld files, extract credentials or infer matches from the failed export.
+
+Current result: history gap confirmed; live schema matches/gaps/drift not yet determinable. Repair recommendation is withheld. Dan has not approved repair, and no migration/dry-run/repair/deployment/phone action has occurred.
