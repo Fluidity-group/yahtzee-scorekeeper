@@ -1,9 +1,10 @@
 # Dice Clubhouse / YAHTZ project memory
 
-Updated 30 October 2026 by SW071 design. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
+Updated 30 October 2026 by SW072. This file holds current intent and durable contracts. Use docs/status.md and identified release records for verification/deployment facts; inspect actual devices freshly. Earlier memory revisions are preserved in Git and dated task records.
 
 ## Current work and source
 
+- Owner now authorizes starting SW071 implementation. [SW072](plans/SW-072-release-baseline-guards.md) begins release identity/required-asset safeguards; source recovery and rule/visual decisions remain open. This supersedes the prior design-only restriction for scoped development, not for deployment or unapproved rule changes. Phones/backend stay unchanged.
 - SW071: owner requests a sprint design for stabilisation and a flexible versioned engine/trigger architecture supporting two developers. [Plan](plans/SW-071-versioned-engine-stabilisation-sprint.md) is proposed; rule/visual approval and baseline recovery precede implementation. Preserve missing prior-phone features; do not assume Git master is the complete latest product. No implementation or deployment is authorized by this design task.
 - SW070 Pixel-only build71 installation/launch was verified; its record remains separate in PR #4. iPhone update was not completed. Prior Pixel APK/source provenance still needs reconciliation; APK matching a Git candidate does not prove feature completeness.
 - Owner authorizes fixing the three SW068 findings, regression tests, full checks and a review PR (SW069). Phone updates are explicitly excluded. See [implementation/evidence](plans/SW-069-manual-core-reliability.md) and [architecture review/checklist](plans/SW-068-architecture-phone-readiness.md).

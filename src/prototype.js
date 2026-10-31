@@ -1,3 +1,4 @@
+import {renderBuildInfo} from './ui/build-info.js';
 import {renderLocalSetup} from './ui/local-setup.js';
 import {initializeMidnight} from './ui/midnight-profile.js';
 import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midnight-panels.js';
@@ -564,6 +565,7 @@ document.addEventListener('click',async e=>{
   if(a==='tournament-menu'&&onlineRoom?.tournament){openDialog(renderTournamentActions(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));dialog.dataset.tournamentMenu='true';dialog.classList.add('tournament-drawer');root.querySelector('[data-action="tournament-menu"]')?.setAttribute('aria-expanded','true');}
   if(a==='global-commentary')openGlobalCommentary();
   if(a==='timing-log')showTimingLog();
+  if(a==='build-info'){let nativeInfo=null;if(Capacitor.isNativePlatform())try{nativeInfo=await (await import('@capacitor/app')).App.getInfo();}catch{}openDialog(renderBuildInfo({nativeInfo,game}));}
   if(a==='home-solo')newScreen({players:1});
   if(a==='home-local')newScreen({players:2});
   if(a==='home-online'||a==='home-people')openHomeAccountPanel('people');
