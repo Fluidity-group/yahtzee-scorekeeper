@@ -53,3 +53,12 @@ it('ignores a late status response after its pending draft was explicitly forgot
  await vi.waitFor(()=>expect(resolveStatus).toBeTypeOf('function'));dialog.querySelector('[data-portrait-abandon]').click();resolveStatus({job:{id:'pending',status:'ready',style:'retro-pixel',url:'https://fixture/old'}});await Promise.resolve();await Promise.resolve();
  expect(localStorage.getItem('clubhouse:portrait-draft:'+owner)).toBeNull();expect(dialog.querySelector('[data-portrait-confirm]').disabled).toBe(true);expect(dialog.querySelector('[data-generated-preview] img')).toBeNull();
 });
+it('does not let a scheduled pending poll restore an old style after explicit status recovery',async()=>{
+ vi.useFakeTimers();let phase='pending';const api=vi.fn(async p=>p.operation==='profile'?{profile:{ownerId:owner,revision:0,kind:'preset'}}:{job:{id:p.id,status:phase,style:'retro-pixel',url:phase==='ready'?'https://fixture/old':undefined}});
+ localStorage.setItem('clubhouse:portrait-draft:'+owner,'pending');document.body.innerHTML='<dialog>'+renderPortraitFlow()+'</dialog>';const dialog=document.querySelector('dialog');cleanup=bindPortraitFlow(dialog,vi.fn(),{api,session:async()=>({user:{id:owner}})});
+ try{
+  await vi.advanceTimersByTimeAsync(1);expect(dialog.querySelector('[data-portrait-check]').hidden).toBe(false);phase='ready';dialog.querySelector('[data-portrait-check]').click();await vi.advanceTimersByTimeAsync(1);
+  const style=dialog.querySelector('[name=portrait-style][value=noir-comic]');style.checked=true;style.dispatchEvent(new Event('change',{bubbles:true}));await vi.advanceTimersByTimeAsync(5000);
+  expect(dialog.querySelector('[data-generated-preview] img')).toBeNull();expect(dialog.querySelector('[data-portrait-confirm]').disabled).toBe(true);expect(dialog.querySelector('[name=portrait-style]:checked').value).toBe('noir-comic');
+ }finally{vi.useRealTimers();}
+});

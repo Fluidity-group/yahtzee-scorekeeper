@@ -104,8 +104,8 @@ Consolidate #4 phone-install record, #5 design, #6 guards, #7 recovered source a
 
 | Gate | Required evidence | Current state |
 |---|---|---|
-| Review | Frozen original source, named independent agent, reproductions, separate fix recheck | Original review complete; recheck requested |
-| Avatar stability | Permanent race/reload/draft/cleanup regressions plus existing privacy/provider coverage | Focused tests pass; clean full gate pending |
+| Review | Frozen original source, named independent agent, reproductions, separate fix recheck | Original review and final independent source recheck complete;55focused tests passed |
+| Avatar stability | Permanent race/reload/draft/cleanup regressions plus existing privacy/provider coverage | Focused tests and independent recheck pass; clean full gate pending |
 | Reaction foundation | Author/actor/audience example and rejected unsafe/foreign/retroactive actions | Pure contract implemented;9tests pass; editor/delivery not implemented |
 | Game builder | Approved programs, worked examples, immutable dispatch and complete-game invariants | Design; not implemented; rule decisions remain open |
 | Cleanup | Actual production reachability evidence; legacy coverage retained | Dead shell isolated; broad legacy deletion deferred |
@@ -116,3 +116,7 @@ Consolidate #4 phone-install record, #5 design, #6 guards, #7 recovered source a
 No new app installation, public backend/schema/scheduler deployment, provider call or live score mutation is authorised by branch consolidation. Preserve accounts, avatar choices, stored originals and active tournaments. Record actual verification results below; do not prefill physical acceptance.
 
 Sources: https://ai.google.dev/gemini-api/docs/image-generation and https://ai.google.dev/api/interactions-api (read31October2026).
+
+### Integration candidate
+
+Working integration branch is codex/yahtzee-integration, in the isolated SW075 worktree. It includes all design/safeguard/recovery ancestry and a normal merge of the remaining phone-record branch; conflicts were documentation-only and both dated records were preserved. Master stays9179f73. The candidate PR will supersede the stacked review chain without deleting its branches/history.

@@ -24,4 +24,6 @@ Legacy production shell can be removed if an exact test fixture preserves histor
 
 ## Recheck
 
-Requested against the implementation worktree after A1–A5 fixes. Pending reviewer response and final qualification; no original finding is marked independently closed yet.
+Independent rechecks first passed52tests, then54tests while identifying additional races: old preset intent crossing an account change; late status resurrecting a forgotten draft; terminal pending-poll timer restoring a discarded style. Each received a permanent regression and fix. Final independent recheck passed55tests across7files on integration commit96fb2a6 plus the terminal-poll source/test patch (before final code commit). Reviewer reported no remaining blocker within the reviewed fix scope.
+
+A1–A5 and those three follow-up races are independently source-rechecked closed. Equal-revision URL refresh remains supported. Revision/profile handling, same-ID status recovery, metadata-first reads, cleanup deadline and strict Undo target handling were rechecked; current pure reaction contract remains inactive groundwork. Legacy integration assertions are preserved. Full clean-commit/native qualification and live Gemini/paired-phone acceptance are separate and not established by this recheck.
