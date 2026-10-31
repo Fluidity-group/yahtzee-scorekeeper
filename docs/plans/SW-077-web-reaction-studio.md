@@ -1,6 +1,6 @@
 # SW077: Desktop Reaction Studio with private drafts and publication
 
-31 October 2026. Owner: Dan; implementer: Codex/fluidity on fg-dev. State: implemented with focused verification; full clean-source gate pending. Not deployed or physically accepted.
+31 October 2026. Owner: Dan; implementer: Codex/fluidity on fg-dev. State: implemented and automatically verified on clean source. Not deployed or physically accepted.
 Baseline: 2aae047091e2e7a7901a655204874211205c81ab, reaction-engine PR #9. Isolated codex/sw077-web-reaction-studio at artifacts/sw077/source. The coordination checkout and PR #9 are preserved. Agent review is development evidence, not owner release approval.
 
 ## Purpose and scope
@@ -15,8 +15,8 @@ Owner selects the Studio desktop concept: existing accounts, table selection, pr
 | ST2 | Drafts are account-owned, stored privately on the backend and reload across computers; saved drafts have revision CAS and uncertain-save retry identity. Save/preview never change published settings or scores. | Actual disposable PostgreSQL/PLpgSQL/RLS:12checks passed; source handler tests pass. |
 | ST3 | Preview uses the shared reaction evaluator/renderer, scorer avatar, exact score/range and selected recipient, with standard fallback and no scoring/provider generation call. | DOM/pure preview tests pass for exact/range/defaults and actual score legality, with no scoring or provider-generation calls. |
 | ST4 | Review publishes only an exact saved draft revision to the selected table, preserving rule ownership, current game/room/config checks and durable command receipts. Rematches retain table settings. | HTTP tests and actual SQL commit wrapper pass including changed/discarded draft between read and commit, future-only state and immutable receipt retries. |
-| ST5 | Studio layout supports keyboard/desktop/narrow browser access, authored-rule library, new/edit/delete draft, disabled and host pause flows. Phone authoring is replaced by a desktop Studio route. | Studio DOM tests pass; old phone editor/component-only tests are replaced by stronger Studio save/preview/publish/CAS/auth coverage. Builds pending. |
-| ST6 | Node24 configured gate passes on clean source; document migration/backend/web rollout and rollback, with phones held. | Pending. |
+| ST5 | Studio layout supports keyboard/desktop/narrow browser access, authored-rule library, new/edit/delete draft, disabled and host pause flows. Phone authoring is replaced by a desktop Studio route. | Studio DOM tests pass; old phone editor/component-only tests are replaced by stronger Studio save/preview/publish/CAS/auth coverage. All configured web/native-web/iOS-web and server builds passed. |
+| ST6 | Node24 configured gate passes on clean source; document migration/backend/web rollout and rollback, with phones held. | Clean6c9191c full gate passed; rollout/rollback prepared, not executed. |
 
 ## Design
 
@@ -48,3 +48,11 @@ Skills were re-read: product-change and manual-multiplayer still route authority
 Final separate-agent recheck:158tests/11files,12actual disposable SQL/RLS checks and whitespace checks passed on the final source fix tree (committed as24c1900). No remaining confirmed blocker in that reviewed scope. Discard redacts private text while retaining a revision/UUID tombstone. No live services/providers/devices were contacted by the reviewer.
 
 Initial24c1900 full gate ran1,385tests/13optional camera skips and every configured build successfully, but correctly failed the unchanged-source invariant because the shared adapter regenerated live-commentary/portraits/portrait-cleanup bundles. Those generated outputs are committed before rerunning the clean-source gate; this initial run is not qualified evidence. Initial report: artifacts/engineering/2026-10-31T20-25-37-816Z-17c185c0/report.json.
+
+## Final committed-source qualification
+
+Clean code6c9191c8cc0e65fe0b0409a4fb4a54220f847b7f, Node24.15.0:1,385Vitest tests passed/13optional camera skips across174passedfiles/1skipped. All configured production web, native web, iOS-manual web, room, commentary and portrait builds passed. Source stayed clean and unchanged. Report: artifacts/engineering/2026-10-31T20-27-47-296Z-52bb7f28/report.json. The earlier generated-bundle source-stability failure is resolved, not suppressed.
+
+Android JDK21 offline testDebugUnitTest/assembleDebug passed19native tests. Build77 embeds clean6c9191c/native identity;53prepared public files match the APK exactly. APK SHA2561781a8f9083ee2eef66dfb1a21997b6e50a0c13fa25587a84cc84b43d1ca235f. Report artifacts/sw077/android-report.json; log artifacts/sw077-android-build.log. This is an offline compilation artifact, not a configured rollout or signing/phone qualification. iOS web passed; Xcode/signing/device testing needs Amber’s Mac.
+
+Independent158testrecheck/11files and actual disposable PostgreSQL12checks passed; report artifacts/sw077/studio-sql-report.json. Automated browser coverage uses synthetic accounts and JSDOM; real existing-account login across two computers, visual/touch/browser acceptance and physical paired Android/iOS gameplay/audio/avatar return remain unperformed. No hosted migration, function/web publication, live score/account/provider action, device connection or install occurred. Current GitHub Pages remains unchanged until an explicitly authorised rollout. Later commits record evidence/documentation only.
