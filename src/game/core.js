@@ -69,7 +69,7 @@ export function scoreOptions(game, dice) {
   return { scores: result, bonus: repeat && sheet.yahtzee > 0 ? bonusPoints(game.rules, dice[0]) : 0,
     extraTurn: repeat && sheet.yahtzee > 0 && game.rules.extraTurn && !(finalChainRules(game) && filled(sheet) === 12), joker: repeat && game.rules.joker, combinations: c };
 }
-function validateValue(game, category, value) {
+export function validateScoreValue(game, category, value) {
   if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail('Invalid score.');
   const c = META[category];
   if (c.face && (value > c.face * 5 || value % c.face)) fail('Choose a count from zero to five.');
@@ -131,7 +131,7 @@ export function command(game, action, { id, time = new Date().toISOString() } = 
     const original = g.events.find(e => e.id === action.target && e.type === 'score');
     if (!original || original.seat !== action.seat) fail('Choose one of this player’s recorded scores.');
     if (g.events.some(e => e.type === 'score-undo' && e.target === original.id)) fail('That score was undone. Choose the replacement score.');
-    validateValue(g, original.category, action.value);
+    validateScoreValue(g, original.category, action.value);
     event('score-correction', { target: original.id, seat: original.seat, category: original.category, before: g.sheets[original.seat][original.category], value: action.value });
     g.sheets[original.seat][original.category] = action.value;
   } else {
@@ -221,7 +221,7 @@ export function command(game, action, { id, time = new Date().toISOString() } = 
           finishTurn(g,true,time);
         } else {
           if (g.sheets[g.activeSeat][action.category] !== undefined) fail('That category is already filled.');
-          validateValue(g,action.category,action.value);
+          validateScoreValue(g,action.category,action.value);
           if (options?.extraTurn) fail('Record the bonus Yahtzee, then take your extra turn.');
           if (options && !(action.category in options.scores)) fail('Joker placement requires another category.');
           if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail('Score does not match the dice.');

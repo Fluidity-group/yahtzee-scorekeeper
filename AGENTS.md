@@ -1,5 +1,7 @@
 # Yahtzee engineering entry point
 
+31 October SW077 authoring direction: the owner selects desktop Reaction Studio with existing accounts, private drafts, local preview and explicit version-fenced publication. Read docs/next-chat-current.md and docs/plans/SW-077-web-reaction-studio.md. SW076 reaction delivery remains the underlying engine; its old in-phone authoring is superseded. Work remains isolated and reviewable; no source qualification implies web/backend/phone activation.
+
 31 October SW075 current entry: read docs/next-chat-current.md. Active consolidated working candidate is codex/yahtzee-integration, draft PR #8; former PRs4–7 are superseded. Master remains the accepted baseline until Android/iOS phone acceptance. Use isolated per-task working folders for both accounts; the shared root is coordination-only. Do not restart from preserved ROG/artifacts source or confuse the inactive reaction foundation with completed editor/delivery functionality.
 
 31 October recovery routing: canonical integration is this fg-dev repository and GitHub master. Both accounts work in isolated task folders/branches and integrate through reviewed PRs. Read docs/plans/SW-074-rog-interface-recovery.md plus current status before interpreting old Windows-only or SW066 baseline notes. The recovery candidate restores later ROG feature source while preserving fg-dev fixes; source integration, runtime deployment and physical acceptance remain separate. Historical host-local SW identifiers overlap; use topic and commit.
