@@ -19,7 +19,7 @@ vi.mock('../src/multiplayer/client.js',()=>({
 vi.mock('qrcode',()=>({default:{toCanvas:vi.fn(async()=>{})}}));
 import QRCode from 'qrcode';
 import { auth,requestRoom } from '../src/multiplayer/client.js';
-import { openOnline,leaveOnline,onlineStandings } from '../src/multiplayer/ui.js';
+import { openOnline,leaveOnline,onlineStandings,changeOnlineReactions } from '../src/multiplayer/ui.js';
 const click=action=>document.querySelector(`[data-mp="${action}"]`).click();
 const submit=()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
 let callbacks;
@@ -190,3 +190,5 @@ describe('multiplayer screens',()=>{
   await vi.waitFor(()=>expect(document.querySelector('[name="code"]')?.value).toBe('ABCDEFGH'));
  });
 });
+
+it('reaction editor sends the current Competition v2 contract and fences a retired table',async()=>{mock.room=startRoom(createRoom({id:'reaction-table',code:'ABCDEFGH',userId:'host',name:'Player A',mode:'competition',rulesVersion:2,time:'2026-10-31T12:00:00Z'}),{userId:'host',time:'2026-10-31T12:00:00Z'});mock.room.capabilities={reactions:true};await openOnline(document.querySelector('#root'),callbacks,'ABCDEFGH','return-table');const body={operation:'reaction-save',gameId:mock.room.game.id,expectedRevision:mock.room.revision,configVersion:0,commandId:'reaction-request-1',rule:{id:'test'}};await changeOnlineReactions(body);expect(requestRoom).toHaveBeenLastCalledWith({...body,code:'ABCDEFGH',rulesVersion:2});leaveOnline();await expect(changeOnlineReactions(body)).rejects.toThrow(/Reconnect/);});

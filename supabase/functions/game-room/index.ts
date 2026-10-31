@@ -58,12 +58,12 @@ var freeze = (value) => {
 function openingFacts({ room, purpose, sourceCommandId, acceptedAt, priorGame = null } = {}) {
   if (!["opening", "return", "next-game"].includes(purpose) || !room?.game || !uuid.test(room.id || "") || typeof sourceCommandId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(sourceCommandId) || !Number.isFinite(Date.parse(acceptedAt))) throw Error("Accepted room lifecycle identity required.");
   const game = room.game, ids = room.members.map((member) => member.userId);
-  if (ids.length !== game.players.length || new Set(ids).size !== ids.length || ids.some((id) => !uuid.test(id || ""))) throw Error("Unique account-owned roster required.");
+  if (ids.length !== game.players.length || new Set(ids).size !== ids.length || ids.some((id2) => !uuid.test(id2 || ""))) throw Error("Unique account-owned roster required.");
   const hidden = game.hideTotals && game.status !== "finished";
   const seats = ids.map((accountId, seat) => ({ accountId, seat, displayName: game.players[seat].name, label: game.players[seat].name, instructionAuthority: "none", remaining: 13 - filledBaseCount(game.sheets[seat]), ...!hidden ? { total: computeTotals(game.sheets[seat]).grand } : {} }));
   const scoresRecorded = game.sheets.reduce((sum, sheet) => sum + filledBaseCount(sheet), 0);
   let priorGameSummary = null;
-  if (priorGame?.authorized === true && priorGame.game?.status === "finished" && Array.isArray(priorGame.accountIds) && priorGame.accountIds.length === ids.length && ids.every((id) => priorGame.accountIds.includes(id)) && priorGame.game.players.length === ids.length) {
+  if (priorGame?.authorized === true && priorGame.game?.status === "finished" && Array.isArray(priorGame.accountIds) && priorGame.accountIds.length === ids.length && ids.every((id2) => priorGame.accountIds.includes(id2)) && priorGame.game.players.length === ids.length) {
     const totals = priorGame.game.sheets.map((sheet) => computeTotals(sheet).grand), best2 = Math.max(...totals);
     const winners = totals.flatMap((total, seat) => total === best2 ? [{ accountId: priorGame.accountIds[seat], displayName: priorGame.game.players[seat].name, total }] : []);
     priorGameSummary = { gameId: priorGame.game.id, winners, tied: winners.length > 1, basis: "authorized-finished-history", meaning: "previous-game-result-not-tournament-standing" };
@@ -72,27 +72,97 @@ function openingFacts({ room, purpose, sourceCommandId, acceptedAt, priorGame = 
   return freeze({ schemaVersion: 1, purpose, observation: "accepted-lifecycle-only", snapshotBasis: "at-acceptance", gameId: game.id, eventId: `lifecycle-${sourceCommandId}`, commandId: sourceCommandId, momentKey: `${room.id}:${game.id}:${purpose}:${sourceCommandId}`, acceptedAt, tournamentName: room.tournament?.name || null, namesInstructionAuthority: "none", scoresRecorded, seats, leaders: hidden ? [] : seats.filter((seat) => seat.total === best).map((seat) => seat.accountId), disclosurePolicy: hidden ? "category-scores-only" : "scores-and-totals", priorGameSummary, complete: game.status === "finished" });
 }
 
+// src/profile/avatar-reactions.js
+var AVATAR_REACTIONS = Object.freeze(["yahtzee", "full-house", "upper-bonus", "large-straight", "game-win", "tournament-win", "scratch", "low-kind", "upper-impossible"]);
+
+// src/experience/reactions.js
+var fail = (message) => {
+  throw new Error(message);
+};
+var fields = (value, allowed) => {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some((k) => !allowed.includes(k))) fail("Unsupported reaction fields.");
+};
+var id = (value) => typeof value === "string" && /^[\w:-]{1,160}$/.test(value);
+var version = (value) => Number.isSafeInteger(value) && value > 0;
+var freeze2 = (value) => {
+  if (value && typeof value === "object") {
+    Object.values(value).forEach(freeze2);
+    Object.freeze(value);
+  }
+  return value;
+};
+function compileReactionSet(input, { memberIds, identityKind = "account", gameId, soundIds = ["score", "scratch", "milestone", "none"] } = {}) {
+  fields(input, ["id", "version", "scopeId", "effectiveAfterRevision", "rules"]);
+  if (!id(input.id) || !id(input.scopeId) || !version(input.version) || !Number.isSafeInteger(input.effectiveAfterRevision) || input.effectiveAfterRevision < 0) fail("Versioned reaction scope required.");
+  if (!Array.isArray(memberIds) || memberIds.length < 1 || memberIds.length > 8 || new Set(memberIds).size !== memberIds.length) fail("Unique roster required.");
+  const uuid4 = /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
+  if (identityKind === "account" ? memberIds.some((v) => !uuid4.test(v)) : identityKind !== "local-seat" || !id(gameId) || memberIds.some((v, i) => v !== `${gameId}:p${i}`)) fail("Use account UUIDs or scoped local-seat identities.");
+  const member = (v) => memberIds.includes(v), rules = input.rules;
+  if (!Array.isArray(rules) || rules.length > 32 || new Set(rules.map((r) => r?.id)).size !== rules.length) fail("Choose at most 32 uniquely identified reactions.");
+  for (const r of rules) {
+    fields(r, ["id", "version", "authorId", "enabled", "when", "audience", "actions"]);
+    fields(r.when, ["category", "actorId", "value", "minValue", "maxValue"]);
+    fields(r.audience, ["kind", "playerIds"]);
+    if (!id(r.id) || !version(r.version) || !member(r.authorId) || typeof r.enabled !== "boolean" || !member(r.when.actorId) || !BASE_KEYS.includes(r.when.category)) fail("Reaction needs a member author, scorer and category.");
+    if (["value", "minValue", "maxValue"].some((key) => r.when[key] !== void 0 && (!Number.isInteger(r.when[key]) || r.when[key] < 0 || r.when[key] > 100)) || r.when.value !== void 0 && (r.when.minValue !== void 0 || r.when.maxValue !== void 0) || r.when.minValue !== void 0 && r.when.maxValue !== void 0 && r.when.minValue > r.when.maxValue) fail("Invalid score condition.");
+    if (!["scorer", "others", "all", "players"].includes(r.audience.kind)) fail("Choose a reaction audience.");
+    if (r.audience.kind === "players") {
+      if (!Array.isArray(r.audience.playerIds) || !r.audience.playerIds.length || new Set(r.audience.playerIds).size !== r.audience.playerIds.length || r.audience.playerIds.some((p) => !member(p))) fail("Recipients must be table members.");
+    } else if (r.audience.playerIds !== void 0) fail("Only a specific audience lists player IDs.");
+    if (!Array.isArray(r.actions) || !r.actions.length || r.actions.length > 3 || new Set(r.actions.map((a) => a?.type)).size !== r.actions.length) fail("Choose one to three reaction actions.");
+    for (const action of r.actions) {
+      fields(action, ["type", "assetId", "text"]);
+      if (action.type === "text") {
+        if (action.assetId !== void 0 || typeof action.text !== "string" || !action.text.trim() || action.text.length > 240) fail("Use a short plain-text reaction.");
+      } else if (action.type === "sound" || action.type === "animation") {
+        if (action.text !== void 0 || !(action.type === "sound" ? soundIds : [...AVATAR_REACTIONS, "none"]).includes(action.assetId)) fail("Choose a registered reaction asset.");
+      } else fail("Reaction actions cannot change game state or invoke providers.");
+    }
+  }
+  return freeze2(structuredClone({ ...input, memberIds, identityKind, ...identityKind === "local-seat" ? { gameId } : {} }));
+}
+function evaluateReactions(set, fact, { now, seenIntentIds = [] } = {}) {
+  if (fact?.type !== "score-recorded") return [];
+  if (fact.scopeId !== set.scopeId || !set.memberIds.includes(fact.actorId) || !id(fact.eventId) || !id(fact.gameId) || !Number.isSafeInteger(fact.roomRevision) || !BASE_KEYS.includes(fact.category) || (!Number.isInteger(fact.value) || fact.value < 0 || fact.value > 100)) fail("Accepted score facts required.");
+  if (set.identityKind === "local-seat" && set.gameId !== fact.gameId) fail("Local reaction belongs to another game.");
+  if (fact.roomRevision <= set.effectiveAfterRevision) return [];
+  const acceptedAt = Date.parse(fact.acceptedAt);
+  if (!Number.isFinite(acceptedAt) || !Number.isFinite(now)) fail("Explicit acceptance and delivery times required.");
+  if (now < acceptedAt || now >= acceptedAt + 15e3) return [];
+  const seen = new Set(seenIntentIds), plans = [];
+  for (const rule of set.rules) {
+    if (!rule.enabled || rule.when.actorId !== fact.actorId || rule.when.category !== fact.category || rule.when.value !== void 0 && rule.when.value !== fact.value || rule.when.minValue !== void 0 && fact.value < rule.when.minValue || rule.when.maxValue !== void 0 && fact.value > rule.when.maxValue) continue;
+    const recipients = rule.audience.kind === "scorer" ? [fact.actorId] : rule.audience.kind === "others" ? set.memberIds.filter((p) => p !== fact.actorId) : rule.audience.kind === "all" ? set.memberIds : rule.audience.playerIds;
+    for (const recipientId of recipients) {
+      const intentId = JSON.stringify([set.scopeId, set.id, set.version, rule.id, rule.version, fact.gameId, fact.eventId, recipientId]);
+      if (seen.has(intentId)) continue;
+      plans.push({ intentId, eventId: fact.eventId, gameId: fact.gameId, ruleId: rule.id, ruleVersion: rule.version, authorId: rule.authorId, actorId: fact.actorId, recipientId, expiresAt: new Date(acceptedAt + 15e3).toISOString(), actions: structuredClone(rule.actions) });
+    }
+  }
+  return freeze2(plans);
+}
+
 // src/game/core.js
 var MODES = Object.freeze({
   standard: Object.freeze({ name: "Standard", version: 1, rolls: 3, finalRolls: 3, extraTurn: false, weighted: false, joker: true }),
   competition: Object.freeze({ name: "Competition", version: 1, rolls: 3, finalRolls: 4, extraTurn: true, weighted: false, joker: true }),
   accumulative: Object.freeze({ name: "Accumulative", version: 1, rolls: 3, finalRolls: 3, extraTurn: true, weighted: true, joker: true })
 });
-var fail = (message) => {
+var fail2 = (message) => {
   throw new Error(message);
 };
 var isFace = (n) => Number.isInteger(n) && n >= 1 && n <= 6;
 var SOURCES = ["manual", "manual-faces", "simulated", "godice", "camera"];
 var FACE_SOURCES = ["manual-faces", "simulated", "godice", "camera"];
 function gameRules(mode, rulesVersion = 1, source = "manual") {
-  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail("Unknown game mode.");
+  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail2("Unknown game mode.");
   if (rulesVersion === 1) return { ...MODES[mode] };
   if (rulesVersion === 2 && mode === "competition" && source === "manual") return { ...MODES.competition, version: 2, joker: false, finalChain: true, bonusRolls: 3 };
-  fail("This rules version requires Competition with manual scoring.");
+  fail2("This rules version requires Competition with manual scoring.");
 }
 var finalChainRules = (g) => g.mode === "competition" && g.rules.version === 2 && g.rules.finalChain === true;
 function validateDice(dice) {
-  if (!Array.isArray(dice) || dice.length !== 5 || !dice.every(isFace)) fail("Enter five dice, each from 1 to 6.");
+  if (!Array.isArray(dice) || dice.length !== 5 || !dice.every(isFace)) fail2("Enter five dice, each from 1 to 6.");
   return dice;
 }
 function combinations(dice) {
@@ -108,23 +178,23 @@ var filled = (sheet) => BASE_KEYS.filter((k) => sheet[k] !== void 0).length;
 function rollLimit(game, seat = game.activeSeat) {
   return game.finalChain?.seat === seat ? game.rules.bonusRolls : filled(game.sheets[seat]) === 12 ? game.rules.finalRolls : game.rules.rolls;
 }
-function createCoreGame({ names, mode = "standard", rulesVersion = 1, source = "manual", hideTotals = false, id, time = (/* @__PURE__ */ new Date()).toISOString() }) {
-  if (!Array.isArray(names) || names.length < 1 || names.length > 8) fail("Choose one to eight players.");
+function createCoreGame({ names, mode = "standard", rulesVersion = 1, source = "manual", hideTotals = false, id: id2, time = (/* @__PURE__ */ new Date()).toISOString() }) {
+  if (!Array.isArray(names) || names.length < 1 || names.length > 8) fail2("Choose one to eight players.");
   const clean = names.map((n) => String(n).trim());
-  if (clean.some((n) => !n || n.length > 24)) fail("Player names must contain 1\u201324 characters.");
-  if (new Set(clean.map((n) => n.toLowerCase())).size !== clean.length) fail("Use a different name for each player.");
-  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail("Unknown game mode.");
-  if (!SOURCES.includes(source)) fail("Unknown dice source.");
-  if (!id) fail("A game ID is required.");
+  if (clean.some((n) => !n || n.length > 24)) fail2("Player names must contain 1\u201324 characters.");
+  if (new Set(clean.map((n) => n.toLowerCase())).size !== clean.length) fail2("Use a different name for each player.");
+  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail2("Unknown game mode.");
+  if (!SOURCES.includes(source)) fail2("Unknown dice source.");
+  if (!id2) fail2("A game ID is required.");
   return {
-    id,
+    id: id2,
     schema: 1,
     revision: 0,
     mode,
     rules: gameRules(mode, rulesVersion, source),
     source,
     hideTotals: Boolean(hideTotals),
-    players: clean.map((name, seat) => ({ id: `${id}:p${seat}`, name, seat })),
+    players: clean.map((name, seat) => ({ id: `${id2}:p${seat}`, name, seat })),
     sheets: clean.map(() => ({})),
     activeSeat: 0,
     status: "active",
@@ -164,12 +234,12 @@ function scoreOptions(game, dice) {
   };
 }
 function validateValue(game, category, value) {
-  if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail("Invalid score.");
+  if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail2("Invalid score.");
   const c = META[category];
-  if (c.face && (value > c.face * 5 || value % c.face)) fail("Choose a count from zero to five.");
-  if (c.type === "sum" && value > 30) fail("The dice total cannot exceed 30.");
-  if (c.type === "fixed" && category !== "yahtzee" && ![0, c.value].includes(value)) fail("Use the category score or zero.");
-  if (category === "yahtzee" && !(game.rules.weighted ? [0, 50, 60, 70, 80, 90, 100] : [0, 50]).includes(value)) fail("Invalid Yahtzee value.");
+  if (c.face && (value > c.face * 5 || value % c.face)) fail2("Choose a count from zero to five.");
+  if (c.type === "sum" && value > 30) fail2("The dice total cannot exceed 30.");
+  if (c.type === "fixed" && category !== "yahtzee" && ![0, c.value].includes(value)) fail2("Use the category score or zero.");
+  if (category === "yahtzee" && !(game.rules.weighted ? [0, 50, 60, 70, 80, 90, 100] : [0, 50]).includes(value)) fail2("Invalid Yahtzee value.");
 }
 function results(game) {
   const totals = game.sheets.map((s) => computeTotals(s).grand), best = Math.max(...totals);
@@ -204,25 +274,25 @@ function undoableScore(game, seat) {
   if (result.type === "score" && game.sheets[result.seat][result.category] === void 0) return null;
   return result;
 }
-function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
-  if (!id) fail("Command ID required.");
-  if (game.events.some((e) => e.commandId === id)) return game;
+function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).toISOString() } = {}) {
+  if (!id2) fail2("Command ID required.");
+  if (game.events.some((e) => e.commandId === id2)) return game;
   const g = structuredClone(game);
   const event = (type, data = {}) => {
-    const e = { id: `${id}:${g.events.length}`, commandId: id, type, time, seat: g.activeSeat, turnId: g.turn?.id ?? null, ...data };
+    const e = { id: `${id2}:${g.events.length}`, commandId: id2, type, time, seat: g.activeSeat, turnId: g.turn?.id ?? null, ...data };
     g.events.push(e);
     return e;
   };
   if (action.type === "undo-score") {
     const original = undoableScore(g, action.seat);
-    if (!original || original.id !== action.target || action.seat !== original.seat) fail("Only your latest completed turn can be undone before the next completed turn.");
+    if (!original || original.id !== action.target || action.seat !== original.seat) fail2("Only your latest completed turn can be undone before the next completed turn.");
     const category = original.type === "score" ? original.category : null;
     const before = category ? g.sheets[original.seat][category] : original.value || 0;
     const reversedBonus = category ? original.bonus || 0 : original.value || 0;
     if (category) delete g.sheets[original.seat][category];
     if (reversedBonus) {
       const remaining = (g.sheets[original.seat].yahtzeeBonus || 0) - reversedBonus;
-      if (remaining < 0) fail("The attached Yahtzee bonus cannot be reversed.");
+      if (remaining < 0) fail2("The attached Yahtzee bonus cannot be reversed.");
       if (remaining) g.sheets[original.seat].yahtzeeBonus = remaining;
       else delete g.sheets[original.seat].yahtzeeBonus;
     }
@@ -236,21 +306,21 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
     event("score-undo", { target: original.id, seat: original.seat, category, before, reversedBonus, undoneTurnId: original.turnId });
   } else if (action.type === "correct-score") {
     const original = g.events.find((e) => e.id === action.target && e.type === "score");
-    if (!original || original.seat !== action.seat) fail("Choose one of this player\u2019s recorded scores.");
-    if (g.events.some((e) => e.type === "score-undo" && e.target === original.id)) fail("That score was undone. Choose the replacement score.");
+    if (!original || original.seat !== action.seat) fail2("Choose one of this player\u2019s recorded scores.");
+    if (g.events.some((e) => e.type === "score-undo" && e.target === original.id)) fail2("That score was undone. Choose the replacement score.");
     validateValue(g, original.category, action.value);
     event("score-correction", { target: original.id, seat: original.seat, category: original.category, before: g.sheets[original.seat][original.category], value: action.value });
     g.sheets[original.seat][original.category] = action.value;
   } else {
-    if (g.status !== "active") fail("This game is complete.");
-    if (action.seat !== g.activeSeat) fail("It is another player\u2019s turn.");
+    if (g.status !== "active") fail2("This game is complete.");
+    if (action.seat !== g.activeSeat) fail2("It is another player\u2019s turn.");
     if (action.type === "start") {
-      if (g.turn) fail("The turn is already started.");
+      if (g.turn) fail2("The turn is already started.");
       const source = action.source ?? g.source;
-      if (!SOURCES.includes(source)) fail("Unknown dice source.");
-      if (finalChainRules(g) && source !== "manual") fail("These Competition rules use manual scoring.");
+      if (!SOURCES.includes(source)) fail2("Unknown dice source.");
+      if (finalChainRules(g) && source !== "manual") fail2("These Competition rules use manual scoring.");
       g.turn = {
-        id: `${id}:turn`,
+        id: `${id2}:turn`,
         seat: g.activeSeat,
         startedAt: time,
         limit: rollLimit(g),
@@ -261,15 +331,15 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
       };
       event("turn-start");
     } else {
-      if (!g.turn) fail("Start your turn first.");
+      if (!g.turn) fail2("Start your turn first.");
       const rolls = g.turn.rolls.filter((r) => !r.excluded), last = rolls.at(-1);
-      if (g.finalChain && action.type !== "final-chain-roll") fail("Report a roll in your final bonus attempt.");
+      if (g.finalChain && action.type !== "final-chain-roll") fail2("Report a roll in your final bonus attempt.");
       if (action.type === "final-chain-roll") {
-        if (!finalChainRules(g) || !g.finalChain || g.turn.phase !== "final-bonus" || g.turn.source !== "manual") fail("No final bonus attempt is active.");
-        if (action.face !== null && !isFace(action.face)) fail("Report a Yahtzee face from one to six, or no Yahtzee.");
-        if (g.turn.manualRolls.length >= g.turn.limit) fail("Final bonus roll limit reached.");
+        if (!finalChainRules(g) || !g.finalChain || g.turn.phase !== "final-bonus" || g.turn.source !== "manual") fail2("No final bonus attempt is active.");
+        if (action.face !== null && !isFace(action.face)) fail2("Report a Yahtzee face from one to six, or no Yahtzee.");
+        if (g.turn.manualRolls.length >= g.turn.limit) fail2("Final bonus roll limit reached.");
         const finishAttempt = action.finishAttempt === true;
-        if (finishAttempt && action.face !== null) fail("A failed attempt cannot also report a Yahtzee.");
+        if (finishAttempt && action.face !== null) fail2("A failed attempt cannot also report a Yahtzee.");
         const rollNumber = finishAttempt ? null : g.turn.manualRolls.length + 1, attempt = g.finalChain.attempt;
         const value = action.face === null ? 0 : bonusPoints(g.rules, action.face);
         const e = event("final-chain-roll", { face: action.face, attempt, rollNumber, value, source: "manual", ...finishAttempt ? { scope: "attempt", outcome: "no-yahtzee" } : {} });
@@ -285,40 +355,40 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
           finishTurn(g, false, time);
         }
       } else if (action.type === "roll") {
-        if (!FACE_SOURCES.includes(g.turn.source)) fail("This turn uses manual scoring.");
-        if (rolls.length >= g.turn.limit) fail("Roll limit reached. Choose a category.");
+        if (!FACE_SOURCES.includes(g.turn.source)) fail2("This turn uses manual scoring.");
+        if (rolls.length >= g.turn.limit) fail2("Roll limit reached. Choose a category.");
         validateDice(action.dice);
         const held = action.held ?? Array(5).fill(false);
-        if (held.length !== 5 || !held.every((v) => typeof v === "boolean")) fail("Invalid held dice.");
-        if (!last && held.some(Boolean)) fail("Roll all five dice first.");
-        if (held.every(Boolean)) fail("Release at least one die to record a reroll.");
-        if (last && held.some((v, i) => v && action.dice[i] !== last.dice[i])) fail("Held dice cannot change during a reroll.");
+        if (held.length !== 5 || !held.every((v) => typeof v === "boolean")) fail2("Invalid held dice.");
+        if (!last && held.some(Boolean)) fail2("Roll all five dice first.");
+        if (held.every(Boolean)) fail2("Release at least one die to record a reroll.");
+        if (last && held.some((v, i) => v && action.dice[i] !== last.dice[i])) fail2("Held dice cannot change during a reroll.");
         let hardware = {};
         if (g.turn.source === "camera") {
           validateCameraCapture(game, action.capture, action.dice, held);
           const original = action.capture.observation;
-          if (g.events.some((e2) => e2.type === "roll" && e2.observedSource === "camera" && ["cameraId", "sessionId", "frameId"].every((k) => e2.capture?.observation[k] === original[k]))) fail("This camera frame was already recorded. Capture a fresh roll.");
-          if (last && held.some(Boolean) && ["cameraId", "sessionId", "calibrationId"].some((k) => last.capture?.observation[k] !== original[k])) fail("Camera session or calibration changed. Release all holds and capture again.");
+          if (g.events.some((e2) => e2.type === "roll" && e2.observedSource === "camera" && ["cameraId", "sessionId", "frameId"].every((k) => e2.capture?.observation[k] === original[k]))) fail2("This camera frame was already recorded. Capture a fresh roll.");
+          if (last && held.some(Boolean) && ["cameraId", "sessionId", "calibrationId"].some((k) => last.capture?.observation[k] !== original[k])) fail2("Camera session or calibration changed. Release all holds and capture again.");
           hardware = { observedSource: "camera", capture: structuredClone(action.capture) };
         }
         if (g.turn.source === "godice") {
-          if (!Array.isArray(action.deviceIds) || action.deviceIds.length !== 5 || new Set(action.deviceIds).size !== 5 || action.deviceIds.some((id2) => typeof id2 !== "string" || !id2)) fail("Five identified dice are required.");
-          if (action.capture?.gameId !== g.id || action.capture?.turnId !== g.turn.id || action.capture?.playerId !== g.players[g.activeSeat].id || action.capture?.revision !== game.revision) fail("Capture belongs to another turn or revision.");
-          if (!Array.isArray(action.capture.events) || action.capture.events.length > 500 || !Array.isArray(action.capture.evidence) || action.capture.evidence.length > 500) fail("Invalid capture evidence.");
-          if (last && held.some(Boolean) && JSON.stringify(last.deviceIds) !== JSON.stringify(action.deviceIds)) fail("Held dice cannot be transferred to another device.");
+          if (!Array.isArray(action.deviceIds) || action.deviceIds.length !== 5 || new Set(action.deviceIds).size !== 5 || action.deviceIds.some((id3) => typeof id3 !== "string" || !id3)) fail2("Five identified dice are required.");
+          if (action.capture?.gameId !== g.id || action.capture?.turnId !== g.turn.id || action.capture?.playerId !== g.players[g.activeSeat].id || action.capture?.revision !== game.revision) fail2("Capture belongs to another turn or revision.");
+          if (!Array.isArray(action.capture.events) || action.capture.events.length > 500 || !Array.isArray(action.capture.evidence) || action.capture.evidence.length > 500) fail2("Invalid capture evidence.");
+          if (last && held.some(Boolean) && JSON.stringify(last.deviceIds) !== JSON.stringify(action.deviceIds)) fail2("Held dice cannot be transferred to another device.");
           hardware = { deviceIds: [...action.deviceIds], capture: structuredClone(action.capture) };
         }
         const e = event("roll", { dice: [...action.dice], held: [...held], source: g.turn.source, combinations: combinations(action.dice), ...hardware });
         g.turn.rolls.push({ id: e.id, dice: [...action.dice], held: [...held], source: g.turn.source, excluded: false, ...hardware.deviceIds ? { deviceIds: hardware.deviceIds } : {}, ...g.turn.source === "camera" ? hardware : {} });
       } else if (action.type === "correct-roll") {
-        if (!last) fail("No roll to correct.");
+        if (!last) fail2("No roll to correct.");
         validateDice(action.dice);
         event("roll-correction", { target: last.id, before: [...last.dice], dice: [...action.dice], source: "manual-correction", observedSource: last.observedSource ?? last.source });
         last.observedSource ??= last.source;
         last.dice = [...action.dice];
         last.source = "manual-correction";
       } else if (action.type === "discard-roll") {
-        if (!last) fail("No roll to exclude.");
+        if (!last) fail2("No roll to exclude.");
         event("roll-excluded", { target: last.id });
         last.excluded = true;
       } else if (action.type === "manual-fallback") {
@@ -327,24 +397,24 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
         g.turn.manualFallback = true;
       } else if (action.type === "score" || action.type === "bonus") {
         let dice = FACE_SOURCES.includes(g.turn.source) ? last?.dice : null;
-        if (FACE_SOURCES.includes(g.turn.source) && !dice) fail("Record a roll first.");
+        if (FACE_SOURCES.includes(g.turn.source) && !dice) fail2("Record a roll first.");
         if (g.turn.source === "manual" && action.yahtzeeFace) {
-          if (!isFace(action.yahtzeeFace)) fail("Choose a valid Yahtzee face.");
+          if (!isFace(action.yahtzeeFace)) fail2("Choose a valid Yahtzee face.");
           dice = Array(5).fill(action.yahtzeeFace);
         }
         const options = dice ? scoreOptions(g, dice) : null;
         if (action.type === "bonus") {
-          if (!options?.extraTurn) fail("A scored first Yahtzee and five matching dice are required.");
+          if (!options?.extraTurn) fail2("A scored first Yahtzee and five matching dice are required.");
           g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + options.bonus;
           event("bonus", { value: options.bonus, face: dice[0], source: g.turn.source, rollId: last?.id ?? null });
           finishTurn(g, true, time);
         } else {
-          if (g.sheets[g.activeSeat][action.category] !== void 0) fail("That category is already filled.");
+          if (g.sheets[g.activeSeat][action.category] !== void 0) fail2("That category is already filled.");
           validateValue(g, action.category, action.value);
-          if (options?.extraTurn) fail("Record the bonus Yahtzee, then take your extra turn.");
-          if (options && !(action.category in options.scores)) fail("Joker placement requires another category.");
-          if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail("Score does not match the dice.");
-          if (g.rules.weighted && action.category === "yahtzee" && action.value > 0 && !dice) fail("Select the Yahtzee face.");
+          if (options?.extraTurn) fail2("Record the bonus Yahtzee, then take your extra turn.");
+          if (options && !(action.category in options.scores)) fail2("Joker placement requires another category.");
+          if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail2("Score does not match the dice.");
+          if (g.rules.weighted && action.category === "yahtzee" && action.value > 0 && !dice) fail2("Select the Yahtzee face.");
           const bonus = options?.bonus || 0;
           g.sheets[g.activeSeat][action.category] = action.value;
           if (bonus) g.sheets[g.activeSeat].yahtzeeBonus = (g.sheets[g.activeSeat].yahtzeeBonus || 0) + bonus;
@@ -356,34 +426,34 @@ function command(game, action, { id, time = (/* @__PURE__ */ new Date()).toISOSt
           }
           finishTurn(g, finalYahtzee, time);
         }
-      } else fail("Unknown action.");
+      } else fail2("Unknown action.");
     }
   }
   g.revision++;
   return g;
 }
 function validateCameraCapture(game, capture, dice, held) {
-  if (capture?.gameId !== game.id || capture?.revision !== game.revision || capture?.turnId !== game.turn?.id || capture?.playerId !== game.players[game.activeSeat].id) fail("Capture belongs to another turn or revision.");
-  if (capture.version !== 1 || capture.confirmed !== true || capture.identityScope !== "logical-slots") fail("Confirm a versioned camera observation first.");
+  if (capture?.gameId !== game.id || capture?.revision !== game.revision || capture?.turnId !== game.turn?.id || capture?.playerId !== game.players[game.activeSeat].id) fail2("Capture belongs to another turn or revision.");
+  if (capture.version !== 1 || capture.confirmed !== true || capture.identityScope !== "logical-slots") fail2("Confirm a versioned camera observation first.");
   const o = capture.observation;
   const observationKeys = ["version", "cameraId", "sessionId", "sequence", "frameId", "width", "height", "orientation", "calibrationId", "mediaOrigin", "receivedAtMonotonicMs", "decodedAtMonotonicMs", "observedAtMonotonicMs", "ageUpperBoundMs", "bridgeReceivedAtMonotonicMs", "timestampMeaning", "readerVersion", "prediction", "predictedValues"];
-  if (o && Object.keys(o).some((k) => !observationKeys.includes(k))) fail("Unexpected camera metadata.");
-  if (!o || o.version !== 1 || !["cameraId", "sessionId", "frameId", "calibrationId", "readerVersion"].every((k) => typeof o[k] === "string" && /^[\w.-]{1,128}$/.test(o[k]))) fail("Invalid camera observation identity.");
-  if (!Number.isInteger(o.sequence) || o.sequence < 1 || !Number.isInteger(o.width) || !Number.isInteger(o.height) || o.width < 1 || o.height < 1 || o.width > 8192 || o.height > 8192 || ![0, 90, 180, 270].includes(o.orientation)) fail("Invalid camera frame metadata.");
-  if (!["camera", "local-rtsp", "fixture", "webcam", "replay", "synthetic"].includes(o.mediaOrigin)) fail("Invalid camera media origin.");
+  if (o && Object.keys(o).some((k) => !observationKeys.includes(k))) fail2("Unexpected camera metadata.");
+  if (!o || o.version !== 1 || !["cameraId", "sessionId", "frameId", "calibrationId", "readerVersion"].every((k) => typeof o[k] === "string" && /^[\w.-]{1,128}$/.test(o[k]))) fail2("Invalid camera observation identity.");
+  if (!Number.isInteger(o.sequence) || o.sequence < 1 || !Number.isInteger(o.width) || !Number.isInteger(o.height) || o.width < 1 || o.height < 1 || o.width > 8192 || o.height > 8192 || ![0, 90, 180, 270].includes(o.orientation)) fail2("Invalid camera frame metadata.");
+  if (!["camera", "local-rtsp", "fixture", "webcam", "replay", "synthetic"].includes(o.mediaOrigin)) fail2("Invalid camera media origin.");
   const rendered = o.timestampMeaning === "local-render-not-sensor-capture";
   if (rendered) {
-    if (!Number.isFinite(o.observedAtMonotonicMs) || o.observedAtMonotonicMs < 0 || !Number.isFinite(o.ageUpperBoundMs) || o.ageUpperBoundMs < 0) fail("Invalid camera render timing.");
-    if (o.bridgeReceivedAtMonotonicMs !== void 0 && (!Number.isFinite(o.bridgeReceivedAtMonotonicMs) || o.bridgeReceivedAtMonotonicMs < o.observedAtMonotonicMs)) fail("Invalid camera bridge timing.");
-  } else if (o.mediaOrigin === "camera" || !Number.isFinite(o.receivedAtMonotonicMs) || !Number.isFinite(o.decodedAtMonotonicMs) || o.receivedAtMonotonicMs < 0 || o.decodedAtMonotonicMs < o.receivedAtMonotonicMs) fail("Invalid camera frame timing.");
-  if (!Array.isArray(o.predictedValues) || o.predictedValues.length !== 5 || !o.predictedValues.every((v) => v === null || isFace(v))) fail("Invalid original camera values.");
-  if (o.prediction && (!Array.isArray(o.prediction.dice) || o.prediction.dice.length > 5 || JSON.stringify(Array.from({ length: 5 }, (_, i) => o.prediction.dice[i]?.value ?? null)) !== JSON.stringify(o.predictedValues))) fail("Original camera prediction does not match its values.");
-  if (JSON.stringify(o).length > 65536) fail("Camera evidence is too large.");
-  if (!Array.isArray(capture.confirmedValues) || JSON.stringify(capture.confirmedValues) !== JSON.stringify(dice) || JSON.stringify(capture.heldMask) !== JSON.stringify(held)) fail("Review does not match the submitted roll.");
-  if (!Array.isArray(capture.corrections) || capture.corrections.length > 5) fail("Invalid camera corrections.");
+    if (!Number.isFinite(o.observedAtMonotonicMs) || o.observedAtMonotonicMs < 0 || !Number.isFinite(o.ageUpperBoundMs) || o.ageUpperBoundMs < 0) fail2("Invalid camera render timing.");
+    if (o.bridgeReceivedAtMonotonicMs !== void 0 && (!Number.isFinite(o.bridgeReceivedAtMonotonicMs) || o.bridgeReceivedAtMonotonicMs < o.observedAtMonotonicMs)) fail2("Invalid camera bridge timing.");
+  } else if (o.mediaOrigin === "camera" || !Number.isFinite(o.receivedAtMonotonicMs) || !Number.isFinite(o.decodedAtMonotonicMs) || o.receivedAtMonotonicMs < 0 || o.decodedAtMonotonicMs < o.receivedAtMonotonicMs) fail2("Invalid camera frame timing.");
+  if (!Array.isArray(o.predictedValues) || o.predictedValues.length !== 5 || !o.predictedValues.every((v) => v === null || isFace(v))) fail2("Invalid original camera values.");
+  if (o.prediction && (!Array.isArray(o.prediction.dice) || o.prediction.dice.length > 5 || JSON.stringify(Array.from({ length: 5 }, (_, i) => o.prediction.dice[i]?.value ?? null)) !== JSON.stringify(o.predictedValues))) fail2("Original camera prediction does not match its values.");
+  if (JSON.stringify(o).length > 65536) fail2("Camera evidence is too large.");
+  if (!Array.isArray(capture.confirmedValues) || JSON.stringify(capture.confirmedValues) !== JSON.stringify(dice) || JSON.stringify(capture.heldMask) !== JSON.stringify(held)) fail2("Review does not match the submitted roll.");
+  if (!Array.isArray(capture.corrections) || capture.corrections.length > 5) fail2("Invalid camera corrections.");
   const changed = o.predictedValues.flatMap((v, i) => v === dice[i] ? [] : [{ slot: i, before: v, after: dice[i] }]);
-  if (JSON.stringify(capture.corrections) !== JSON.stringify(changed)) fail("Camera corrections must preserve the original values.");
-  if (!Number.isFinite(capture.reviewedAtMonotonicMs) || capture.reviewedAtMonotonicMs < (rendered ? o.observedAtMonotonicMs : o.decodedAtMonotonicMs)) fail("Invalid camera review timing.");
+  if (JSON.stringify(capture.corrections) !== JSON.stringify(changed)) fail2("Camera corrections must preserve the original values.");
+  if (!Number.isFinite(capture.reviewedAtMonotonicMs) || capture.reviewedAtMonotonicMs < (rendered ? o.observedAtMonotonicMs : o.decodedAtMonotonicMs)) fail2("Invalid camera review timing.");
 }
 
 // src/game/upper-progress.js
@@ -411,7 +481,7 @@ function upperProgress(sheet = {}) {
 // src/game/score-presentation.js
 var VENUE_IDS = Object.freeze(["miami", "sydney", "las-vegas", "tokyo"]);
 var SPECIAL_EVENT_MS = 4e3;
-function scorePresentation(before, after, { time, id } = {}) {
+function scorePresentation(before, after, { time, id: id2 } = {}) {
   if (!before || !after || before.id !== after.id) return null;
   const fresh = (after.events || []).filter((e) => !(before.events || []).some((p) => p.id === e.id));
   const event = fresh.filter((e) => ["score", "score-correction", "score-undo", "final-chain-roll", "bonus", "final-chain-end"].includes(e.type)).at(-1);
@@ -437,7 +507,7 @@ function scorePresentation(before, after, { time, id } = {}) {
   if (!items.length) return null;
   const acceptedAt = Date.parse(time || event.time);
   if (!Number.isFinite(acceptedAt)) throw Error("Accepted event time required");
-  return { id: id || event.id, gameId: after.id, gameRevision: after.revision, seat: event.seat, acceptedAt: new Date(acceptedAt).toISOString(), expiresAt: new Date(acceptedAt + SPECIAL_EVENT_MS).toISOString(), items };
+  return { id: id2 || event.id, gameId: after.id, gameRevision: after.revision, seat: event.seat, acceptedAt: new Date(acceptedAt).toISOString(), expiresAt: new Date(acceptedAt + SPECIAL_EVENT_MS).toISOString(), items };
 }
 function presentationRemaining(event, now = Date.now()) {
   return event ? Math.max(0, Date.parse(event.expiresAt) - now) : 0;
@@ -504,12 +574,12 @@ var RoomError = class extends Error {
     this.status = status;
   }
 };
-var fail2 = (message, status) => {
+var fail3 = (message, status) => {
   throw new RoomError(message, status);
 };
 function playerName(value) {
   const name = String(value || "").trim();
-  if (!name || name.length > 24) fail2("Enter a name of 1\u201324 characters.");
+  if (!name || name.length > 24) fail3("Enter a name of 1\u201324 characters.");
   return name;
 }
 function memberSeat(room, userId) {
@@ -517,19 +587,19 @@ function memberSeat(room, userId) {
 }
 function requireMember(room, userId) {
   const seat = memberSeat(room, userId);
-  if (seat < 0) fail2("You are not a member of this game.", 403);
+  if (seat < 0) fail3("You are not a member of this game.", 403);
   return seat;
 }
-function createRoom({ id, code, userId, name, mode = "standard", source = "manual", hideTotals = false, tournament, rulesVersion = 1, time, presentationVersion }) {
-  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail2("Unknown game mode.");
-  if (!["manual", "godice"].includes(source)) fail2("Choose manual or host GoDice.");
+function createRoom({ id: id2, code, userId, name, mode = "standard", source = "manual", hideTotals = false, tournament, rulesVersion = 1, time, presentationVersion }) {
+  if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail3("Unknown game mode.");
+  if (!["manual", "godice"].includes(source)) fail3("Choose manual or host GoDice.");
   try {
     gameRules(mode, rulesVersion, source);
   } catch (error) {
-    fail2(error.message);
+    fail3(error.message);
   }
   return {
-    id,
+    id: id2,
     code,
     hostId: userId,
     revision: 0,
@@ -548,19 +618,19 @@ function createRoom({ id, code, userId, name, mode = "standard", source = "manua
 }
 function joinRoom(room, { userId, name, time }) {
   if (memberSeat(room, userId) >= 0) return room;
-  if (room.status !== "lobby") fail2("This game has started. Only its existing players can rejoin.");
-  if (time >= room.joinExpiresAt) fail2("This invitation has expired. Ask the host to create a new game.");
-  if (room.members.length >= 8) fail2("This game already has eight players.");
-  if (room.tournament && room.members.length >= room.tournament.playerCount) fail2("This tournament already has its chosen number of players.");
+  if (room.status !== "lobby") fail3("This game has started. Only its existing players can rejoin.");
+  if (time >= room.joinExpiresAt) fail3("This invitation has expired. Ask the host to create a new game.");
+  if (room.members.length >= 8) fail3("This game already has eight players.");
+  if (room.tournament && room.members.length >= room.tournament.playerCount) fail3("This tournament already has its chosen number of players.");
   name = playerName(name);
-  if (room.members.some((m) => m.name.toLowerCase() === name.toLowerCase())) fail2("That name is taken in this game. Choose another.");
+  if (room.members.some((m) => m.name.toLowerCase() === name.toLowerCase())) fail3("That name is taken in this game. Choose another.");
   return { ...room, revision: room.revision + 1, members: [...room.members, { userId, name }] };
 }
 function startRoom(room, { userId, time }) {
   requireMember(room, userId);
-  if (room.hostId !== userId) fail2("Only the host can start the game.", 403);
+  if (room.hostId !== userId) fail3("Only the host can start the game.", 403);
   if (room.status !== "lobby") return room;
-  if (room.tournament && room.members.length !== room.tournament.playerCount) fail2("Wait for the chosen number of tournament players before starting.");
+  if (room.tournament && room.members.length !== room.tournament.playerCount) fail3("Wait for the chosen number of tournament players before starting.");
   let game = createCoreGame({ id: room.id, names: room.members.map((m) => m.name), mode: room.mode, hideTotals: room.hideTotals, source: room.source || "manual", rulesVersion: room.rulesVersion ?? 1, time });
   game.players = game.players.map((p, i) => ({ ...p, id: room.members[i].userId }));
   if (room.tournament) game.rules = structuredClone(room.tournament.rules);
@@ -570,40 +640,40 @@ function startRoom(room, { userId, time }) {
 function playRoom(room, { userId, action, commandId: commandId2, expectedRevision, gameId, time, presentationVersion }) {
   const member = requireMember(room, userId), host = room.hostId === userId;
   requireTournamentPlaying(room);
-  if (!room.game) fail2("The host has not started this game.");
-  if (action?.type === "undo-score" && gameId !== room.game.id) fail2("Refresh the current game before undoing a score.", 409);
-  if (gameId !== void 0 && gameId !== room.game.id || (room.gameSequence ?? 1) > 1 && gameId === void 0) fail2("The table moved to a new game. Refresh or update the app before scoring.", 409);
-  if (typeof commandId2 !== "string" || !/^[\w-]{8,100}$/.test(commandId2)) fail2("Invalid command ID.");
+  if (!room.game) fail3("The host has not started this game.");
+  if (action?.type === "undo-score" && gameId !== room.game.id) fail3("Refresh the current game before undoing a score.", 409);
+  if (gameId !== void 0 && gameId !== room.game.id || (room.gameSequence ?? 1) > 1 && gameId === void 0) fail3("The table moved to a new game. Refresh or update the app before scoring.", 409);
+  if (typeof commandId2 !== "string" || !/^[\w-]{8,100}$/.test(commandId2)) fail3("Invalid command ID.");
   const prior = room.game.events.find((e) => e.commandId === commandId2);
   const receipt = room.receipts?.find((r) => r.id === commandId2);
   if (receipt) {
-    if (receipt.actor !== userId) fail2("This command belongs to another player.", 403);
+    if (receipt.actor !== userId) fail3("This command belongs to another player.", 403);
     return room;
   }
   if (prior) {
-    if ((prior.actorId || room.members[prior.seat]?.userId) !== userId) fail2("This command belongs to another player.", 403);
+    if ((prior.actorId || room.members[prior.seat]?.userId) !== userId) fail3("This command belongs to another player.", 403);
     return room;
   }
-  if (room.revision !== expectedRevision) fail2("The game changed. Refresh and choose your score again.", 409);
-  if (!["correct-score", "undo-score"].includes(action?.type) && presentationRemaining(room.scorePresentation, Date.parse(time)) > 0) fail2("Wait for the shared announcement to finish.", 409);
-  if (!action || !["start", "score", "bonus", "final-chain-roll", "correct-score", "undo-score", "roll", "correct-roll", "manual-fallback", "dice-state"].includes(action.type)) fail2("Unsupported game action.");
+  if (room.revision !== expectedRevision) fail3("The game changed. Refresh and choose your score again.", 409);
+  if (!["correct-score", "undo-score"].includes(action?.type) && presentationRemaining(room.scorePresentation, Date.parse(time)) > 0) fail3("Wait for the shared announcement to finish.", 409);
+  if (!action || !["start", "score", "bonus", "final-chain-roll", "correct-score", "undo-score", "roll", "correct-roll", "manual-fallback", "dice-state"].includes(action.type)) fail3("Unsupported game action.");
   const hardware = room.game.source === "godice";
   const receipts = [...room.receipts || [], { id: commandId2, actor: userId }].slice(-100);
   if (action.type === "dice-state") {
-    if (!host || !hardware) fail2("Only the GoDice host can publish dice readings.", 403);
-    if (room.game.status !== "active" || action.turnId !== room.game.turn?.id || action.gameRevision !== room.game.revision) fail2("The turn changed.", 409);
-    if (!["rolling", "paused", "ready", "settled"].includes(action.phase) || !Array.isArray(action.faces) || action.faces.length !== 5 || action.faces.some((v) => v !== null && (!Number.isInteger(v) || v < 1 || v > 6)) || !Array.isArray(action.moving) || action.moving.length !== 5 || action.moving.some((v) => typeof v !== "boolean")) fail2("Invalid live dice state.");
-    if (!Number.isInteger(action.connected) || action.connected < 0 || action.connected > 5) fail2("Invalid dice count.");
+    if (!host || !hardware) fail3("Only the GoDice host can publish dice readings.", 403);
+    if (room.game.status !== "active" || action.turnId !== room.game.turn?.id || action.gameRevision !== room.game.revision) fail3("The turn changed.", 409);
+    if (!["rolling", "paused", "ready", "settled"].includes(action.phase) || !Array.isArray(action.faces) || action.faces.length !== 5 || action.faces.some((v) => v !== null && (!Number.isInteger(v) || v < 1 || v > 6)) || !Array.isArray(action.moving) || action.moving.length !== 5 || action.moving.some((v) => typeof v !== "boolean")) fail3("Invalid live dice state.");
+    if (!Number.isInteger(action.connected) || action.connected < 0 || action.connected > 5) fail3("Invalid dice count.");
     return { ...room, revision: room.revision + 1, receipts, liveDice: { turnId: action.turnId, phase: action.phase, faces: [...action.faces], moving: [...action.moving], connected: action.connected, updatedAt: time } };
   }
-  if (["roll"].includes(action.type) && (!host || !hardware)) fail2("Only the GoDice host can record physical rolls.", 403);
-  if (["correct-roll", "manual-fallback"].includes(action.type) && !hardware) fail2("This room uses manual dice.");
-  if (action.type === "start" && action.source !== void 0 && action.source !== (hardware ? "godice" : "manual")) fail2("The room dice mode is fixed.");
+  if (["roll"].includes(action.type) && (!host || !hardware)) fail3("Only the GoDice host can record physical rolls.", 403);
+  if (["correct-roll", "manual-fallback"].includes(action.type) && !hardware) fail3("This room uses manual dice.");
+  if (action.type === "start" && action.source !== void 0 && action.source !== (hardware ? "godice" : "manual")) fail3("The room dice mode is fixed.");
   const delegated = hardware && host && ["start", "roll", "correct-roll", "manual-fallback"].includes(action.type);
   const seat = delegated ? room.game.activeSeat : member;
-  if (!["correct-score", "undo-score"].includes(action.type) && room.game.activeSeat !== seat) fail2("It is another player\u2019s turn.", 403);
-  if (["score", "bonus", "correct-roll"].includes(action.type) && hardware && room.game.turn?.source === "godice" && ["rolling", "paused"].includes(room.liveDice?.phase)) fail2("Wait for the host dice to settle.");
-  if (["correct-score", "undo-score"].includes(action.type) && !room.game.events.some((e) => e.id === action.target && (e.type === "score" || action.type === "undo-score" && ["bonus", "final-chain-roll"].includes(e.type)) && e.seat === seat)) fail2("You can only change your own scores.", 403);
+  if (!["correct-score", "undo-score"].includes(action.type) && room.game.activeSeat !== seat) fail3("It is another player\u2019s turn.", 403);
+  if (["score", "bonus", "correct-roll"].includes(action.type) && hardware && room.game.turn?.source === "godice" && ["rolling", "paused"].includes(room.liveDice?.phase)) fail3("Wait for the host dice to settle.");
+  if (["correct-score", "undo-score"].includes(action.type) && !room.game.events.some((e) => e.id === action.target && (e.type === "score" || action.type === "undo-score" && ["bonus", "final-chain-roll"].includes(e.type)) && e.seat === seat)) fail3("You can only change your own scores.", 403);
   let game = room.game;
   try {
     if (!game.turn && ["score", "bonus", "final-chain-roll"].includes(action.type)) game = command(game, { type: "start", seat }, { id: `room:${commandId2}:start`, time });
@@ -620,10 +690,96 @@ function playRoom(room, { userId, action, commandId: commandId2, expectedRevisio
   return updateTournamentCompletion({ ...room, revision: room.revision + 1, status: game.status, game, receipts, ...presentationEnabled ? { presentationVersion: 1, scorePresentation: presentation } : {}, ...["correct-score", "undo-score"].includes(action.type) && room.game.status === "finished" ? { rematch: null } : {}, ...hardware ? { liveDice } : {} });
 }
 
+// src/experience/room-reactions.js
+var REACTION_LIVE_MS = 15e3;
+var REACTION_QUEUE_LIMIT = 16;
+var commandPattern = /^[\w-]{8,100}$/;
+var reject = (text, status = 400) => {
+  throw new RoomError(text, status);
+};
+var reactionOperations = ["reaction-save", "reaction-remove", "reactions-toggle"];
+function compiled(room, config) {
+  return compileReactionSet({ id: room.id, version: config.version, scopeId: room.id, effectiveAfterRevision: config.effectiveAfterRevision, rules: config.rules }, { memberIds: room.members.map((m) => m.userId) });
+}
+function changeRoomReactions(room, { userId, operation, gameId, expectedRevision, configVersion, rule, ruleId, enabled, commandId: commandId2 }) {
+  requireMember(room, userId);
+  if (!room.game || room.game.id !== gameId) reject("Reopen reactions for the current game.", 409);
+  if (room.revision !== expectedRevision) reject("The table changed. Refresh reactions and try again.", 409);
+  if (!commandPattern.test(commandId2 || "")) reject("Invalid reaction request.");
+  const old = room.reactions || { version: 0, enabled: true, rules: [] };
+  if (configVersion !== old.version) reject("Reaction settings changed. Refresh before saving.", 409);
+  let rules = structuredClone(old.rules), tableEnabled = old.enabled;
+  if (operation === "reactions-toggle") {
+    if (userId !== room.hostId) reject("Only the host can switch table reactions on or off.", 403);
+    if (typeof enabled !== "boolean") reject("Choose whether table reactions are enabled.");
+    tableEnabled = enabled;
+  } else if (operation === "reaction-save") {
+    if (!rule || typeof rule !== "object" || Array.isArray(rule) || Object.keys(rule).some((k) => !["id", "enabled", "when", "audience", "actions"].includes(k))) reject("Invalid reaction definition.");
+    const prior = rules.find((r) => r.id === rule.id);
+    if (prior && prior.authorId !== userId) reject("You can only edit reactions you created.", 403);
+    const next = { ...structuredClone(rule), authorId: userId, version: (prior?.version || 0) + 1 };
+    rules = rules.filter((r) => r.id !== rule.id);
+    rules.push(next);
+  } else if (operation === "reaction-remove") {
+    const prior = rules.find((r) => r.id === ruleId);
+    if (!prior) reject("That reaction no longer exists. Refresh the editor.", 409);
+    if (prior.authorId !== userId) reject("You can only remove reactions you created.", 403);
+    rules = rules.filter((r) => r.id !== ruleId);
+  } else reject("Unknown reaction operation.");
+  const reactions = { version: old.version + 1, effectiveAfterRevision: room.revision + 1, enabled: tableEnabled, rules };
+  try {
+    compiled(room, reactions);
+  } catch (error) {
+    reject(error.message);
+  }
+  const disabledIds = new Set(rules.filter((r) => !r.enabled).map((r) => r.id));
+  const keep = (i) => tableEnabled && !disabledIds.has(i.ruleId) && rules.some((r) => r.id === i.ruleId);
+  const reactionIntents = (room.reactionIntents || []).filter(keep);
+  const reactionQueue = (room.reactionQueue || []).map((entry) => ({ ...entry, intents: entry.intents.filter(keep) }));
+  return { ...room, revision: room.revision + 1, reactions, reactionIntents, reactionQueue };
+}
+function withAcceptedReactions(before, after, time) {
+  if (after === before || !after.game) return after;
+  const game = after.game, previous = before.game;
+  if (!previous || previous.id !== game.id) return { ...after, reactionPopup: null, reactionIntents: [], reactionQueue: [] };
+  const fresh = game.events.filter((e) => !previous.events.some((old) => old.id === e.id));
+  const invalid = new Set(game.events.filter((e) => ["score-undo", "score-correction"].includes(e.type)).map((e) => e.target));
+  const score = fresh.filter((e) => e.type === "score" && !invalid.has(e.id)).at(-1);
+  const clock = Date.parse(time);
+  const reactionQueue = (after.reactionQueue || []).filter((entry) => !invalid.has(entry.popup.eventId) && Date.parse(entry.expiresAt) > clock);
+  if (!score) {
+    if (before.reactionPopup && invalid.has(before.reactionPopup.eventId)) return { ...after, reactionPopup: null, reactionIntents: [], reactionQueue };
+    return { ...after, reactionQueue };
+  }
+  const actorId = game.players[score.seat]?.id;
+  if (!after.members.some((m) => m.userId === actorId)) reject("Score has no authoritative table member.", 500);
+  const acceptedAt = Date.parse(time);
+  if (!Number.isFinite(acceptedAt)) reject("Accepted score time required.", 500);
+  const standard = after.scorePresentation?.id === score.commandId ? after.scorePresentation : null;
+  const popup = { ...standard || {}, id: score.commandId, eventId: score.id, gameId: game.id, gameRevision: game.revision, seat: score.seat, actorId, category: score.category, value: score.value, acceptedAt: new Date(acceptedAt).toISOString(), expiresAt: new Date(acceptedAt + 4e3).toISOString(), items: standard?.items || [{ kind: "score", seat: score.seat, category: score.category, text: `${META[score.category].name} \xB7 ${score.value} points` }] };
+  let reactionIntents = [];
+  if (after.reactions?.enabled) {
+    const set = compiled(after, after.reactions);
+    reactionIntents = compactIntents(evaluateReactions(set, { type: "score-recorded", scopeId: after.id, gameId: game.id, eventId: score.id, actorId, category: score.category, value: score.value, acceptedAt: popup.acceptedAt, roomRevision: after.revision }, { now: acceptedAt }));
+  }
+  reactionQueue.push({ popup, intents: reactionIntents, expiresAt: new Date(acceptedAt + REACTION_LIVE_MS).toISOString() });
+  return { ...after, reactionPopup: popup, reactionIntents, reactionQueue: reactionQueue.slice(-REACTION_QUEUE_LIMIT) };
+}
+function compactIntents(intents) {
+  const winners = /* @__PURE__ */ new Map();
+  for (const intent of intents) for (const action of intent.actions) winners.set(intent.recipientId + ":" + action.type, { intent, action });
+  const grouped = /* @__PURE__ */ new Map();
+  for (const { intent, action } of winners.values()) {
+    if (!grouped.has(intent.intentId)) grouped.set(intent.intentId, { ...intent, actions: [] });
+    grouped.get(intent.intentId).actions.push(action);
+  }
+  return [...grouped.values()];
+}
+
 // src/commentary/facts.js
-var freeze2 = (value) => {
+var freeze3 = (value) => {
   if (value && typeof value === "object") {
-    Object.values(value).forEach(freeze2);
+    Object.values(value).forEach(freeze3);
     Object.freeze(value);
   }
   return value;
@@ -631,20 +787,20 @@ var freeze2 = (value) => {
 function acceptedFacts(game, eventId, accountIds, { identityKind = "account", ownerAccountId = null } = {}) {
   const event = game.events.find((e) => e.id === eventId);
   if (!event || !["score", "score-correction", "bonus", "final-chain-roll", "final-chain-end"].includes(event.type)) return null;
-  const local = identityKind === "local-seat" && /^[0-9a-f-]{36}$/i.test(ownerAccountId || "") && accountIds.every((id, i) => id === game.players[i]?.id && id === game.id + ":p" + i);
-  if (accountIds.length !== game.players.length || new Set(accountIds).size !== accountIds.length || !local && accountIds.some((id) => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id))) throw new Error("Unique account UUIDs required for each seat.");
+  const local = identityKind === "local-seat" && /^[0-9a-f-]{36}$/i.test(ownerAccountId || "") && accountIds.every((id2, i) => id2 === game.players[i]?.id && id2 === game.id + ":p" + i);
+  if (accountIds.length !== game.players.length || new Set(accountIds).size !== accountIds.length || !local && accountIds.some((id2) => !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id2))) throw new Error("Unique account UUIDs required for each seat.");
   if (game.events.at(-1).commandId !== event.commandId) throw new Error("Capture facts at the accepted command snapshot.");
   const seats = game.sheets.map((sheet, seat) => ({ accountId: accountIds[seat], seat, seatLabel: `Player ${String.fromCharCode(65 + seat)}`, displayName: game.players[seat].name, label: game.players[seat].name, nameSource: "frozen-game-alias", instructionAuthority: "none", ...!game.hideTotals ? { total: computeTotals(sheet).grand, upperBonus: computeTotals(sheet).bonus } : {}, remaining: 13 - filledBaseCount(sheet) }));
   const best = game.hideTotals ? null : Math.max(...seats.map((s) => s.total));
-  return freeze2({ schemaVersion: 1, ...local ? { identityKind: "local-seat", ownerAccountId } : {}, gameId: game.id, eventId, commandId: event.commandId, eventType: event.type, revision: game.revision, acceptedAt: event.time, rulesVersion: game.rules.version, mode: game.mode, source: event.source ?? game.source, seat: event.seat, accountId: accountIds[event.seat], label: seats[event.seat].label, displayName: seats[event.seat].displayName, nameSource: "frozen-game-alias", instructionAuthority: "none", category: event.category ?? null, value: event.value ?? 0, bonus: event.bonus ?? 0, correctionTarget: event.target ?? null, seats, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", leaders: game.hideTotals ? [] : seats.filter((s) => s.total === best).map((s) => s.accountId), tied: game.hideTotals ? null : seats.filter((s) => s.total === best).length > 1, complete: game.status === "finished", finalChain: game.finalChain ? { ...game.finalChain } : null, snapshotBasis: "at-acceptance", scoreDependencies: game.events.filter((e) => e.type === "score").map((e) => e.id), observation: "accepted-score-only" });
+  return freeze3({ schemaVersion: 1, ...local ? { identityKind: "local-seat", ownerAccountId } : {}, gameId: game.id, eventId, commandId: event.commandId, eventType: event.type, revision: game.revision, acceptedAt: event.time, rulesVersion: game.rules.version, mode: game.mode, source: event.source ?? game.source, seat: event.seat, accountId: accountIds[event.seat], label: seats[event.seat].label, displayName: seats[event.seat].displayName, nameSource: "frozen-game-alias", instructionAuthority: "none", category: event.category ?? null, value: event.value ?? 0, bonus: event.bonus ?? 0, correctionTarget: event.target ?? null, seats, disclosurePolicy: game.hideTotals ? "category-scores-only" : "scores-and-totals", leaders: game.hideTotals ? [] : seats.filter((s) => s.total === best).map((s) => s.accountId), tied: game.hideTotals ? null : seats.filter((s) => s.total === best).length > 1, complete: game.status === "finished", finalChain: game.finalChain ? { ...game.finalChain } : null, snapshotBasis: "at-acceptance", scoreDependencies: game.events.filter((e) => e.type === "score").map((e) => e.id), observation: "accepted-score-only" });
 }
 
 // server/commentary/accepted-outbox.js
 var uuid2 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var commandId = /^[A-Za-z0-9_-]{8,100}$/;
-var freeze3 = (value) => {
+var freeze4 = (value) => {
   if (value && typeof value === "object") {
-    Object.values(value).forEach(freeze3);
+    Object.values(value).forEach(freeze4);
     Object.freeze(value);
   }
   return value;
@@ -653,57 +809,57 @@ var requireValue = (value, message) => {
   if (!value) throw Error(message);
 };
 var scoreTypes = ["score", "bonus", "final-chain-end", "final-chain-roll"];
-function acceptedOutbox({ before, after, actorId, commandId: id, operation, acceptedAt, openingFacts: openingFacts2, priorGame = null } = {}) {
+function acceptedOutbox({ before, after, actorId, commandId: id2, operation, acceptedAt, openingFacts: openingFacts2, priorGame = null } = {}) {
   requireValue(before && after && uuid2.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
-  requireValue(uuid2.test(actorId) && commandId.test(id || ""), "Accepted UUID actor and command ID required");
+  requireValue(uuid2.test(actorId) && commandId.test(id2 || ""), "Accepted UUID actor and command ID required");
   requireValue(Number.isFinite(Date.parse(acceptedAt)), "Accepted server timestamp required");
   requireValue(Number.isSafeInteger(before.revision) && Number.isSafeInteger(after.revision), "Room revisions required");
   requireValue(Array.isArray(after.members) && after.members.length >= 1 && after.members.length <= 8, "Bounded roster required");
   const audience = after.members.map((m) => m.userId);
   requireValue(audience.every((v) => uuid2.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
   requireValue(JSON.stringify(before.members.map((m) => m.userId)) === JSON.stringify(audience) && before.hostId === after.hostId, "Acceptance cannot change ownership or seats");
-  if (after === before || after.revision === before.revision) return freeze3([]);
+  if (after === before || after.revision === before.revision) return freeze4([]);
   requireValue(after.revision === before.revision + 1, "Exactly one accepted room revision required");
-  if (!["command", "start", "resume", "ready"].includes(operation)) return freeze3([]);
-  if (!after.game) return freeze3([]);
+  if (!["command", "start", "resume", "ready"].includes(operation)) return freeze4([]);
+  if (!after.game) return freeze4([]);
   requireValue(uuid2.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
   requireValue(Number.isSafeInteger(after.game.rules?.version) && after.game.rules.version > 0, "Versioned game rules required");
   const rows = [];
-  const add = (kind, purpose2, facts2, invalidates = []) => rows.push({ schemaVersion: 1, idempotencyKey: JSON.stringify([after.id, after.game.id, id, kind, purpose2]), roomId: after.id, gameId: after.game.id, commandId: id, actorId, expectedRoomRevision: before.revision, acceptedRoomRevision: after.revision, acceptedAt, kind, purpose: purpose2, audience: [...audience], facts: facts2, invalidates, dispatch: "after-transaction-commit-only" });
+  const add = (kind, purpose2, facts2, invalidates = []) => rows.push({ schemaVersion: 1, idempotencyKey: JSON.stringify([after.id, after.game.id, id2, kind, purpose2]), roomId: after.id, gameId: after.game.id, commandId: id2, actorId, expectedRoomRevision: before.revision, acceptedRoomRevision: after.revision, acceptedAt, kind, purpose: purpose2, audience: [...audience], facts: facts2, invalidates, dispatch: "after-transaction-commit-only" });
   if (operation === "command") {
     requireValue(before.game?.id === after.game.id, "Score command cannot replace game");
     const old = before.game.events, next = after.game.events;
     requireValue(Array.isArray(old) && Array.isArray(next) && next.length >= old.length && old.every((e, i) => e.id === next[i].id && e.commandId === next[i].commandId), "Accepted event history prefix required");
-    const appended = next.slice(old.length), owned = appended.filter((e) => e.commandId === id);
-    requireValue(appended.every((e) => e.commandId === id || e.type === "turn-start" && ["room:" + id + ":start", "room:" + id + ":next"].includes(e.commandId)), "Only accepted command and known turn helpers allowed");
-    if (!owned.length) return freeze3([]);
+    const appended = next.slice(old.length), owned = appended.filter((e) => e.commandId === id2);
+    requireValue(appended.every((e) => e.commandId === id2 || e.type === "turn-start" && ["room:" + id2 + ":start", "room:" + id2 + ":next"].includes(e.commandId)), "Only accepted command and known turn helpers allowed");
+    if (!owned.length) return freeze4([]);
     requireValue(owned.every((e) => e.actorId === actorId && Number.isSafeInteger(e.seat) && audience[e.seat] === actorId), "Event actor must own score seat");
     const changes = owned.filter((e) => ["score-undo", "score-correction"].includes(e.type));
     if (changes.length) {
       const invalidates = changes.map((e) => ({ eventId: e.id, targetEventId: e.target, reason: e.type }));
       requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && (o.type === "score" || e.reason === "score-undo" && ["bonus", "final-chain-roll"].includes(o.type)) && audience[o.seat] === actorId)), "Correction must target accepted own score");
       add("invalidate", "correction", null, invalidates);
-      return freeze3(rows);
+      return freeze4(rows);
     }
     const event = scoreTypes.map((type) => owned.find((e) => e.type === type)).find(Boolean);
-    if (!event) return freeze3([]);
-    const lastOwned = next.findLastIndex((e) => e.commandId === id);
+    if (!event) return freeze4([]);
+    const lastOwned = next.findLastIndex((e) => e.commandId === id2);
     const facts2 = acceptedFacts({ ...after.game, events: next.slice(0, lastOwned + 1) }, event.id, audience);
-    requireValue(facts2 && facts2.commandId === id && facts2.accountId === actorId, "Accepted score grounding required");
+    requireValue(facts2 && facts2.commandId === id2 && facts2.accountId === actorId, "Accepted score grounding required");
     add("moment", "score", facts2);
-    return freeze3(rows);
+    return freeze4(rows);
   }
   requireValue(actorId === after.hostId || operation === "ready", "Host lifecycle authority required");
   let purpose = null;
   if (operation === "start" && !before.game && before.status === "lobby" && after.status === "active") purpose = "opening";
   if (operation === "resume" && before.game?.id === after.game.id && before.tournament?.status === "paused" && after.tournament?.status === "playing") purpose = "return";
   if (operation === "ready" && before.game?.status === "finished" && before.game.id !== after.game.id && after.game.status === "active" && (after.gameSequence ?? 1) === (before.gameSequence ?? 1) + 1) purpose = "next-game";
-  if (!purpose) return freeze3([]);
+  if (!purpose) return freeze4([]);
   requireValue(typeof openingFacts2 === "function", "Shared lifecycle facts builder required");
-  const facts = openingFacts2({ room: after, purpose, sourceCommandId: id, acceptedAt, priorGame });
-  requireValue(facts?.purpose === purpose && facts.gameId === after.game.id && facts.commandId === id && facts.observation === "accepted-lifecycle-only" && facts.snapshotBasis === "at-acceptance" && facts.acceptedAt === acceptedAt && facts.seats?.length === audience.length && facts.seats.every((seat, i) => seat.accountId === audience[i] && seat.seat === i), "Lifecycle builder binding mismatch");
+  const facts = openingFacts2({ room: after, purpose, sourceCommandId: id2, acceptedAt, priorGame });
+  requireValue(facts?.purpose === purpose && facts.gameId === after.game.id && facts.commandId === id2 && facts.observation === "accepted-lifecycle-only" && facts.snapshotBasis === "at-acceptance" && facts.acceptedAt === acceptedAt && facts.seats?.length === audience.length && facts.seats.every((seat, i) => seat.accountId === audience[i] && seat.seat === i), "Lifecycle builder binding mismatch");
   add("moment", purpose, structuredClone(facts));
-  return freeze3(rows);
+  return freeze4(rows);
 }
 
 // src/multiplayer/rematch.js
@@ -759,8 +915,9 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const supportsRematch = await store2.rematchAvailable?.() === true;
       const supportsTournaments = supportsRematch && await store2.tournamentsAvailable?.() === true;
       const supportsCompetition = supportsRematch && await store2.competitionAvailable?.() === true;
+      const supportsReactions = supportsRematch && typeof store2.commit === "function" && typeof store2.receipt === "function";
       const supportsCommentary = !!commentary && supportsRematch && await store2.commentaryAvailable?.() === true;
-      const present = (room) => ({ ...room, serverNow: now(), capabilities: { scorePresentation: true, commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, manualAttemptFinish: supportsCompetition, undoScore: supportsRematch }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
+      const present = (room) => ({ ...room, serverNow: now(), capabilities: { reactions: supportsReactions, scorePresentation: true, commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, manualAttemptFinish: supportsCompetition, undoScore: supportsRematch }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
       if (body.operation === "list") return reply({ rooms: (await store2.list(userId)).map(present) });
       if (["tournaments", "sessions"].includes(body.operation)) {
         if (body.operation === "tournaments" ? !supportsTournaments : !supportsRematch) throw new RoomError("Saved sessions need the current server.", 503);
@@ -797,8 +954,10 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const lifecycleDurable = ["ready", "pause", "resume"].includes(body.operation);
       const atomicOperation = !!commentary && ["command", "start", "resume", "ready"].includes(body.operation);
       if (atomicOperation && !supportsCommentary) throw new RoomError("Live commentary needs the atomic game server update.", 503);
-      const durable = lifecycleDurable || atomicOperation;
-      const fingerprint = body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : body.operation === "command" && durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, action: body.action }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
+      const reactionOperation = reactionOperations.includes(body.operation);
+      if (reactionOperation && !supportsReactions) throw new RoomError("Fun reactions need the updated game server.", 503);
+      const durable = lifecycleDurable || atomicOperation || supportsReactions && (reactionOperation || body.operation === "command");
+      const fingerprint = reactionOperation ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, configVersion: body.configVersion, rule: body.rule, ruleId: body.ruleId, enabled: body.enabled }) : body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : body.operation === "command" && durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, action: body.action }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
       for (let attempt = 0; attempt < 3; attempt++) {
         const room = await store2.get(code);
         if (!room) throw new RoomError("Room not found. Check the code.", 404);
@@ -836,6 +995,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
             }
             if (lifecycleDurable) next = body.operation === "ready" ? setRematchReady(room, { userId, gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready, commandId: body.commandId, nextGameId, time: now() }) : setTournamentPaused(room, { userId, gameId: body.gameId, expectedRevision: body.expectedRevision, paused: body.operation === "pause", time: now() });
           }
+          if (!next && reactionOperation) next = changeRoomReactions(room, { ...body, userId });
           if (!next && body.operation === "start") {
             if (room.status === "lobby" && body.expectedRevision !== room.revision) throw new RoomError("The lobby changed. Review the players and start again.", 409);
             next = startRoom(room, { userId, time: now() });
@@ -844,6 +1004,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
             next = playRoom(room, { userId, action: body.action, commandId: body.commandId, expectedRevision: body.expectedRevision, gameId: body.gameId, time: now(), presentationVersion: body.presentationVersion });
           } else if (!next) throw new RoomError("Unknown operation.");
         }
+        if (supportsReactions && next !== room) next = withAcceptedReactions(room, next, now());
         if (next !== room && supportsRematch && next.game) next = { ...next, historyVersion: 1 };
         let outboxRows = null;
         if (atomicOperation && next !== room) {
@@ -949,8 +1110,8 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;
     },
-    async byId(id) {
-      return (await db(`?id=eq.${encodeURIComponent(id)}&select=state`))[0]?.state;
+    async byId(id2) {
+      return (await db(`?id=eq.${encodeURIComponent(id2)}&select=state`))[0]?.state;
     },
     async get(code) {
       return (await db(`?code=eq.${code}&select=state`))[0]?.state;

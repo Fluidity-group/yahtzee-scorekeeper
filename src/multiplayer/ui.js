@@ -82,7 +82,7 @@ function lifecycleGreeting(before,next,ack){
 }
 function accept(next,ack=null){
  if(room?.code===next.code&&next.revision<room.revision)return;
- const changed=!room||next.revision!==room.revision||next.code!==room.code||(next.capabilities&&(next.capabilities.rematch!==room.capabilities?.rematch||next.capabilities.tournaments!==room.capabilities?.tournaments||next.capabilities.undoScore!==room.capabilities?.undoScore||next.capabilities.commentaryAtomicCommit!==room.capabilities?.commentaryAtomicCommit));
+ const changed=!room||next.revision!==room.revision||next.code!==room.code||(next.capabilities&&(next.capabilities.reactions!==room.capabilities?.reactions||next.capabilities.rematch!==room.capabilities?.rematch||next.capabilities.tournaments!==room.capabilities?.tournaments||next.capabilities.undoScore!==room.capabilities?.undoScore||next.capabilities.commentaryAtomicCommit!==room.capabilities?.commentaryAtomicCommit));
  const before=room;
  room={...next,...(!next.capabilities&&room?.code===next.code?{capabilities:room.capabilities}: {}),...(room?.code===next.code&&room.revision===next.revision&&room.tournamentStandings?{tournamentStandings:room.tournamentStandings}:{})};connected=true;remember('clubhouse-room',room.code);
  if(watchingCode!==room.code){
@@ -93,7 +93,7 @@ function accept(next,ack=null){
  else if(changed||screen!=='lobby')lobby();
  if(!document.hidden)silentGreetingHydration=false;
 }
-function schedule(){clearTimeout(timer);if(!room)return;timer=setTimeout(refresh,connected?15000:3000);}
+function schedule(){clearTimeout(timer);if(!room)return;timer=setTimeout(refresh,connected&&room.capabilities?.reactions!==true?15000:3000);}
 async function refresh(){
  const ticket=generation,code=room?.code;
  if(!code)return;
@@ -222,6 +222,15 @@ export async function onlineHistory(){
   before=data.nextBefore;
  }while(before);
  games.set(room.game.id,{...room.game,sequence:room.gameSequence??1});return [...games.values()];
+}
+export async function changeOnlineReactions(body){
+ if(!onlineOpen||!room?.game||room.capabilities?.reactions!==true||!connected||working)throw new Error('Reconnect to an updated hosted table before editing reactions.');
+ if(body.gameId!==room.game.id)throw new Error('The game changed. Reopen reactions.');
+ return mutate({...body,rulesVersion:room.game.rules.version,code:room.code});
+}
+export async function refreshOnlineReactions(){
+ if(!onlineOpen||!room?.game||working)throw new Error('Open your hosted table first.');
+ return mutate({operation:'read',code:room.code});
 }
 export async function sendHostState(action){
  if(!connected||working||room?.hostId!==user?.id)return false;
