@@ -72,3 +72,7 @@ After approved repair, re-read history and confirm these 16 are recorded. Only t
 ## Verification artifacts
 
 artifacts/sw078/schema-audit/: expected-catalog.json, live-canonicalized.json, expected/live-operations.json, comparison.json, comparison-vanilla.json and platform-context-verification.json. No raw administrator export is copied into Git. The schema-only importer rejects top-level data writes, application-function execution, unknown client meta-commands and unparsed SQL. Tests cover those guards, platform-default scoping, ACL/RLS/body drift, omitted cron hashes and activation differences. Focused 19 tests passed; final committed-source gate is recorded separately below.
+
+## Committed-source qualification
+
+Clean `922cbd1406f31d7c06bb3002a55118bd7adccab8` passed the Node 24.15.0 engineering gate: 1,404 tests passed, 13 optional camera tests skipped, and every configured web/native-web/Edge build passed. Source remained unchanged throughout the run. Evidence: `artifacts/engineering/2026-10-31T23-45-25-649Z-35505a69/report.json`; source digest `0e6c46d8f6eb04373083e1453c1fdc6774d218a37648213de283e68f87e9d421`. The later qualification-record update is documentation only. No physical phone, live application-account flow, backfill or cron-command acceptance is established by this gate.
