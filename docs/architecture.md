@@ -1,5 +1,7 @@
 # Yahtzee architecture map
 
+30 October SW071: proposed next architecture and migration boundaries are in [the sprint design](plans/SW-071-versioned-engine-stabilisation-sprint.md) and [decision](decisions/2026-10-30-versioned-engine-and-triggers.md). These are not implemented. Recover the prior phone/ROG baseline and approve mode rules before extraction.
+
 27 October SW068 review: current integrated application is the SW066/SW067 baseline, reviewed at published d3d8037. See plans/SW-068-architecture-phone-readiness.md for verified boundaries, reproduced gaps and next-phone gates. On fg-dev the source is this repository; Windows paths in historical handovers are host-specific. Keep the present stack for the manual POC; application fixes proposed in SW068 are not implemented by that review.
 
 SW046 additive boundary: account-addressed invitations/readiness use the authenticated clubhouse_social RPC and separate social tables/RLS. A locked explicit lobby accept adds a UUID seat; existing membership and score authority remain in clubhouse_rooms. Transient play requests never resume/advance games. Server-only APNs/FCM worker owns notification delivery; notification data is an untrusted navigation hint, never a game command. SW047 is the Playform shared UI layer; it derives bonus geometry from accepted scores.
