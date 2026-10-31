@@ -56,20 +56,43 @@ async function boundedBody(request) {
     reader.releaseLock();
   }
 }
-function portraitHandler({ authenticate, store, images, generate, clips }) {
+function portraitHandler({ authenticate, store, images, generate, clips, cleanupTimeoutMs = 1e3 }) {
   const reply = (value, status = 200) => new Response(JSON.stringify(value), { status, headers });
   const validId = (id) => {
     if (!UUID.test(id || "")) throw new PortraitError("Invalid portrait request.");
     return id;
   };
   async function cleanupOwner(actor) {
-    for (const task of await store.call("cleanup", actor, {})) {
-      await images.remove(task.paths);
-      await store.call("cleanup-complete", actor, { id: task.id, paths: task.paths });
+    const controller = new AbortController();
+    let timer;
+    const work = (async () => {
+      for (const task of await store.call("cleanup", actor, {}, { signal: controller.signal })) {
+        controller.signal.throwIfAborted();
+        await images.remove(task.paths, { signal: controller.signal });
+        controller.signal.throwIfAborted();
+        await store.call("cleanup-complete", actor, { id: task.id, paths: task.paths }, { signal: controller.signal });
+      }
+    })();
+    try {
+      await Promise.race([work, new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          controller.abort();
+          reject(new Error("Cleanup deferred"));
+        }, cleanupTimeoutMs);
+      })]);
+    } finally {
+      clearTimeout(timer);
     }
   }
   async function profileView(profile) {
-    return { ownerId: profile.owner_id, avatarId: profile.job_id || null, revision: profile.revision, kind: profile.kind, preset: profile.preset, style: profile.style, hasOriginal: !!profile.original_path, ...profile.image_path ? { url: await images.sign(profile.image_path) } : {} };
+    const view = { ownerId: profile.owner_id, avatarId: profile.job_id || null, revision: profile.revision, kind: profile.kind, preset: profile.preset, style: profile.style, hasOriginal: !!profile.original_path };
+    if (profile.image_path) try {
+      view.url = await images.sign(profile.image_path);
+      view.imageStatus = "ready";
+    } catch {
+      view.imageStatus = "unavailable";
+    }
+    return view;
   }
   async function jobView(job) {
     return { id: job.id, status: job.status, style: job.style, error: job.status === "failed" ? "This draft expired, failed or was replaced. Reopen Your avatar or generate a new draft." : null, ...job.status === "ready" || job.status === "confirmed" ? { url: await images.sign(job.image_path) } : {} };
@@ -80,10 +103,6 @@ function portraitHandler({ authenticate, store, images, generate, clips }) {
     try {
       const actor = await authenticate(request);
       if (!actor) throw new PortraitError("Sign in to save your avatar across phones.", 401);
-      try {
-        await cleanupOwner(actor);
-      } catch {
-      }
       const length = Number(request.headers.get("Content-Length"));
       if (length > 72e5) throw new PortraitError("Choose a photo up to 5 MB.", 413);
       const raw = await boundedBody(request);
@@ -94,6 +113,10 @@ function portraitHandler({ authenticate, store, images, generate, clips }) {
         throw new PortraitError("Invalid portrait request.");
       }
       if (!body || Array.isArray(body) || typeof body !== "object") throw new PortraitError("Invalid portrait request.");
+      if (!["profile", "status", "peers", "animation"].includes(body.operation)) try {
+        await cleanupOwner(actor);
+      } catch {
+      }
       if (body.operation === "profile") return reply({ profile: await profileView(await store.call("profile", actor, {})) });
       if (body.operation === "animation") {
         if (!clips) throw new PortraitError("Avatar animations are not configured yet.", 503);
@@ -353,10 +376,11 @@ function createAvatarAnimationAdapter({ url, key, fetchImplementation = fetch })
 }
 
 // server/portraits/supabase-adapter.js
-function createPortraitAdapter({ url, key, fetchImplementation = fetch }) {
+function createPortraitAdapter({ url, key, fetchImplementation = fetch, requestTimeoutMs = 15e3 }) {
+  const deadline = (signal) => signal ? AbortSignal.any([signal, AbortSignal.timeout(requestTimeoutMs)]) : AbortSignal.timeout(requestTimeoutMs);
   const authorization = { apikey: key, Authorization: `Bearer ${key}` };
-  async function call(action, actor, payload) {
-    const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_portraits`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: JSON.stringify({ p_action: action, p_actor: actor, p_payload: payload }) });
+  async function call(action, actor, payload, { signal } = {}) {
+    const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_portraits`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, signal: deadline(signal), body: JSON.stringify({ p_action: action, p_actor: actor, p_payload: payload }) });
     const data = await response.json();
     if (!response.ok) {
       if (data.code === "40001") throw new PortraitError("Your avatar changed on another phone. Refresh before confirming.", 409);
@@ -374,7 +398,7 @@ function createPortraitAdapter({ url, key, fetchImplementation = fetch }) {
   async function storage(route, options) {
     let response;
     try {
-      response = await fetchImplementation(url + "/storage/v1/" + route, { ...options, headers: { ...authorization, ...options.headers } });
+      response = await fetchImplementation(url + "/storage/v1/" + route, { ...options, headers: { ...authorization, ...options.headers }, signal: deadline(options.signal) });
     } catch {
       throw new PortraitError("Portrait storage could not connect.", 503);
     }
@@ -386,18 +410,18 @@ function createPortraitAdapter({ url, key, fetchImplementation = fetch }) {
       await storage("object/clubhouse-portraits/" + path(p), { method: "POST", headers: { "Content-Type": mime, "x-upsert": "false" }, body: bytes });
     },
     async sign(p) {
-      const response = await storage("object/sign/clubhouse-portraits/" + path(p), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 900 }) });
+      const response = await storage("object/sign/clubhouse-portraits/" + path(p), { method: "POST", signal: AbortSignal.timeout(Math.min(requestTimeoutMs, 4e3)), headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expiresIn: 900 }) });
       const data = await response.json();
       if (typeof data.signedURL !== "string" || !data.signedURL.startsWith("/object/sign/clubhouse-portraits/")) throw new PortraitError("Invalid portrait response.", 503);
       return url + "/storage/v1" + data.signedURL;
     },
-    async remove(paths) {
+    async remove(paths, { signal } = {}) {
       if (!paths.length) return;
-      await storage("object/clubhouse-portraits", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [...new Set(paths.map(path))] }) });
+      await storage("object/clubhouse-portraits", { method: "DELETE", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefixes: [...new Set(paths.map(path))] }) });
     }
   };
   async function maintenanceActors() {
-    const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_portrait_cleanup_owners`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: "{}" });
+    const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_portrait_cleanup_owners`, { method: "POST", headers: { ...authorization, "Content-Type": "application/json" }, body: "{}", signal: deadline() });
     if (!response.ok) throw new PortraitError("Cleanup list unavailable.", 503);
     return response.json();
   }

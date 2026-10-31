@@ -1,22 +1,30 @@
 import{PortraitError,UUID,portraitStyle,PORTRAIT_PRESETS,validatePortraitImage}from'../../src/profile/portrait-contract.js';
 const headers={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Content-Type':'application/json','Cache-Control':'no-store'};
 async function boundedBody(request){if(!request.body)return'';const reader=request.body.getReader(),decoder=new TextDecoder();let total=0,text='';try{while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>7200000){await reader.cancel();throw new PortraitError('Choose a photo up to 5 MB.',413);}text+=decoder.decode(value,{stream:true});}return text+decoder.decode();}finally{reader.releaseLock();}}
-export function portraitHandler({authenticate,store,images,generate,clips}){
+export function portraitHandler({authenticate,store,images,generate,clips,cleanupTimeoutMs=1000}){
  const reply=(value,status=200)=>new Response(JSON.stringify(value),{status,headers});
  const validId=id=>{if(!UUID.test(id||''))throw new PortraitError('Invalid portrait request.');return id;};
- async function cleanupOwner(actor){for(const task of await store.call('cleanup',actor,{})){await images.remove(task.paths);await store.call('cleanup-complete',actor,{id:task.id,paths:task.paths});}}
- async function profileView(profile){return{ownerId:profile.owner_id,avatarId:profile.job_id||null,revision:profile.revision,kind:profile.kind,preset:profile.preset,style:profile.style,hasOriginal:!!profile.original_path,...(profile.image_path?{url:await images.sign(profile.image_path)}:{})};}
+ async function cleanupOwner(actor){
+  const controller=new AbortController();let timer;
+  const work=(async()=>{for(const task of await store.call('cleanup',actor,{}, {signal:controller.signal})){controller.signal.throwIfAborted();await images.remove(task.paths,{signal:controller.signal});controller.signal.throwIfAborted();await store.call('cleanup-complete',actor,{id:task.id,paths:task.paths},{signal:controller.signal});}})();
+  try{await Promise.race([work,new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Cleanup deferred'));},cleanupTimeoutMs);})]);}finally{clearTimeout(timer);}
+ }
+ async function profileView(profile){
+  const view={ownerId:profile.owner_id,avatarId:profile.job_id||null,revision:profile.revision,kind:profile.kind,preset:profile.preset,style:profile.style,hasOriginal:!!profile.original_path};
+  if(profile.image_path)try{view.url=await images.sign(profile.image_path);view.imageStatus='ready';}catch{view.imageStatus='unavailable';}
+  return view;
+ }
  async function jobView(job){return{id:job.id,status:job.status,style:job.style,error:job.status==='failed'?'This draft expired, failed or was replaced. Reopen Your avatar or generate a new draft.':null,...(job.status==='ready'||job.status==='confirmed'?{url:await images.sign(job.image_path)}:{})};}
  return async request=>{
   if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
   if(request.method!=='POST')return reply({error:'Use POST.'},405);
   try{
    const actor=await authenticate(request);if(!actor)throw new PortraitError('Sign in to save your avatar across phones.',401);
-   // Cleanup is durable in SQL. Storage failures never silently discard the list.
-   try{await cleanupOwner(actor);}catch{/* Retained for the next authenticated request. */}
    const length=Number(request.headers.get('Content-Length'));if(length>7200000)throw new PortraitError('Choose a photo up to 5 MB.',413);
    const raw=await boundedBody(request);
    let body;try{body=JSON.parse(raw);}catch{throw new PortraitError('Invalid portrait request.');}if(!body||Array.isArray(body)||typeof body!=='object')throw new PortraitError('Invalid portrait request.');
+   // Metadata recovery never waits for unrelated storage cleanup. Durable tasks are retained.
+   if(!['profile','status','peers','animation'].includes(body.operation))try{await cleanupOwner(actor);}catch{/* Later mutation or cleanup worker retries the durable queue. */}
    if(body.operation==='profile')return reply({profile:await profileView(await store.call('profile',actor,{}))});
    if(body.operation==='animation'){if(!clips)throw new PortraitError('Avatar animations are not configured yet.',503);return reply({animation:await clips.read(actor,body)});}
    if(body.operation==='peers'){

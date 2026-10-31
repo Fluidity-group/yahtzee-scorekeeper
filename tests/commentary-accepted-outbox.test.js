@@ -99,3 +99,10 @@ describe('server-clock conservative lease timing',()=>{
 
 
 
+
+it('invalidates an owned bonus Undo accepted by the authoritative room without permitting bonus corrections',()=>{
+ let room=startRoom(createRoom({id,code:'ABCDEFGH',userId:a,name:'Example',mode:'competition',time}),{userId:a,time});
+ room=play(room,{type:'score',category:'yahtzee',value:50},'first-score-0001');room=play(room,{type:'bonus',yahtzeeFace:6},'bonus-score-0001');const bonus=room.game.events.find(e=>e.type==='bonus');
+ const next=play(room,{type:'undo-score',target:bonus.id},'command_0001');expect(map(room,next)[0].invalidates[0].targetEventId).toBe(bonus.id);
+ const forged=structuredClone(next);forged.game.events.at(-1).type='score-correction';expect(()=>map(room,forged)).toThrow(/target/);
+});
