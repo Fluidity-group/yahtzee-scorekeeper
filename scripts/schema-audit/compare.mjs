@@ -15,3 +15,13 @@ export function compareCatalog(expected,actual){
  for(const ext of expected.requiredExtensions||[]){const live=actual.extensions?.find(v=>v.key===ext.key);results.extensions.push({...ext,state:!live?'missing':live.schema===ext.schema?'match':'drift'});}
  return{...results,complete:results.missing.length===0&&results.drift.length===0&&results.extra.length===0&&results.extensions.every(e=>e.state==='match'),scope:'Cumulative final catalog equality. Operational jobs/buckets, migration-specific backfills and history repair approval remain separate.'};
 }
+
+export function compareOperations(expected,actual){
+ if(expected.auditVersion!==1||actual.auditVersion!==1||actual.readOnly!==true)throw Error('Versioned read-only operations snapshots required.');
+ const result={matches:[],drift:[],missing:[],extra:[],unverified:[]};
+ for(const group of ['jobs','buckets']){if(!Array.isArray(expected[group])||!Array.isArray(actual[group]))throw Error('Incomplete operations snapshot');const after=new Map(actual[group].map(x=>[x.key,x]));
+  for(const value of expected[group]){const key=group+':'+value.key,live=after.get(value.key);if(!live){result.missing.push(key);continue;}const keys=Object.keys(value).filter(k=>!(group==='jobs'&&k==='commandMd5'&&live.commandNotExported===true));if(group==='jobs'&&live.commandNotExported===true)result.unverified.push({key,field:'commandMd5',reason:'Administrator intentionally omitted command text/hashes'});const fields=keys.filter(k=>!same(value[k],live[k]));if(fields.length)result.drift.push({key,fields,expected:Object.fromEntries(fields.map(k=>[k,value[k]])),live:Object.fromEntries(fields.map(k=>[k,live[k]]))});else result.matches.push(key);}
+  for(const key of after.keys())if(!expected[group].some(v=>v.key===key))result.extra.push(group+':'+key);
+ }
+ return result;
+}
