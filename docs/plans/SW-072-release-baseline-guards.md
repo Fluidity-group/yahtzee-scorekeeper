@@ -7,7 +7,7 @@ Scope: first implementation slice of [SW071](SW-071-versioned-engine-stabilisati
 
 | ID | Required outcome | Method | Result |
 |---|---|---|---|
-| R1 | Identify packaged source independently of native versionCode | Embedded commit/source digest/profile/state plus matching JSON artifact; native App.getInfo separately | Implemented; focused tests pass; full gate pending |
+| R1 | Identify packaged source independently of native versionCode | Embedded commit/source digest/profile/state plus matching JSON artifact; native App.getInfo separately | Verified automatically; full gate and packaged bundle identity checks passed |
 | R2 | Missing or changed declared UI assets stop a build | Reviewed SHA256 contract checked in Vite buildStart; new public assets require declaration | Implemented; missing/altered/undeclared cases covered |
 | R3 | About is reachable through the actual application | Home → clubhouse menu → More tools → About this build; no game mutation | Focused app navigation test passed |
 | R4 | Do not claim a complete baseline without recovered source | Recovery ledger below; provenance and product acceptance separate from build identity | Open; ROG access requested |
@@ -44,4 +44,4 @@ Outstanding source access, Competition first-vs-repeat final-chain policy and av
 
 ## Checks and completion
 
-Focused Node24 tests: 12 passed across4files (asset/source guards, About actual app navigation, adjacent Home/native contracts). Full configured gate pending. No native compilation/install, live data/provider/backend mutation or physical acceptance. Shared master untouched; all implementation remains on the scoped branch.
+Focused Node24 tests: 12 passed across4files (asset/source guards, About actual app navigation, adjacent Home/native contracts). Clean7b31215 Node24.15.0 full gate passed: 1,222tests/13optional camera skips/all configured builds/source stable. Emitted and embedded metadata matched commit/source fingerprint for production, native and ios-test profiles. Evidence: artifacts/engineering/2026-10-31T04-38-54-830Z-42be367f/report.json. UTC evidence date is31October; local task date is30October America/Chicago. No native compilation/install, live data/provider/backend mutation or physical acceptance. Shared master untouched; all implementation remains on the scoped branch.

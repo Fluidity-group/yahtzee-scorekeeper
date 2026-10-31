@@ -41,3 +41,9 @@ At handover record branch/commit, PR/dependencies, design decisions, check resul
 ## Automation boundaries
 
 Scripts automate inspection and deterministic tests/builds. Skills direct Codex to reconcile task memory and investigate failures. CI rechecks pushed work. No background Codex schedule, auto-commit, auto-merge, deployment or device testing is enabled by this setup. Those need a concrete purpose and suitable authorization. Human decisions, measurements, listening and physical acceptance remain explicit.
+
+## Required public assets and build identity (SW072)
+
+Production Vite builds validate public-assets.required.json before bundling and emit build-identity.json. Review path/hash changes in that contract alongside intended asset changes; builds reject missing, altered or undeclared public runtime assets. Optional camera runtimes are explicitly separate. This inventory covers known current assets, not unrecovered ROG/phone features. Baseline source/feature comparison and owner acceptance remain required.
+
+The application embeds the same commit, source state/digest and build profile and exposes them under clubhouse menu → More tools → About this build. Native app version/build comes separately from Capacitor App; active-game mode/rules labels are separate again. Modified builds are labelled. Ignored public configuration and final signed-package hashes are not part of the source digest; record their permitted release identities independently. Do not infer a complete or qualified product from build metadata alone.
