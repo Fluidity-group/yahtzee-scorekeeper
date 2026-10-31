@@ -180,7 +180,7 @@ function scoreOptions(game, dice) {
     combinations: c
   };
 }
-function validateValue(game, category, value) {
+function validateScoreValue(game, category, value) {
   if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail("Invalid score.");
   const c = META[category];
   if (c.face && (value > c.face * 5 || value % c.face)) fail("Choose a count from zero to five.");
@@ -251,7 +251,7 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
     const original = g.events.find((e) => e.id === action.target && e.type === "score");
     if (!original || original.seat !== action.seat) fail("Choose one of this player\u2019s recorded scores.");
     if (g.events.some((e) => e.type === "score-undo" && e.target === original.id)) fail("That score was undone. Choose the replacement score.");
-    validateValue(g, original.category, action.value);
+    validateScoreValue(g, original.category, action.value);
     event("score-correction", { target: original.id, seat: original.seat, category: original.category, before: g.sheets[original.seat][original.category], value: action.value });
     g.sheets[original.seat][original.category] = action.value;
   } else {
@@ -353,7 +353,7 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
           finishTurn(g, true, time);
         } else {
           if (g.sheets[g.activeSeat][action.category] !== void 0) fail("That category is already filled.");
-          validateValue(g, action.category, action.value);
+          validateScoreValue(g, action.category, action.value);
           if (options?.extraTurn) fail("Record the bonus Yahtzee, then take your extra turn.");
           if (options && !(action.category in options.scores)) fail("Joker placement requires another category.");
           if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail("Score does not match the dice.");
@@ -2402,6 +2402,17 @@ function composeCommentaryEndpoint({ service, authenticate, refresh } = {}) {
   } });
 }
 
+// src/game/score-presentation.js
+var VENUE_IDS = Object.freeze(["miami", "sydney", "las-vegas", "tokyo"]);
+
+// src/multiplayer/room.js
+var RoomError = class extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+};
+
 // server/rooms/supabase-adapter.js
 var uuid7 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var row = (room) => ({ id: room.id, code: room.code, host_id: room.hostId, member_ids: room.members.map((m) => m.userId), revision: room.revision, state: room, created_at: room.createdAt });
@@ -2418,7 +2429,56 @@ function createSupabaseRoomAdapter({ url, key: key2, fetchImplementation = (...a
       throw new Error("Database request failed");
     }
   }
+  async function studioResource(path, options = {}) {
+    let response;
+    try {
+      response = await fetchImplementation(`${url}/rest/v1/${path}`, { ...options, headers: { apikey: key2, Authorization: `Bearer ${key2}`, "Content-Type": "application/json" } });
+    } catch {
+      throw new RoomError("Studio could not connect. Retry with the same request.", 503);
+    }
+    if (response.status === 404) throw new RoomError("Studio needs the draft-storage server update.", 503);
+    if (!response.ok) {
+      let code;
+      try {
+        code = (await response.json())?.code;
+      } catch {
+      }
+      if (["40001", "23505"].includes(code)) throw new RoomError("This draft changed on another computer. Reload it before saving.", 409);
+      if (code === "42501") throw new RoomError("Open your own draft in a table you belong to.", 403);
+      if (code === "22023") throw new RoomError("Invalid draft or draft limit reached (32).", 400);
+      throw new RoomError("Studio could not save this request. Refresh and try again.", 503);
+    }
+    try {
+      return await response.json();
+    } catch {
+      throw new RoomError("Unreadable Studio response. Refresh before editing.", 503);
+    }
+  }
+  const draftFields = "id,room_id,owner_id,revision,base_config_version,content,updated_at";
+  const draftScope = (roomId, ownerId) => {
+    if (!uuid7.test(roomId) || !uuid7.test(ownerId)) throw new Error("Invalid draft scope");
+    return `room_id=eq.${roomId}&owner_id=eq.${ownerId}&deleted=eq.false`;
+  };
   const store = {
+    async reactionDrafts(roomId, ownerId) {
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&select=${draftFields}&order=updated_at.desc&limit=32`);
+      if (!Array.isArray(rows)) throw new Error("Invalid drafts");
+      return rows;
+    },
+    async reactionDraft(roomId, ownerId, id2) {
+      if (!uuid7.test(id2)) throw new Error("Invalid draft identity");
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&id=eq.${id2}&select=${draftFields}`);
+      if (!Array.isArray(rows)) throw new Error("Invalid draft");
+      return rows[0];
+    },
+    async saveReactionDraft({ roomId, ownerId, id: id2, expectedRevision, baseVersion, content, requestId }) {
+      return studioResource("rpc/clubhouse_save_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id2, p_expected_revision: expectedRevision, p_base_version: baseVersion, p_content: content, p_request_id: requestId }) });
+    },
+    async discardReactionDraft(roomId, ownerId, id2, expectedRevision) {
+      const result = await studioResource("rpc/clubhouse_discard_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id2, p_expected_revision: expectedRevision }) });
+      if (result !== true) throw new RoomError("Draft discard could not be confirmed. Refresh Studio.", 503);
+      return true;
+    },
     async commentaryAvailable() {
       if (!uuid7.test(commentaryScopeId || "")) return false;
       try {
@@ -2480,8 +2540,14 @@ function createSupabaseRoomAdapter({ url, key: key2, fetchImplementation = (...a
     async history(roomId, before) {
       return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before ? `&sequence_number=lt.${before}` : ""}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
     },
-    async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null } = {}) {
+    async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null, draft = null } = {}) {
       if (outboxRows !== null && !uuid7.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+      if (draft) {
+        if (outboxRows !== null) throw new Error("Invalid publication commit");
+        const result2 = await studioResource("rpc/clubhouse_commit_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, p_draft_id: draft.id, p_draft_revision: draft.revision }) });
+        if (typeof result2 !== "boolean") throw new Error("Invalid publication result");
+        return result2;
+      }
       const result = await resource(outboxRows === null ? "rpc/clubhouse_commit_game" : "rpc/clubhouse_commit_game_commentary", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, ...outboxRows !== null ? { p_scope: commentaryScopeId, p_outbox: outboxRows } : {} }) });
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;

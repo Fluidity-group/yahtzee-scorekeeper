@@ -196,6 +196,49 @@ function portraitHandler({ authenticate, store, images, generate, clips, cleanup
   };
 }
 
+// src/game/categories.js
+var UPPER = [
+  { key: "aces", name: "Aces", face: 1, hint: "Add up your 1s", type: "count" },
+  { key: "twos", name: "Twos", face: 2, hint: "Add up your 2s", type: "count" },
+  { key: "threes", name: "Threes", face: 3, hint: "Add up your 3s", type: "count" },
+  { key: "fours", name: "Fours", face: 4, hint: "Add up your 4s", type: "count" },
+  { key: "fives", name: "Fives", face: 5, hint: "Add up your 5s", type: "count" },
+  { key: "sixes", name: "Sixes", face: 6, hint: "Add up your 6s", type: "count" }
+];
+var LOWER = [
+  { key: "threeKind", name: "Three of a Kind", hint: "Sum all 5 \xB7 ~21% a roll", type: "sum", max: 30 },
+  { key: "fourKind", name: "Four of a Kind", hint: "Sum all 5 \xB7 ~2% a roll", type: "sum", max: 30 },
+  { key: "fullHouse", name: "Full House", hint: "25 pts \xB7 ~4% a roll", type: "fixed", value: 25 },
+  { key: "smallStraight", name: "Small Straight", hint: "30 pts \xB7 ~15% a roll", type: "fixed", value: 30 },
+  { key: "largeStraight", name: "Large Straight", hint: "40 pts \xB7 ~3% a roll", type: "fixed", value: 40 },
+  { key: "yahtzee", name: "Yahtzee", hint: "50 pts \xB7 ~0.08% a roll \u{1F92F}", type: "fixed", value: 50 },
+  { key: "chance", name: "Chance", hint: "Sum all 5 \xB7 freebie", type: "sum", max: 30 },
+  { key: "yahtzeeBonus", name: "Yahtzee Bonus", hint: "+100 \xB7 then take a whole extra turn", type: "bonus" }
+];
+var ALL = [...UPPER, ...LOWER];
+var META = Object.fromEntries(ALL.map((c) => [c.key, c]));
+var UPPER_KEYS = UPPER.map((c) => c.key);
+var LOWER_KEYS = LOWER.map((c) => c.key);
+var BASE_KEYS = [...UPPER_KEYS, "threeKind", "fourKind", "fullHouse", "smallStraight", "largeStraight", "yahtzee", "chance"];
+
+// src/game/core.js
+var MODES = Object.freeze({
+  standard: Object.freeze({ name: "Standard", version: 1, rolls: 3, finalRolls: 3, extraTurn: false, weighted: false, joker: true }),
+  competition: Object.freeze({ name: "Competition", version: 1, rolls: 3, finalRolls: 4, extraTurn: true, weighted: false, joker: true }),
+  accumulative: Object.freeze({ name: "Accumulative", version: 1, rolls: 3, finalRolls: 3, extraTurn: true, weighted: true, joker: true })
+});
+
+// src/game/score-presentation.js
+var VENUE_IDS = Object.freeze(["miami", "sydney", "las-vegas", "tokyo"]);
+
+// src/multiplayer/room.js
+var RoomError = class extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+};
+
 // server/rooms/supabase-adapter.js
 var uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var row = (room) => ({ id: room.id, code: room.code, host_id: room.hostId, member_ids: room.members.map((m) => m.userId), revision: room.revision, state: room, created_at: room.createdAt });
@@ -212,7 +255,56 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       throw new Error("Database request failed");
     }
   }
+  async function studioResource(path, options = {}) {
+    let response;
+    try {
+      response = await fetchImplementation(`${url}/rest/v1/${path}`, { ...options, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } });
+    } catch {
+      throw new RoomError("Studio could not connect. Retry with the same request.", 503);
+    }
+    if (response.status === 404) throw new RoomError("Studio needs the draft-storage server update.", 503);
+    if (!response.ok) {
+      let code;
+      try {
+        code = (await response.json())?.code;
+      } catch {
+      }
+      if (["40001", "23505"].includes(code)) throw new RoomError("This draft changed on another computer. Reload it before saving.", 409);
+      if (code === "42501") throw new RoomError("Open your own draft in a table you belong to.", 403);
+      if (code === "22023") throw new RoomError("Invalid draft or draft limit reached (32).", 400);
+      throw new RoomError("Studio could not save this request. Refresh and try again.", 503);
+    }
+    try {
+      return await response.json();
+    } catch {
+      throw new RoomError("Unreadable Studio response. Refresh before editing.", 503);
+    }
+  }
+  const draftFields = "id,room_id,owner_id,revision,base_config_version,content,updated_at";
+  const draftScope = (roomId, ownerId) => {
+    if (!uuid.test(roomId) || !uuid.test(ownerId)) throw new Error("Invalid draft scope");
+    return `room_id=eq.${roomId}&owner_id=eq.${ownerId}&deleted=eq.false`;
+  };
   const store = {
+    async reactionDrafts(roomId, ownerId) {
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&select=${draftFields}&order=updated_at.desc&limit=32`);
+      if (!Array.isArray(rows)) throw new Error("Invalid drafts");
+      return rows;
+    },
+    async reactionDraft(roomId, ownerId, id) {
+      if (!uuid.test(id)) throw new Error("Invalid draft identity");
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&id=eq.${id}&select=${draftFields}`);
+      if (!Array.isArray(rows)) throw new Error("Invalid draft");
+      return rows[0];
+    },
+    async saveReactionDraft({ roomId, ownerId, id, expectedRevision, baseVersion, content, requestId }) {
+      return studioResource("rpc/clubhouse_save_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id, p_expected_revision: expectedRevision, p_base_version: baseVersion, p_content: content, p_request_id: requestId }) });
+    },
+    async discardReactionDraft(roomId, ownerId, id, expectedRevision) {
+      const result = await studioResource("rpc/clubhouse_discard_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id, p_expected_revision: expectedRevision }) });
+      if (result !== true) throw new RoomError("Draft discard could not be confirmed. Refresh Studio.", 503);
+      return true;
+    },
     async commentaryAvailable() {
       if (!uuid.test(commentaryScopeId || "")) return false;
       try {
@@ -274,8 +366,14 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     async history(roomId, before) {
       return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before ? `&sequence_number=lt.${before}` : ""}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
     },
-    async commit(room, revision, { actor, commandId = null, fingerprint = null, outboxRows = null } = {}) {
+    async commit(room, revision, { actor, commandId = null, fingerprint = null, outboxRows = null, draft = null } = {}) {
       if (outboxRows !== null && !uuid.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+      if (draft) {
+        if (outboxRows !== null) throw new Error("Invalid publication commit");
+        const result2 = await studioResource("rpc/clubhouse_commit_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId, p_fingerprint: fingerprint, p_draft_id: draft.id, p_draft_revision: draft.revision }) });
+        if (typeof result2 !== "boolean") throw new Error("Invalid publication result");
+        return result2;
+      }
       const result = await resource(outboxRows === null ? "rpc/clubhouse_commit_game" : "rpc/clubhouse_commit_game_commentary", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId, p_fingerprint: fingerprint, ...outboxRows !== null ? { p_scope: commentaryScopeId, p_outbox: outboxRows } : {} }) });
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;
