@@ -1,8 +1,8 @@
 # SW078: Live migration baseline audit result
 
-31 October 2026, America/Chicago. Owner: Dan; operator/reviewer: Codex/fluidity. Audit only: no repair, migration, db push/dry run, deployment or device action.
+31 October 2026, America/Chicago. Owner: Dan; operator/reviewer: Codex/fluidity. Original comparison was audit only. The authorised history repair and subsequent read-only checks are recorded below; no migration SQL, deployment or device action has run.
 
-**Result: the cumulative application schema and access controls match all 16 baseline migrations in the administrator-released export.** 262 catalog objects match, with 0 missing, 0 drifted and 0 extra application objects. The exact history-repair candidate list is [SW-078-history-repair-candidates.txt](SW-078-history-repair-candidates.txt). Dan has NOT approved repair and no repair has run. Studio 202610310001 is new work and is deliberately excluded.
+**Result: the cumulative application schema and access controls match all 16 baseline migrations in the administrator-released export.** 262 catalog objects match, with 0 missing, 0 drifted and 0 extra application objects. The exact history-repair candidate list is [SW-078-history-repair-candidates.txt](SW-078-history-repair-candidates.txt). Dan subsequently approved the 16 baseline versions; the vetted history-only repair succeeded as recorded below. Studio 202610310001 is new work and is deliberately excluded.
 
 ## Evidence and comparison method
 
@@ -76,3 +76,13 @@ artifacts/sw078/schema-audit/: expected-catalog.json, live-canonicalized.json, e
 ## Committed-source qualification
 
 Clean `922cbd1406f31d7c06bb3002a55118bd7adccab8` passed the Node 24.15.0 engineering gate: 1,404 tests passed, 13 optional camera tests skipped, and every configured web/native-web/Edge build passed. Source remained unchanged throughout the run. Evidence: `artifacts/engineering/2026-10-31T23-45-25-649Z-35505a69/report.json`; source digest `0e6c46d8f6eb04373083e1453c1fdc6774d218a37648213de283e68f87e9d421`. The later qualification-record update is documentation only. No physical phone, live application-account flow, backfill or cron-command acceptance is established by this gate.
+
+## Approved history repair and Studio dry run
+
+On 31 October 2026 Dan explicitly approved marking these exact 16 versions applied. The administrator enabled a project-pinned, exact-version, single-use `migration-repair-applied` wrapper operation. Its `--check` validated every version against commit `bbfdec4630bc676d700b241bef2b8870d0a0c414` without changing anything. The repair then exited 0, reported all 16 versions applied, and consumed the approval list. No migration SQL was executed.
+
+Two subsequent migration listings, including one pinned to Studio commit `a3c5225e40e70ace0e6357b2733b143150bed9ef`, showed matching Local/Remote entries for all 16 approved versions. Studio `202610310001` had a Local entry and a blank Remote entry. No other remote version was listed.
+
+The vetted `db-push-dry-run --ref a3c5225e40e70ace0e6357b2733b143150bed9ef` exited 0 and listed only `202610310001_reaction_studio_drafts.sql`. It issued approval ID **`ab1c8bb7aa680829`** for that exact commit. Dan must OK this ID with Home Network before the administrator enables the one-use `db-push`; no apply has run. Do not substitute a later documentation commit/ref. The latest instruction explicitly holds deployments and phone updates.
+
+Evidence: `artifacts/sw078/schema-audit/history-repair-result.json` records command outcomes, versions, scope and the approval ID without credentials or application rows. Existing application data, jobs, permissions and buckets were not modified by this history-only operation. Backfills and cron commands remain unverified as above. Earlier approval/next-action instructions in this audit are the pre-repair sequence and are superseded by this result. This record update changes documentation only; the clean-code 1,404-test gate above remains the qualification evidence.
