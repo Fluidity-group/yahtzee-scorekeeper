@@ -3,7 +3,7 @@
 import { execFileSync,spawnSync } from 'node:child_process';
 import { resolve,join,sep } from 'node:path';
 import { existsSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,cpSync } from 'node:fs';
-const repo='FluidityGroup-Git/yahtzee-scorekeeper';
+const repo='Fluidity-group/yahtzee-scorekeeper';
 const root=resolve('artifacts/pages-publish'),dist=resolve('dist'),marker=join(root,'.codex-pages-workspace');
 if(!existsSync(join(dist,'index.html')))throw new Error('Build the web app first.');
 if(existsSync(join(dist,'godice-evaluation.json')))throw new Error('Refusing to publish a local GoDice evaluation build.');
@@ -34,4 +34,4 @@ if(pages.status!==0){
  if(created.status!==0&&!created.stderr.includes('409'))throw new Error(created.stderr);
 }
 console.log('Published assets. GitHub Pages may take a minute to finish deployment.');
-console.log('https://fluiditygroup-git.github.io/yahtzee-scorekeeper/');
+console.log('https://fluidity-group.github.io/yahtzee-scorekeeper/');
