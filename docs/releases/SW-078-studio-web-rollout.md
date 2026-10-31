@@ -25,3 +25,11 @@ User enters existing account credentials on the actual sign-in page. Agent does 
 GitHub publishing authentication is available under FluidityGroup-Git. No deployment credentials are present in this session. The project-local Supabase CLI fails at startup while attempting to initialise ~/.supabase; it cannot yet verify authenticated project access. Administrator setup/approved deployment command requested without asking for secrets. Web artifacts/rollback preparation continue; do not publish a half-activated frontend before backend/schema are ready.
 
 Fresh public boundary checks: GitHub PagesHTTP200 and live index hash matches preserveda6981c7 rollback;52rollback files preserved (including hosting metadata). Validated public-only config resolves to the expected backend project; Auth healthHTTP200 and unsigned roomPOST401. Evidence artifacts/sw078/before-public.json contains hashes/status only. No management/schema access or live data change is established by these probes.
+
+## Prepared release evidence / access still required
+
+Clean8eec15fa2fd6a7a16e03b98114191ad6b5dda37e Node24 gate passed1,385tests/13optional camera skips/all configured builds/source stable. Report artifacts/engineering/2026-10-31T21-27-10-277Z-0f6a6f5e/report.json. Publisher/preparation scripts pass syntax and whitespace checks.
+
+Production web bundle rebuilt from that clean commit with validated public-only configuration, expected backend project, canonical current-org URL/base, push disabled and live commentary deferred.57web files have recorded hashes; embedded JWT roles are public anon only and secret-key/env-file scan passed. Report artifacts/sw078/web-build.json; build log artifacts/sw078-web-build.log. Earlier offline qualification assets are not used as the rollout package.
+
+The only remaining execution gate is authenticated Supabase administration access. Migration, schema/data fingerprint inventory, old room-function backup, room deployment/readback and Pages publication have NOT run. Public site/backend/phones remain unchanged. Resume after the administrator supplies a working authenticated CLI or approved project-local deployment command; never put credentials in chat or source. Keep the prepared bundle/rollback evidence and recheck live targets before mutation. Later source commits record preparation status only.
