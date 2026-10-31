@@ -1,5 +1,7 @@
 # SW078: Studio migration, backend and web rollout
 
+Current prerequisite update: the administrator-approved yz-supabase wrapper is available for migration history/function inventory. Its read-only migration listing confirms all16baseline Remote entries blank. Before any dry run, migration, repair or deployment, compare the live schema and report matches/drift. [Baseline audit](SW-078-schema-baseline-audit.md) records the expected catalog and missing approved schema-read path. Any history repair needs Dan’s separate explicit approval and administrator enablement; prior Studio rollout authorisation does not cover it.
+
 31 October2026. Owner: Dan. Operator: Codex/fluidity on fg-dev. User explicitly authorises Studio migration/backend/web activation for existing-account testing; Android/iPhone native installation remains held. This authorisation supersedes SW077’s source-only deployment hold for these three live targets. It does not authorise PR self-merge or master promotion.
 
 State: preparation in progress; nothing live changed yet.
