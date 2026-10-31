@@ -1,5 +1,7 @@
 # SW071: Stabilise the baseline and design an extensible game engine
 
+31 October baseline recovery update: [SW074](SW-074-rog-interface-recovery.md) recovered later ROG account portraits/reactions, fit/pinch and controls while preserving fg-dev reliability/build guards. Account avatar sync and shared four-second presentations exist in recovered candidate source; do not design them again as wholly absent. The recovery candidate is automatically verified, not merged/deployed or physically accepted. Adapt S1/S3 contracts to these actual boundaries; future rule decisions and engine extraction remain open.
+
 Date: 30 October 2026. Product owner: Dan. Design author/coordinating architect: Codex. Independent reviewer: unassigned; author checks are not independent review.
 State: sprint design proposed; implementation, verification, deployment and physical acceptance open.
 Project: software, with later Android/iOS integration acceptance. Current task authorizes design documentation only.
