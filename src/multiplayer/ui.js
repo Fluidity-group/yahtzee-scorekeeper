@@ -1,3 +1,7 @@
+import{MIDNIGHT_LOCATIONS,renderMidnightCity,locationById}from'../ui/midnight-art.js';
+import{readMidnight}from'../ui/midnight-profile.js';
+import{renderAvatar}from'../profile/avatar-view.js';
+import{refreshTableAvatars}from'../profile/avatar-sync.js';
 import QRCode from 'qrcode';
 import { auth, configured, webUrl, emailOtpEnabled, requestRoom, watchRoom } from './client.js';
 import { MODES } from '../game/core.js';
@@ -28,23 +32,23 @@ function shell(body){
 function accountScreen(codeSent=false){
  if(!emailOtpEnabled&&!codeSent){passwordScreen();return;}
  screen='account';
- shell(`<div class="intro-kicker">YOUR SEAT AT THE TABLE</div><h1>${codeSent?'Check your inbox.':'Let’s play together.'}</h1><p class="core-muted">${codeSent?`Enter the sign-in code sent to ${esc(email)}.`:'Sign in with your email to host, join, and return to your games.'}</p><form data-mp-form="${codeSent?'verify':'email'}">${codeSent?'<label>Sign-in code<input name="token" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6,10}" required></label>':'<label>Email<input name="email" type="email" autocomplete="email" required></label>'}<button class="bigbtn score core-primary" type="submit">${codeSent?'Sign in':'Email me a code'}</button></form>${codeSent?'<button class="all-scores" data-mp="change-email">Use another email / resend</button>':'<button class="all-scores" data-mp="password">Sign in with an existing password</button>'}`);
+ shell(`<div class="intro-kicker">YOUR SEAT AT THE TABLE</div><h1>${codeSent?'Check your inbox.':'Let’s play together.'}</h1><p class="core-muted">${codeSent?`Enter the sign-in code sent to ${esc(email)}.`:'Sign in with your email to host, join, and return to your games.'}</p><form data-mp-form="${codeSent?'verify':'email'}">${codeSent?'<label>Sign-in code<input name="token" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6,10}" required></label>':'<label>Email<input name="email" type="email" autocomplete="email" required></label>'}<button class="bigbtn score core-primary" type="submit">${codeSent?'Sign In':'Email me a code'}</button></form>${codeSent?'<button class="all-scores" data-mp="change-email">Use Another Email / Resend</button>':'<button class="all-scores" data-mp="password">Sign In With An Existing Password</button>'}`);
 }
 function passwordScreen(){
  screen='account';
- shell(`<div class="intro-kicker">WELCOME BACK</div><h1>Your seat is waiting.</h1><p class="core-muted">Sign in with your game-account email and password. Camera credentials are separate. For local camera or manual testing, choose Local games; no account is needed.</p><form data-mp-form="password"><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="bigbtn score core-primary" type="submit">Sign in</button></form><a class="all-scores" href="${esc(recoveryRedirect(webUrl))}">Forgot password?</a>${emailOtpEnabled?'<button class="all-scores" data-mp="change-email">Use an email code instead</button>':''}`);
+ shell(`<div class="intro-kicker">WELCOME BACK</div><h1>Your seat is waiting.</h1><p class="core-muted">Sign in with your game-account email and password. Camera credentials are separate. For local camera or manual testing, choose Local games; no account is needed.</p><form data-mp-form="password"><label>Email<input name="email" type="email" autocomplete="email" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button class="bigbtn score core-primary" type="submit">Sign In</button></form><a class="all-scores" href="${esc(recoveryRedirect(webUrl))}">Forgot password?</a>${emailOtpEnabled?'<button class="all-scores" data-mp="change-email">Use An Email Code Instead</button>':''}`);
 }
 function home(){
  screen='home';room=null;
- shell(`<div class="intro-kicker">BRING YOUR PEOPLE</div><h1>A seat for everyone.</h1><p class="core-muted">Host on iPhone or Android. Join from any phone. One shared scorecard.</p>${renderResumeEntry()}<div class="mp-entry"><button data-mp="host"><span class="mp-icon">＋</span><strong>Host a game</strong><small>Choose the rules. Invite your table.</small></button><button data-mp="join"><span class="mp-icon">↗</span><strong>Join a game</strong><small>Scan the host’s QR or enter a code.</small></button></div><button class="all-scores" data-mp="social-inbox">Invitations &amp; play requests</button><button class="all-scores" data-mp="tournaments">Your tournaments · return to saved progress</button><button class="all-scores" data-mp="rooms">Your online games &amp; completed tournaments</button><p class="mp-account">${esc(user.email)} <button class="hbtn" data-mp="signout">Sign out</button></p>`);
+ shell(`<div class="intro-kicker">BRING YOUR PEOPLE</div><h1>A seat for everyone.</h1><p class="core-muted">Host on iPhone or Android. Join from any phone. One shared scorecard.</p>${renderResumeEntry()}<div class="mp-entry"><button data-mp="host"><span class="mp-icon">＋</span><strong>Host a Game</strong><small>Choose the rules. Invite your table.</small></button><button data-mp="join"><span class="mp-icon">↗</span><strong>Join a Game</strong><small>Scan the host’s QR or enter a code.</small></button></div><button class="all-scores" data-mp="social-inbox">Invitations &amp; Play Requests</button><button class="all-scores" data-mp="tournaments">Your Tournaments · Return To Saved Progress</button><button class="all-scores" data-mp="rooms">Your Online Games &amp; Completed Tournaments</button><p class="mp-account">${esc(user.email)} <button class="hbtn" data-mp="signout">Sign Out</button></p>`);
 }
 function hostForm(){
  screen='host';
- shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">YOU’RE THE HOST</div><h1>Set the table.</h1><form data-mp-form="host"><label>Your player name<input name="name" maxlength="24" value="${esc(displayName)}" autocomplete="nickname" required></label><label>Play<select name="tableType"><option value="game">Hosted game</option><option value="tournament">Tournament · multiple games</option></select></label><fieldset class="mp-tournament-fields" hidden disabled><legend>Your tournament</legend><label>Tournament name<input name="tournamentName" maxlength="60" placeholder="Our tournament" required></label><div class="core-form-row"><label>Games<input name="gameCount" type="number" min="2" max="20" step="1" value="3" required></label><label>Players<select name="tournamentPlayers">${Array.from({length:7},(_,i)=>`<option value="${i+2}">${i+2}</option>`).join('')}</select></label></div><p class="core-muted">Keep the same players and rules. Save your progress and resume another day.</p></fieldset><label>Game mode<select name="mode">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><label class="mp-check"><input name="hideTotals" type="checkbox"><span>Hide totals until the end</span></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · connected to this host</option>':''}</select></label><div class="mp-note">Up to 8 players · guests join from any phone.<br>Tournaments use manual scoring. For GoDice games, the Android host connects five dice and stays open during play.</div><p class="core-muted">Next: invite players and set up commentary before you start.</p><button class="bigbtn score core-primary">Create room</button></form>`);
+ shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">YOU’RE THE HOST</div><h1>Set the table.</h1><form data-mp-form="host"><label>Your player name<input name="name" maxlength="24" value="${esc(displayName)}" autocomplete="nickname" required></label><label>Play<select name="tableType"><option value="game">Hosted game</option><option value="tournament">Tournament · multiple games</option></select></label><fieldset class="mp-tournament-fields" hidden disabled><legend>Your tournament</legend><label>Tournament name<input name="tournamentName" maxlength="60" placeholder="Our tournament" required></label><div class="core-form-row"><label>Games<input name="gameCount" type="number" min="2" max="20" step="1" value="3" required></label><label>Players<select name="tournamentPlayers">${Array.from({length:7},(_,i)=>`<option value="${i+2}">${i+2}</option>`).join('')}</select></label></div><label>Tournament venue<select name="venue">${MIDNIGHT_LOCATIONS.map(c=>`<option value="${c.id}" ${c.id===readMidnight().location?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label><p class="core-muted">The host chooses the shared venue; it stays fixed for this tournament.</p><p class="core-muted">Keep the same players and rules. Save your progress and resume another day.</p></fieldset><label>Your avatar<button type="button" class="all-scores" data-action="midnight-avatar">Choose Your Avatar / Portrait</button></label><label>Game mode<select name="mode">${Object.entries(MODES).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('')}</select></label><label class="mp-check"><input name="hideTotals" type="checkbox"><span>Hide totals until the end</span></label><label>Dice input<select name="source"><option value="manual">Manual scoring</option>${import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled?'<option value="godice">GoDice · connected to this host</option>':''}</select></label><div class="mp-note">Up to 8 players · guests join from any phone.<br>Tournaments use manual scoring. For GoDice games, the Android host connects five dice and stays open during play.</div><p class="core-muted">Next: invite players and set up commentary before you start.</p><button class="bigbtn score core-primary">Create Room</button></form>`);
 }
 function joinForm(){
  screen='join';
- shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">PULL UP A CHAIR</div><h1>Join your table.</h1><form data-mp-form="join"><label>Room code<input name="code" class="mp-code-input" value="${esc(invite)}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" required></label><label>Your player name<input name="name" maxlength="24" value="${esc(displayName)}" autocomplete="nickname" required></label><button class="bigbtn score core-primary">Join game</button></form>`);
+ shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">PULL UP A CHAIR</div><h1>Join your table.</h1><form data-mp-form="join"><label>Room code<input name="code" class="mp-code-input" value="${esc(invite)}" maxlength="12" autocomplete="off" autocapitalize="characters" spellcheck="false" required></label><label>Your player name<input name="name" maxlength="24" value="${esc(displayName)}" autocomplete="nickname" required></label><button class="bigbtn score core-primary">Join Game</button></form>`);
  const hint=document.createElement('p');hint.className='core-muted';hint.textContent='Already a player? Use the same account. Joining this saved invitation restores your seat and progress.';root.querySelector('h1').after(hint);
 }
 function inviteUrl(){const url=new URL(webUrl);url.search='';url.hash='';url.searchParams.set('join',room.code);return url.href;}
@@ -54,9 +58,14 @@ export function onlineInvitation(){
 }
 function lobby(){
  screen='lobby';const host=room.hostId===user.id;
+ if(room.tournament?.venue)document.documentElement.dataset.location=room.tournament.venue;
  const tournament=room.tournament,full=!tournament||room.members.length===tournament.playerCount;
- shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">${host?'YOUR TABLE IS OPEN':'YOU’RE IN'}</div><h1>${host?'Invite your people.':'Waiting for the host.'}</h1><div class="mp-room-card"><div class="mp-qr">${room.tournament?'<button class="all-scores" data-mp="social-players">Players · invite by email &amp; ask to play</button>':''}<canvas id="roomQr" aria-label="Scan this QR code to join the game" role="img"></canvas></div><span class="core-muted">Scan to join · no app needed</span><strong class="mp-room-code">${esc(room.code.slice(0,4))} ${esc(room.code.slice(4))}</strong><button class="hbtn" data-mp="copy">Copy invitation link</button></div><div class="mp-roster-title"><strong>At the table</strong><span>${room.members.length} / 8 players</span></div><ol class="mp-roster">${room.members.map((m,i)=>`<li style="--seat-hue:${[162,267,205,24,48,332,185,232][i]}"><span class="mp-avatar">${esc(m.name.slice(0,1).toUpperCase())}</span><strong>${esc(m.name)}</strong><small>${m.userId===room.hostId?'Host':m.userId===user.id?'You':'Joined'}</small></li>`).join('')}</ol><p class="mp-note">${esc(MODES[room.mode].name)} · ${room.source==='godice'?'Host GoDice':'Manual dice'}${room.hideTotals?' · Totals hidden':''}</p>${host&&room.source==='godice'?'<button class="all-scores" data-mp="connect-dice">Connect / manage host GoDice</button>':''}<section class="mp-commentary-setup" aria-label="Before you start"><h2>Give your table a voice</h2><p>${host?'Choose your commentator, humor and frequency before starting. Your welcome plays on the host phone.':'Add your optional player details before the host starts.'}</p><button class="all-scores" data-mp="commentary">${host?'Set up commentary &amp; player details':'Personalize my commentary'}</button></section>${host?'<button class="bigbtn score core-primary" data-mp="start">Everyone’s here · start game</button>':'<p class="mp-wait">The game will open when the host starts.</p>'}`);
+ shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><div class="intro-kicker">${host?'YOUR TABLE IS OPEN':'YOU’RE IN'}</div><h1>${host?'Invite your people.':'Waiting for the host.'}</h1><div class="mp-room-card"><div class="mp-qr">${room.tournament?'<button class="all-scores" data-mp="social-players">Players · Invite By Email &amp; Ask To Play</button>':''}<canvas id="roomQr" aria-label="Scan this QR code to join the game" role="img"></canvas></div><span class="core-muted">Scan to join · no app needed</span><strong class="mp-room-code">${esc(room.code.slice(0,4))} ${esc(room.code.slice(4))}</strong><button class="hbtn" data-mp="copy">Copy Invitation Link</button></div><div class="mp-roster-title"><strong>At the table</strong><span>${room.members.length} / 8 players</span></div><ol class="mp-roster">${room.members.map((m,i)=>`<li style="--seat-hue:${[162,267,205,24,48,332,185,232][i]}"><span class="mp-avatar" data-avatar-account="${esc(m.userId)}">${renderAvatar({accountId:m.userId,name:m.name})}</span><strong>${esc(m.name)}</strong><small>${m.userId===room.hostId?'Host':m.userId===user.id?'You':'Joined'}</small></li>`).join('')}</ol><p class="mp-note">${esc(MODES[room.mode].name)} · ${room.source==='godice'?'Host GoDice':'Manual dice'}${room.hideTotals?' · Totals hidden':''}</p>${host&&room.source==='godice'?'<button class="all-scores" data-mp="connect-dice">Connect / Manage Host GoDice</button>':''}<section class="mp-commentary-setup" aria-label="Before you start"><h2>Give your table a voice</h2><p>${host?'Choose your commentator, humor and frequency before starting. Your welcome plays on the host phone.':'Add your optional player details before the host starts.'}</p><button class="all-scores" data-mp="commentary">${host?'Set Up Commentary &amp; Player Details':'Personalize My Commentary'}</button></section>${host?'<button class="bigbtn score core-primary" data-mp="start">Everyone’s Here · Start Game</button>':'<p class="mp-wait">The game will open when the host starts.</p>'}`);
  const ticket=generation;
+ const lobbyCode=room.code;
+ const avatarButton=document.createElement('button');avatarButton.type='button';avatarButton.className='all-scores';avatarButton.dataset.action='midnight-avatar';avatarButton.textContent='Your avatar / portrait';root.querySelector('.mp-roster-title').before(avatarButton);
+ if(tournament?.venue){const scene=document.createElement('div');scene.className='mp-shared-venue';scene.setAttribute('aria-label','Shared tournament venue: '+locationById(tournament.venue).name);scene.innerHTML=renderMidnightCity(tournament.venue);root.querySelector('h1').after(scene);}
+ void refreshTableAvatars(lobbyCode).then(ok=>{if(!ok||!current(ticket)||screen!=='lobby'||room?.code!==lobbyCode)return;root.querySelectorAll('[data-avatar-account]').forEach(el=>{const member=room.members.find(m=>m.userId===el.dataset.avatarAccount);if(member)el.innerHTML=renderAvatar({accountId:member.userId,name:member.name});});});
  if(tournament){
   const summary=document.createElement('p');summary.className='mp-note';summary.textContent=`${tournament.name} · ${tournament.gameCount} games · ${tournament.playerCount} players · Rules fixed at creation`;root.querySelector('h1').after(summary);
   root.querySelector('.mp-roster-title span').textContent=`${room.members.length} / ${tournament.playerCount} players`;
@@ -89,7 +98,7 @@ async function refresh(){
  const ticket=generation,code=room?.code;
  if(!code)return;
  if(working||document.hidden){schedule();return;}
- try{const data=await requestRoom({operation:'read',code});if(ticket===generation)accept(data.room);}
+ try{const data=await requestRoom({operation:'read',code});if(ticket===generation){accept(data.room);if(screen==='lobby')lobby();else if(screen==='game'){const refreshed=await refreshTableAvatars(code);if(refreshed&&current(ticket)&&room?.code===code)callbacks.game(room,user.id,connected,true);}}}
  catch(error){if(ticket!==generation)return;connected=false;silentGreetingHydration=true;if(screen==='game')callbacks.connection(false);else message('Reconnecting… Your place at the table is saved.');}
  finally{if(ticket===generation)schedule();}
 }
@@ -116,7 +125,7 @@ async function tournaments(){
   data.rooms.forEach(r=>saved.set(r.id,r));
   if(data.nextBefore){
    const key=JSON.stringify(data.nextBefore);
-   if(cursors.has(key)||before&&(data.nextBefore.createdAt>before.createdAt||data.nextBefore.createdAt===before.createdAt&&data.nextBefore.id>=before.id))throw new Error('The tournament list could not advance. Try again.');
+   if(cursors.has(key)||before&&(data.nextBefore.createdAt>before.createdAt||data.nextBefore.createdAt===before.createdAt&&data.nextBefore.id>=before.id))throw new Error('The tournament list could not advance. Try Again.');
    cursors.add(key);
   }
   before=data.nextBefore;
@@ -131,10 +140,10 @@ async function sessions(view='open'){
   const data=await requestRoom({operation:'sessions',view,...(before?{before}:{})});
   if(!current(ticket)||screen!==`sessions-${view}`)return;
   data.rooms.forEach(session=>saved.set(session.id,session));
-  if(data.nextBefore){const key=JSON.stringify(data.nextBefore);if(cursors.has(key)||before&&(data.nextBefore.createdAt>before.createdAt||data.nextBefore.createdAt===before.createdAt&&data.nextBefore.id>=before.id))throw new Error('The saved game list could not advance. Try again.');cursors.add(key);}
+  if(data.nextBefore){const key=JSON.stringify(data.nextBefore);if(cursors.has(key)||before&&(data.nextBefore.createdAt>before.createdAt||data.nextBefore.createdAt===before.createdAt&&data.nextBefore.id>=before.id))throw new Error('The saved game list could not advance. Try Again.');cursors.add(key);}
   before=data.nextBefore;
  }while(before);
- shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Saved games &amp; tournaments.</h1><div class="tournament-actions" role="group" aria-label="Saved game filters"><button class="hbtn" data-mp="sessions-open" aria-pressed="${view==='open'}">Open · resume play</button><button class="hbtn" data-mp="sessions-completed" aria-pressed="${view==='completed'}">Completed · view results</button></div><p class="core-muted">Saved to your signed-in account. Open the same table to keep your seat, scores and current turn.</p>${renderSavedSessions([...saved.values()],user.id,{view})}`);
+ shell(`<button class="hbtn" data-mp="home">← Multiplayer</button><h1>Saved games &amp; tournaments.</h1><div class="tournament-actions" role="group" aria-label="Saved game filters"><button class="hbtn" data-mp="sessions-open" aria-pressed="${view==='open'}">Open · Resume Play</button><button class="hbtn" data-mp="sessions-completed" aria-pressed="${view==='completed'}">Completed · View Results</button></div><p class="core-muted">Saved to your signed-in account. Open the same table to keep your seat, scores and current turn.</p>${renderSavedSessions([...saved.values()],user.id,{view})}`);
 }
 async function accountDestination(){
  const ticket=generation;
@@ -171,7 +180,7 @@ export async function openOnline(element,handlers,joinCode='',view='home'){
 }
 export async function sendOnline(action,expectedRevision,commandId=crypto.randomUUID()){
  if(!connected||working)throw new Error('Reconnecting. Wait for the game to sync before scoring.');
- return mutate({operation:'command',code:room.code,gameId:room.game.id,rulesVersion:room.game?.rules.version??room.rulesVersion??1,action,expectedRevision,commandId});
+ return mutate({operation:'command',presentationVersion:1,code:room.code,gameId:room.game.id,rulesVersion:room.game?.rules.version??room.rulesVersion??1,action,expectedRevision,commandId});
 }
 export async function setOnlineReady(ready){
  if(!connected||working)throw new Error('Reconnecting. Wait for the table to sync.');
@@ -209,7 +218,7 @@ export async function onlineHistory(){
   const data=await requestRoom({operation:'history',code,...(before?{before}:{})});
   if(!current(ticket)||room.code!==code)throw new Error('The table changed. Open its history again.');
   data.games.forEach(game=>games.set(game.id,game));
-  if(data.nextBefore!==null&&(before!==undefined&&data.nextBefore>=before))throw new Error('History could not advance. Try again.');
+  if(data.nextBefore!==null&&(before!==undefined&&data.nextBefore>=before))throw new Error('History could not advance. Try Again.');
   before=data.nextBefore;
  }while(before);
  games.set(room.game.id,{...room.game,sequence:room.gameSequence??1});return [...games.values()];
@@ -225,7 +234,7 @@ document.addEventListener('change',e=>{
  const tournament=e.target.value==='tournament',fields=root.querySelector('.mp-tournament-fields'),source=root.querySelector('[name="source"]');
  fields.hidden=!tournament;fields.disabled=!tournament;
  if(tournament)source.value='manual';source.disabled=tournament;
- root.querySelector('[data-mp-form="host"] button.bigbtn').textContent=tournament?'Create tournament':'Create room';
+ root.querySelector('[data-mp-form="host"] button.bigbtn').textContent=tournament?'Create tournament':'Create Room';
 });
 document.addEventListener('click',async e=>{
  const button=e.target.closest('[data-mp]');if(!button||!onlineOpen)return;
@@ -273,11 +282,11 @@ document.addEventListener('submit',async e=>{
    const {data,error}=await waitForOnline(auth.verifyOtp({email,token:String(f.get('token')).trim(),type:'email'}));if(!current(ticket))return;if(error)throw error;user=data.user;callbacks?.account?.(user);await accountDestination();
   }else{
    displayName=String(f.get('name')).trim();remember('clubhouse-name',displayName);
-   const payload=kind==='host'?{operation:'create',name:displayName,mode:f.get('mode'),source:f.get('source')||'manual',hideTotals:f.has('hideTotals'),requestId:crypto.randomUUID()}:{operation:'join',code:f.get('code'),name:displayName};
+   const payload=kind==='host'?{operation:'create',presentationVersion:1,name:displayName,mode:f.get('mode'),source:f.get('source')||'manual',hideTotals:f.has('hideTotals'),requestId:crypto.randomUUID()}:{operation:'join',code:f.get('code'),name:displayName};
    if(kind==='host'&&f.get('tableType')==='tournament'){
     const name=String(f.get('tournamentName')||'').trim(),gameCount=Number(f.get('gameCount')),playerCount=Number(f.get('tournamentPlayers'));
     if(!name||name.length>60||!Number.isInteger(gameCount)||gameCount<2||gameCount>20||!Number.isInteger(playerCount)||playerCount<2||playerCount>8)throw new Error('Choose a tournament name, 2–20 games and 2–8 players.');
-    payload.tournament={name,gameCount,playerCount};payload.source='manual';
+    payload.tournament={name,gameCount,playerCount,venue:f.get('venue')||'miami'};payload.source='manual';
    }
    if(kind==='host'&&payload.mode==='competition'&&payload.source==='manual')payload.rulesVersion=2;
    const joined=await mutate(payload);if(current(ticket)){

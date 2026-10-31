@@ -1,5 +1,7 @@
 # Software project control
 
+31 October SW074 recovery candidate: owner ROG archive supplies later avatar/account sync, reactions, fit/pinch and SW073 controls missing from published9179f73. Three-way integration preserves fg-dev session/recovery/push guards and source/asset identification. Initial combined1,295tests/13optional skips and disposable SQL17+10+5passed; clean full/native qualification pending. One canonical GitHub master on fg-dev, isolated task worktrees for both accounts. No live/device/provider changes. See [recovery](../plans/SW-074-rog-interface-recovery.md).
+
 30 October SW072 implementation started under owner instruction: packaged source identity/About and required public-asset build guards implemented in an isolated branch stacked on design PR #5. Focused12tests and clean7b31215 full gate passed:1,222tests/13optional camera skips/all configured builds/source stable; bundled/emitted identities matched. Baseline recovery, owner rule/visual decisions and avatar-transfer scope remain open; no rules/UI-restoration/deployment success claimed. See [task](../plans/SW-072-release-baseline-guards.md).
 
 30 October SW071 design proposed: baseline recovery, immutable rule packs/interpreters, deterministic game engine, accepted-event trigger pipeline, targeted sizing/avatar/effect restoration and isolated two-developer workflow. Owner rule/visual decisions and sprint capacity remain open; no implementation/deployment. See [sprint design](../plans/SW-071-versioned-engine-stabilisation-sprint.md).

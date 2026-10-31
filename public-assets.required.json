@@ -44,6 +44,22 @@
     {
       "path": "sounds/yahtzee.mp3",
       "sha256": "40705a2be92dff8c4f80f0c575ab6b971317ac96d6d82f3ddefab4f99f22d769"
+    },
+    {
+      "path": "portrait-styles/box-art.webp",
+      "sha256": "5afa255b5207bf68c3c9561a832a57c338850bb37b484196e7ba058623387ae9"
+    },
+    {
+      "path": "portrait-styles/neon-airbrush.webp",
+      "sha256": "02a7994089d6073ebe098ab76801680d299aacaa3106d95c75e08f114b4ec3e7"
+    },
+    {
+      "path": "portrait-styles/noir-comic.webp",
+      "sha256": "45d9fbf2dcf7ba0d57095e6d41a72bb0fb402fdbeacdedd548b86a7d2b69268c"
+    },
+    {
+      "path": "portrait-styles/retro-pixel.webp",
+      "sha256": "47f184807f0a47400b5437f907fc1f86ac3fb88b1c9b8961a3dcede8b3bca09a"
     }
   ]
 }

@@ -1,5 +1,6 @@
 import { createCoreGame, command, MODES,gameRules } from '../game/core.js';
 import {tournamentConfig,requireTournamentPlaying,updateTournamentCompletion} from './tournament.js';
+import{scorePresentation,presentationRemaining}from'../game/score-presentation.js';
 
 export class RoomError extends Error {
  constructor(message,status=400){super(message);this.status=status;}
@@ -14,13 +15,13 @@ export function memberSeat(room,userId){return room.members.findIndex(m=>m.userI
 export function requireMember(room,userId){
  const seat=memberSeat(room,userId);if(seat<0)fail('You are not a member of this game.',403);return seat;
 }
-export function createRoom({id,code,userId,name,mode='standard',source='manual',hideTotals=false,tournament,rulesVersion=1,time}){
+export function createRoom({id,code,userId,name,mode='standard',source='manual',hideTotals=false,tournament,rulesVersion=1,time,presentationVersion}){
  if(typeof mode!=='string'||!Object.hasOwn(MODES,mode))fail('Unknown game mode.');
  if(!['manual','godice'].includes(source))fail('Choose manual or host GoDice.');
  try{gameRules(mode,rulesVersion,source);}catch(error){fail(error.message);}
  return {id,code,hostId:userId,revision:0,status:'lobby',mode,source,hideTotals:hideTotals===true,
   createdAt:time,joinExpiresAt:new Date(Date.parse(time)+48*60*60*1000).toISOString(),
-  members:[{userId,name:playerName(name)}],game:null,rulesVersion,...(tournament!==undefined&&tournament!==null?{tournament:tournamentConfig(tournament,mode,source,rulesVersion)}:{})};
+  members:[{userId,name:playerName(name)}],game:null,rulesVersion,...(presentationVersion===1?{presentationVersion:1}:{}),...(tournament!==undefined&&tournament!==null?{tournament:tournamentConfig(tournament,mode,source,rulesVersion)}:{})};
 }
 export function joinRoom(room,{userId,name,time}){
  if(memberSeat(room,userId)>=0)return room;
@@ -44,7 +45,7 @@ export function startRoom(room,{userId,time}){
  if(game.source==='godice')game=command(game,{type:'start',seat:0},{id:`room:${room.id}:first-turn`,time});
  return {...room,revision:room.revision+1,status:'active',game};
 }
-export function playRoom(room,{userId,action,commandId,expectedRevision,gameId,time}){
+export function playRoom(room,{userId,action,commandId,expectedRevision,gameId,time,presentationVersion}){
  const member=requireMember(room,userId),host=room.hostId===userId;
  requireTournamentPlaying(room);
  if(!room.game)fail('The host has not started this game.');
@@ -56,6 +57,7 @@ export function playRoom(room,{userId,action,commandId,expectedRevision,gameId,t
  if(receipt){if(receipt.actor!==userId)fail('This command belongs to another player.',403);return room;}
  if(prior){if((prior.actorId||room.members[prior.seat]?.userId)!==userId)fail('This command belongs to another player.',403);return room;}
  if(room.revision!==expectedRevision)fail('The game changed. Refresh and choose your score again.',409);
+ if(!['correct-score','undo-score'].includes(action?.type)&&presentationRemaining(room.scorePresentation,Date.parse(time))>0)fail('Wait for the shared announcement to finish.',409);
  if(!action||!['start','score','bonus','final-chain-roll','correct-score','undo-score','roll','correct-roll','manual-fallback','dice-state'].includes(action.type))fail('Unsupported game action.');
  const hardware=room.game.source==='godice';
  const receipts=[...(room.receipts||[]),{id:commandId,actor:userId}].slice(-100);
@@ -83,5 +85,7 @@ export function playRoom(room,{userId,action,commandId,expectedRevision,gameId,t
  if(hardware&&game.status==='active'&&!game.turn)game=command(game,{type:'start',seat:game.activeSeat,source:'godice'},{id:`room:${commandId}:next`,time});
  const last=game.turn?.rolls.filter(r=>!r.excluded).at(-1);
  const liveDice=hardware?{turnId:game.turn?.id,phase:last?'settled':'ready',faces:last?.dice||Array(5).fill(null),moving:Array(5).fill(false),connected:room.liveDice?.connected??0,updatedAt:time}:undefined;
- return updateTournamentCompletion({...room,revision:room.revision+1,status:game.status,game,receipts,...(['correct-score','undo-score'].includes(action.type)&&room.game.status==='finished'?{rematch:null}:{}),...(hardware?{liveDice}:{})});
+ const presentationEnabled=room.presentationVersion===1||presentationVersion===1;
+ const presentation=presentationEnabled?scorePresentation(room.game,game,{time,id:commandId}):null;
+ return updateTournamentCompletion({...room,revision:room.revision+1,status:game.status,game,receipts,...(presentationEnabled?{presentationVersion:1,scorePresentation:presentation}:{}),...(['correct-score','undo-score'].includes(action.type)&&room.game.status==='finished'?{rematch:null}:{}),...(hardware?{liveDice}:{})});
 }

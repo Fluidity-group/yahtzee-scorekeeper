@@ -1,4 +1,14 @@
 import {renderBuildInfo} from './ui/build-info.js';
+import {pullSlotLever,clearSlotRain} from './ui/slot-rain.js';
+import {saveCardPreferences} from './ui/scorecard-preferences.js';
+import {resumeDismissed,setResumeDismissed,bindResumeSwipe} from './ui/resume-queue.js';
+import {renderBonusChecks} from './ui/bonus-checks.js';
+import {captureFinaleState,restoreFinaleState} from './ui/finale-dashboard.js';
+import{scorePresentation,presentationRemaining}from'./game/score-presentation.js';
+import{syncScorePresentation,clearScorePresentation}from'./ui/score-presentation.js';
+import './ui/score-presentation.css';
+import{watchAccountAvatars}from'./profile/avatar-sync.js';
+import './ui/portraits.css';
 import {renderLocalSetup} from './ui/local-setup.js';
 import {initializeMidnight} from './ui/midnight-profile.js';
 import {renderMidnightPanel,bindMidnightPanel,playMidnightSound} from './ui/midnight-panels.js';
@@ -40,6 +50,10 @@ import './ui/local-setup.css';
 import './ui/mobile-polish.css';
 import './ui/slot-cabinet.css';
 import './ui/retro-finish.css';
+import './ui/sw070-ui.css';
+import './ui/sw071-ui.css';
+import './ui/sw072-ui.css';
+import './ui/sw073-ui.css';
 import {applyScorecardSize,saveScorecardSize,renderScorecardDisplay} from './ui/scorecard-display.js';
 import {renderPhoneScorecard,bindPhoneScorecard} from './ui/phone-scorecard.js';
 import { getDiceStatus, subscribeDiceStatus, subscribeDiceEvents } from './dice/live-status.js';
@@ -140,10 +154,13 @@ function header(){return '<header class="compact-header"><button class="hbtn hom
 let launchGeneration=0;
 let view='home',localVoice=null,localVoiceGameId=null,welcomeGate=null,pendingWelcome=false,pendingLocalLaunch=null,settingsCleanup=()=>{};
 let homeAccount={status:'loading'},homeAccountGeneration=0;
-function drawHome(){const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount,theme});if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
+watchAccountAvatars(()=>{if(view==='home')drawHome();});
+let resumeCleanup=()=>{};
+function dismissResume(){if(view!=='home'||!game||onlineRoom)return;try{setResumeDismissed(game.id,true);drawHome();root.querySelector('[data-action=restore-resume]')?.focus({preventScroll:true});}catch{notice('Could not remove the shortcut. Your game is still saved.');}}
+function drawHome(){resumeCleanup();const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount,theme,resumeHidden:!!game&&resumeDismissed(game.id)});resumeCleanup=bindResumeSwipe(root,dismissResume);if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
 function openHomeAccountPanel(kind){openDialog(kind==='profile'?renderPlayerProfile(homeAccount):kind==='people'?renderPeopleDialog(homeAccount):renderTrophyDialog(homeAccount));dialog.dataset.homeAccountPanel=kind;}
 async function refreshHomeAccount(){const ticket=++homeAccountGeneration;let data;try{data=await loadHomeAccount();}catch{data={status:'error'};}if(ticket!==homeAccountGeneration||view!=='home')return;homeAccount=data;drawHome();const panel=dialog.dataset.homeAccountPanel;if(dialog.open&&panel)openHomeAccountPanel(panel);}
-function showHome(){clearTimeout(noticeTimer);document.getElementById('coreNotice').textContent='';view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();homeAccount={status:'loading'};drawHome();void refreshHomeAccount();}
+function showHome(){clearScorePresentation();initializeMidnight();clearTimeout(noticeTimer);document.getElementById('coreNotice').textContent='';view='home';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');localVoice?.setVisible(false);syncHostedCommentary();homeAccount={status:'loading'};drawHome();void refreshHomeAccount();}
 async function returnHome(){launchGeneration++;welcomeGate?.cancel();if(onlineRoom){const {leaveOnline}=await import('./multiplayer/ui.js');leaveOnline();game=localGame;onlineRoom=null;onlineUserId=null;onlineConnected=false;hostedCommentaryActive=false;resetHostedCommentary();}dialog.close();showHome();}
 function openNavigation(){if(dialog.open){notice('Finish or close score entry before opening the menu.');return;}openDialog(renderGameMenu({hasGame:!!game,theme,native:Capacitor.getPlatform()==='android',resumeTournament:!!(tournamentPaused()&&onlineRoom.hostId===onlineUserId&&onlineRoom.capabilities?.tournaments===true),resumeDisabled:busy||!onlineConnected}));dialog.dataset.navigation='true';}
 function openGlobalCommentary(){if(iosManualTest){notice('Voice is deferred in this iOS manual test.');return;}const saved=readCommentaryPreferences(),defaults=readLocalPlayerDefaults(),players=defaults.length?defaults:[{displayName:localStorage.getItem('clubhouse-name')||'',gender:'',blurb:''}];openDialog(renderCommentarySettings({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted,isHost:true,connected:false,id:'global-commentary'}).replace('Voice not connected · preferences only','Saved defaults · connect when a new game begins').replace('Enable table commentary','Offer commentary for new games').replace('Table voice style','Your default commentator').replace('<p data-commentary-error', '<details class="global-player-defaults"><summary>Saved player details for local games</summary><p class="core-muted">Stored on this phone. Only players in the new game are shared when you choose commentary.</p>'+players.map((p,i)=>'<label>Player '+(i+1)+' name<input name="localName'+i+'" maxlength="24" value="'+esc(p.displayName)+'"></label>'+renderPlayerProfileFields('defaultPlayer'+i,p)).join('')+'</details><p data-commentary-error')+'<p class="core-muted">Saved on this phone across app launches. Each new game asks whether to use commentary. Live voice needs an internet connection and sign-in; your optional player details are shared only when you choose commentary for that game.</p>');settingsCleanup();settingsCleanup=bindCommentarySettings(dialog,{onClose:()=>dialog.close(),onListenerMute:value=>{persistCommentaryPatch({listenerMuted:value});(onlineRoom?hostedCommentary:localVoice?.session)?.setListenerMuted?.(value);},onTableSettings:async value=>{const data=new FormData(dialog.querySelector('[data-commentary-form]'));saveLocalPlayerDefaults(players.map((_,i)=>({displayName:String(data.get('localName'+i)||''),...readPlayerProfileFields(data,'defaultPlayer'+i)})));const saved=persistCommentaryPatch({profile:{...value.profile,enabled:value.enabled}});const active=onlineRoom?hostedCommentary:localVoice?.session;if(active&&(!onlineRoom||onlineRoom.hostId===onlineUserId)){active.muteForGame?.();await active.configure({profile:saved.profile,enabled:saved.profile.enabled,listenerMuted:saved.listenerMuted});}notice('Commentary settings saved for every game.');}});}
@@ -156,7 +173,7 @@ async function launchLocalVoice(created,players,{resume=false}={}){const launchT
 async function prepareHostedStart(){if(iosManualTest)return true;const prefs=readCommentaryPreferences(),yes=await askGameCommentary(dialog,prefs);const session=await ensureHostedCommentary();if(session)await session.configure({profile:prefs.profile,enabled:yes,listenerMuted:yes?false:prefs.listenerMuted});pendingWelcome=yes;if(yes){view='welcome';root.innerHTML='<main class="launch-progress"><div class="launch-pulse" aria-hidden="true">⚄</div><h1>Opening your table.</h1><p>Getting the welcome ready…</p></main>';}return true;}
 function startHostedWelcome(metadata){if(iosManualTest)return;if(!pendingWelcome){void ensureHostedCommentary().then(session=>session?.allowGreeting(metadata));return;}pendingWelcome=false;view='welcome';void ensureHostedCommentary().then(session=>{if(!session){view='game';render();return;}welcomeGate=showWelcomeGate({root,session,metadata,onDone:()=>{welcomeGate=null;view='game';render();},onSkip:reason=>{welcomeGate=null;session.muteForGame();void session.configure({profile:readCommentaryPreferences().profile,enabled:false,listenerMuted:true}).catch(()=>{});view='game';render();if(['timeout','unavailable'].includes(reason))notice('The welcome could not connect. Your game is ready without commentary.');}});}).catch(()=>{view='game';render();notice('Welcome unavailable. You can keep playing.');});}
 
-function newScreen({players=2}={}){view='setup';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');
+function newScreen({players=2}={}){clearSlotRain();view='setup';cancelPulse(root);clearCelebration();phoneCleanup();root.classList.remove('playing');
  root.innerHTML=header()+renderLocalSetup({players,modes:MODES,description:descriptions.standard,camera:Capacitor.getPlatform()==='android',connectedDice:import.meta.env.MODE==='native-evaluation'||getDiceStatus().enabled,hasGame:!!game});
  root.querySelector('[data-setup-saved]').innerHTML=renderResumeEntry({local:true});nameInputs(players);
 }
@@ -174,11 +191,11 @@ function options(){
  if(game.turn?.source==='godice'&&hardwareCapture.capture){const preview=hardwareCapture.candidate();return preview?scoreOptions(game,preview.dice):null;}
  return ['simulated','godice','camera'].includes(game.turn?.source||game.source)?(latest()?scoreOptions(game,latest().dice):null):reportedFace?scoreOptions(game,Array(5).fill(reportedFace)):null;
 }
-function turnPanel(){
+function turnPanel(scorecardMarkup=''){
  if(game.finalChain)return finalChainPanel();
  if(game.status==='finished'){
-  if(onlineRoom)return renderHostedResults({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,busy});
-  const r=results(game),title=r.solo?'Game complete':r.winners.length>1?'A shared victory':`${esc(game.players[r.winners[0]].name)} wins`;
+  if(onlineRoom)return renderHostedResults({room:hostedCommentaryActive?onlineRoom:null,userId:onlineUserId,connected:onlineConnected,busy,scorecardMarkup});
+  const r=results(game),title=r.solo?'Game Complete':r.winners.length>1?'A Shared Victory':`${esc(game.players[r.winners[0]].name)} Wins`;
   return `<section class="compact-result"><strong>${title}</strong><button class="hbtn" data-action="new">Play again</button></section>`;
  }
  const t=game.turn,opt=options();
@@ -206,7 +223,7 @@ function scoreCell(key, seat) {
  const attrs=`data-score-key="${key}" data-score-seat="${seat}"`;
  if(value!==undefined){
   const label=`${name} ${category}: ${value===0?'scratched, zero points':`${value} points`}`;
-  const content=value===0?'<svg class="scratch-value" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M0 0L100 100M100 0L0 100"/></svg>':value;
+  const content=value===0?'<span class="scratch-mark" aria-hidden="true">X</span>':value;
   const classes=`recorded-score ${value===0?'scratched-score':''}`;
   return `<td ${attrs}>${onlineRoom&&!ownsSeat(seat)?`<span class="${classes}" aria-label="${label}">${content}</span>`:`<button class="${classes}" data-action="edit" data-key="${key}" data-seat="${seat}" aria-label="Edit ${label}">${content}</button>`}</td>`;
  }
@@ -228,7 +245,8 @@ function bonusCell(seat,{hideTotals=false}={}) {
  const ready=!hardwareCapture.capture&&!sharedRolling()&&(manual||opt?.combinations.yahtzee);
  const undo=ownUndoCandidate();
  const undoControl=undo&&undo.seat===seat&&undo.type!=='score'?`<button class="all-scores bonus-undo" data-action="undo-last-score" aria-label="Undo last Yahtzee bonus for ${esc(game.players[seat].name)}"${tournamentPaused()||onlineRoom&&!onlineConnected?' disabled':''}>Undo last bonus</button>`:'';
- return `<td>${active?`<button class="add-yahtzee" data-action="another-yahtzee" aria-label="Add another Yahtzee for ${esc(game.players[seat].name)}; ${hideTotals?'bonus total hidden':`bonus total ${sheet.yahtzeeBonus||0}`}" ${ready?'':'disabled'}>${sheet.yahtzeeBonus&&!hideTotals?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'<span>Yahtzee</span>'}<span class="bonus-plus" aria-hidden="true">+</span></button>`:hideTotals?'<span class="hidden-total">Hidden</span>':sheet.yahtzeeBonus?`<span class="bonus-total">${sheet.yahtzeeBonus}</span>`:'—'}${undoControl}</td>`;
+ const addControl=active?`<button type="button" class="add-yahtzee bonus-check" role="checkbox" aria-checked="false" data-action="another-yahtzee" aria-label="Record another Yahtzee for ${esc(game.players[seat].name)}; confirm dice before adding a bonus" ${ready?'':'disabled'}><span aria-hidden="true">□</span></button>`:'';
+ return `<td>${renderBonusChecks(game,seat,{hidden:hideTotals,addControl,undoControl})}</td>`;
 }
 function anotherYahtzee(){
  if(game.finalChain)return;
@@ -253,7 +271,8 @@ function declareYahtzee(face){
   const keys=Object.keys(opt.scores);if(keys.length===1)choose(keys[0]);
  }
 }
-function render(){
+function render(){if(view!=='home')clearSlotRain();
+ if(onlineRoom?.tournament?.venue)document.documentElement.dataset.location=onlineRoom.tournament.venue;
  applyScorecardSize(root);
  if(dialog.open&&dialog.dataset.tournamentMenu==='true')dialog.close();
  if(view==='welcome')return;
@@ -265,9 +284,11 @@ function render(){
  hardwareCapture.sync(game,getDiceStatus());
  if(hardwareTurnId!==game.turn?.id){hardwareTurnId=game.turn?.id;hardwareHeld=Array(5).fill(false);}
  const totals=results(game).totals,active=game.status==='active';
- root.innerHTML=gameHeader()+`<div class="game-strip sr-only"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel()}<div data-hosted-commentary-inline></div>${renderPhoneScorecard(game,{viewerSeat:onlineRoom?onlineRoom.members.findIndex(member=>member.userId===onlineUserId):game.activeSeat,scoreCell,bonusCell,totals,winners:results(game).winners,peerOffset,sharedLastTurn:onlineRoom?null:ownUndoCandidate()})}</main>`;
+ const finale=game.status==='finished'&&onlineRoom?.tournament?.status==='completed',finaleState=captureFinaleState(root);
+ const scorecardMarkup=renderPhoneScorecard(game,{viewerSeat:onlineRoom?onlineRoom.members.findIndex(member=>member.userId===onlineUserId):game.activeSeat,scoreCell,bonusCell,totals,winners:results(game).winners,peerOffset,sharedLastTurn:onlineRoom?null:ownUndoCandidate()});
+ root.innerHTML=gameHeader()+`<div class="game-strip sr-only"><span class="turn-indicator">${active?`${esc(game.players[game.activeSeat].name)} to play`:'Game Complete'}</span><span>${onlineRoom?(onlineConnected?'Online · '+onlineRoom.code:'Reconnecting…'):`${esc(game.rules.name)} · ${(game.turn?.source||game.source)==='godice'?'GoDice':(game.turn?.source||game.source)==='camera'?'Camera':'Manual'}`}</span></div><main class="compact-game" data-score-lock aria-label="Game scorecard"><div id="liveDiceStatus"></div>${turnPanel(finale?scorecardMarkup:'')}<div data-hosted-commentary-inline></div>${finale?'':scorecardMarkup}</main>`;
+ restoreFinaleState(root,finaleState);
  if(onlineRoom?.tournament){
-  if(onlineRoom.tournament.status==='completed')root.querySelector('main').insertAdjacentHTML('afterbegin',renderTournamentBanner(onlineRoom,onlineUserId,{connected:onlineConnected,busy}));
   if(tournamentPaused())root.querySelectorAll('.core-score-table button').forEach(button=>{button.disabled=true;});
   if(tournamentPaused())root.querySelector('.turn-indicator').textContent='Tournament paused';
  }
@@ -277,12 +298,13 @@ function render(){
  updateHardwarePanel();
  applyScorePulse();
  hostedCommentary?.mountSurface?.({root,scoreDialog:dialog});localVoice?.session.mountSurface?.({root,scoreDialog:dialog});
+ syncScorePresentation({root,room:onlineRoom,event:onlineRoom?onlineRoom.scorePresentation:game.scorePresentation,game,serverNow:onlineRoom?.serverNow,onEnd:()=>{if(view==='game')render();}});
 
 }
 function ensureAutomaticTurn(){
  if(view!=='game')return;
  const status=getDiceStatus();
- if(autoStarting||busy||onlineRoom||game?.status!=='active'||game.source!=='godice'||game.turn||status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected))return;
+ if(autoStarting||busy||onlineRoom||game?.status!=='active'||presentationRemaining(game.scorePresentation)>0||game.source!=='godice'||game.turn||status.paused||status.dice.length!==5||status.dice.some(d=>!d.connected))return;
  autoStarting=true;
  void send({type:'start',source:'godice'}).catch(e=>notice(e.message)).finally(()=>{autoStarting=false;});
 }
@@ -399,6 +421,7 @@ root.addEventListener('keydown',event=>{if(['Enter',' '].includes(event.key)&&ev
 dialog.addEventListener('close',scheduleAutomaticRoll);
 function clearCelebration(){clearTimeout(effectTimer);activeEffect=null;const box=document.getElementById('gameCelebration');box.replaceChildren();box.className='';}
 function celebrate(previous,next){
+ if(next.scorePresentation||onlineRoom?.presentationVersion===1)return;
  const pulseId=next.id,pulseRevision=next.revision;
  const seen=new Set(previous?.events?.map(event=>event.id)||[]);
  const invalidated=previous?.id!==next.id||next.events.some(event=>['score-undo','score-correction'].includes(event.type)&&!seen.has(event.id));
@@ -414,11 +437,12 @@ function celebrate(previous,next){
  effectTimer=setTimeout(clearCelebration,5000);
 }
 document.addEventListener('visibilitychange',()=>{localVoice?.setVisible(!document.hidden&&view!=='home');syncHostedCommentary();if(document.hidden){cancelPulse(root);clearCelebration();}});
-window.addEventListener('pagehide',()=>{localVoice?.dispose();localVoice=null;resetHostedCommentary();cancelPulse(root);clearCelebration();});
+window.addEventListener('pagehide',()=>{clearSlotRain();localVoice?.dispose();localVoice=null;resetHostedCommentary();cancelPulse(root);clearCelebration();});
 window.addEventListener('pageshow',syncHostedCommentary);
 
 function showRules(){openDialog(`<h2>${esc(game.rules.name)} rules · version ${game.rules.version}</h2><p class="core-muted">Score totals: ${game.hideTotals?'hidden until the game ends':'visible during play'}.</p><p class="core-muted">${rulesDescription()}</p><p class="core-muted">Tap + in your column to score. Tap a recorded score to correct it. A scratched first Yahtzee earns no bonus. ${game.rules.joker?'This saved game uses Joker placement.':'No Joker placement: choose a legal scoring category.'}</p><p class="core-muted">Corrections change category points without rewriting historical turns or granted bonuses. Suggested points are only saved when confirmed.</p>`);}
 async function persist(next){
+ if(game?.id===next.id){const effect=scorePresentation(game,next,{time:new Date().toISOString()});if(effect||next.scorePresentation)next={...next,scorePresentation:effect};}
  busy=true;root.setAttribute('inert','');
  try{const saved=await saveCore(next);const previous=game;game=next;reportedFace=0;render();celebrate(previous,next);if(saved?.recoveryOnly)notice('Saved in recovery storage. Keep this browser’s data until database access returns.');}
  catch(e){notice(`Save failed: ${e.message}. Retry before continuing.`);throw e;}
@@ -427,6 +451,7 @@ async function persist(next){
 async function send(action,commandId){
  if(busy)throw Error('Wait for the current save before submitting another action.');
  if(tournamentPaused())throw Error('The tournament is paused. Ask the host to resume.');
+ if(!onlineRoom&&!['correct-score','undo-score'].includes(action.type)&&presentationRemaining(game?.scorePresentation)>0)throw Error('Wait for the announcement to finish.');
  const scoreCommandId=commandId||id();if(['score','bonus','final-chain-roll'].includes(action.type))markScoreSubmitted(scoreCommandId);
  if(onlineRoom){
   busy=true;root.setAttribute('inert','');
@@ -447,7 +472,7 @@ function openMidnightPanel(kind){openDialog(renderMidnightPanel(kind));midnightC
 // openDialog cleans the outgoing panel synchronously before binding its replacement.
 dialog.addEventListener('close',()=>{if(!dialog.open)midnightCleanup();});
 function openDialog(html){midnightCleanup();delete dialog.dataset.homeAccountPanel;insightsCleanup();delete dialog.dataset.insightRequest;delete dialog.dataset.tournamentMenu;delete dialog.dataset.navigation;delete dialog.dataset.bonusConfirmation;dialog.innerHTML=`<button class="sheet-close" data-action="close" aria-label="Close panel">×</button>${html}`;dialog.showModal();hostedCommentary?.refreshSurface?.();}
-async function openMultiplayer(joinCode='',landing='home'){
+async function openMultiplayer(joinCode='',landing='home'){clearSlotRain();
  view='online';
  hostedCommentaryActive=false;resetHostedCommentary();commentarySession.close();
  if(!onlineRoom)localGame=game;
@@ -551,6 +576,7 @@ document.addEventListener('click',async e=>{
  const a=b.dataset.action;if(dialog.dataset.navigation==='true'){dialog.close();delete dialog.dataset.navigation;}
  root.querySelector('.game-menu')?.removeAttribute('open');
  try{
+  if(a!=='slot-lever')clearSlotRain();
   if(a==='home')await returnHome();
   if(a==='game-menu'){if(dialog.open&&dialog.querySelector('.midnight-settings-links'))dialog.close();openNavigation();}
   if(a==='midnight-avatar')openMidnightPanel('avatar');
@@ -576,6 +602,9 @@ document.addEventListener('click',async e=>{
   if(a==='tournament-create')await openMultiplayer('','host-tournament');
   if(a==='tournament-join')await openMultiplayer('','join');
   if(a==='online-sessions')await openMultiplayer('','sessions');
+  if(a==='slot-lever'&&view==='home')pullSlotLever();
+  if(a==='dismiss-resume')dismissResume();
+  if(a==='restore-resume'&&game){setResumeDismissed(game.id,false);drawHome();root.querySelector('[data-action=resume-game]')?.focus({preventScroll:true});}
   if(a==='resume-game'){view='game';localVoice?.setVisible(true);render();if(!localVoice&&Capacitor.getPlatform()==='android'&&readCommentaryPreferences().profile.enabled&&localStorage.getItem('dice-clubhouse:game-commentary:'+game.id)==='yes')void launchLocalVoice(game,[],{resume:true});}
   if(a==='launch-signin')await openMultiplayer('','voice-signin');
   if(a==='launch-without-voice'){launchGeneration++;localStorage.setItem('dice-clubhouse:game-commentary:'+game.id,'no');pendingLocalLaunch=null;void localVoice?.stopForGame().catch(()=>{});localVoice=null;view='game';render();}
@@ -654,7 +683,7 @@ document.addEventListener('click',async e=>{
   }
   if(a==='rematch-ready'||a==='rematch-withdraw'){
    busy=true;render();
-   try{if(a==='rematch-ready'&&onlineRoom?.hostId===onlineUserId)await prepareHostedStart();const {setOnlineReady}=await import('./multiplayer/ui.js');await setOnlineReady(a==='rematch-ready');if(game.status==='finished'&&pendingWelcome){view='game';render();}notice(game.status==='finished'?(a==='rematch-ready'?'You’re ready for the next game.':'You’re not ready yet.'):`New game · ${game.players[game.activeSeat].name} starts.`);}
+   try{if(a==='rematch-ready'&&onlineRoom?.hostId===onlineUserId)await prepareHostedStart();const {setOnlineReady}=await import('./multiplayer/ui.js');await setOnlineReady(a==='rematch-ready');if(game.status==='finished'&&pendingWelcome){view='game';render();}clearTimeout(noticeTimer);document.getElementById('coreNotice').textContent='';}
    finally{busy=false;render();}
   }
   if(a==='rules')showRules();
@@ -714,3 +743,5 @@ document.addEventListener('change',event=>{if(event.target.matches('[name="score
 dialog.addEventListener('close',()=>{dialog.classList.remove('tournament-drawer');if(dialog.dataset.tournamentMenu==='true'){delete dialog.dataset.tournamentMenu;const trigger=root.querySelector('[data-action="tournament-menu"]');trigger?.setAttribute('aria-expanded','false');trigger?.focus();}});
 
 dialog.addEventListener('close',()=>{if(!dialog.open){insightsCleanup();delete dialog.dataset.insightRequest;}});
+
+document.addEventListener('change',event=>{const t=event.target;if(!t.matches('[name="upper-label-style"],[data-category-label]'))return;try{saveCardPreferences(t.name==='upper-label-style'?{labels:t.value}:{names:{[t.dataset.categoryLabel]:t.value}});if(t.name==='upper-label-style')dialog.querySelector('.category-preferences details').open=t.value==='custom';if(view==='game')render();}catch{notice('Could not save category labels. Check device storage.');}});

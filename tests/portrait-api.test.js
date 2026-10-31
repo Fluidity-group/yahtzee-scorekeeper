@@ -1,0 +1,6 @@
+import{it,expect,vi,afterEach}from'vitest';
+const mock=vi.hoisted(()=>({getSession:vi.fn()}));vi.mock('../src/multiplayer/client.js',()=>({configured:true,auth:mock}));
+import{requestPortrait}from'../src/profile/portrait-api.js';
+afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
+it('binds an operation to the initiating account before any photo upload or mutation',async()=>{mock.getSession.mockResolvedValue({data:{session:{user:{id:'B'},access_token:'fictional'}}});const fetch=vi.fn();vi.stubGlobal('fetch',fetch);await expect(requestPortrait({operation:'generate',photo:'private-photo'},{expectedOwner:'A'})).rejects.toThrow('account changed');expect(fetch).not.toHaveBeenCalled();});
+it('rejects a changed account after an uncertain request instead of publishing old-account data',async()=>{mock.getSession.mockResolvedValueOnce({data:{session:{user:{id:'A'},access_token:'fictional'}}}).mockResolvedValueOnce({data:{session:{user:{id:'B'},access_token:'fictional'}}});vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({profile:{ownerId:'A',kind:'preset'}}))));await expect(requestPortrait({operation:'profile'},{expectedOwner:'A'})).rejects.toThrow('account changed');});

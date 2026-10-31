@@ -43,7 +43,7 @@ describe('smartphone scorecard adapter',()=>{
  it('does not reveal own or peer totals in hidden-total active games and reveals at completion',()=>{
   const game=fixture(4);game.hideTotals=true;mount(game,{viewerSeat:2});
   expect(document.querySelectorAll('thead strong')).toHaveLength(0);
-  expect(document.querySelectorAll('.hidden-total')).toHaveLength(4);
+  expect(document.querySelectorAll('thead .hidden-total')).toHaveLength(4);
   game.status='finished';mount(game,{viewerSeat:2,winners:[1]});
   expect(document.querySelectorAll('.hidden-total')).toHaveLength(0);
   expect(document.querySelectorAll('thead strong')).toHaveLength(4);
@@ -58,7 +58,7 @@ describe('smartphone scorecard adapter',()=>{
   expect(card.style.getPropertyValue('--peer-offset')).toBe('6');
   expect(root.querySelector('[data-phone-peer-position]').textContent).toBe('7/7');
   expect(changed).toHaveBeenCalledTimes(6);
-  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(17);
+  expect(root.querySelectorAll('.phone-peer-track')).toHaveLength(16);
   expect([...root.querySelectorAll('.phone-peer-track')].every(track=>!track.hasAttribute('style'))).toBe(true);
   root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');
   cleanup();root.querySelector('[data-phone-peer-step="-1"]').click();expect(card.style.getPropertyValue('--peer-offset')).toBe('5');

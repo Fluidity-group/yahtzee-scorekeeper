@@ -3,6 +3,7 @@
   "appName": "Dice Clubhouse Dev",
   "webDir": "dist-native",
   "android": {
+    "zoomEnabled": true,
     "backgroundColor": "#0b141c"
   },
   "plugins": {
@@ -11,9 +12,11 @@
     }
   },
   "ios": {
+    "zoomEnabled": true,
     "backgroundColor": "#0b141c",
     "includePlugins": [
       "@capacitor/app",
+      "@capacitor/haptics",
       "@capacitor/push-notifications",
       "@capacitor/status-bar"
     ],

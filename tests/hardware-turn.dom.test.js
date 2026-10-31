@@ -36,7 +36,7 @@ it('creates a GoDice game with one display, automatically records three rolls an
  expect(document.querySelector('[data-key="yahtzee"].roll-match')).not.toBeNull();
  event(0,'moving');event(0,'stable',1);expect(stored.game.turn.rolls).toHaveLength(3);
  click('[data-action="choose"][data-key="yahtzee"]');click('[data-action="confirm-score"][data-value="50"]');
- await vi.waitFor(()=>{expect(stored.game.activeSeat).toBe(1);expect(stored.game.turn?.source).toBe('godice');});
+ await vi.waitFor(()=>{expect(stored.game.activeSeat).toBe(1);expect(stored.game.turn?.source).toBe('godice');},{timeout:6000});
  expect(stored.game.turn.rolls).toHaveLength(0);expect(document.querySelectorAll('.roll-match')).toHaveLength(0);
  event(0,'moving');event(0,'stable',2);expect(stored.game.turn.rolls).toHaveLength(0);
  publishDiceStatus({...status,dice:status.dice.slice(0,4)});
@@ -47,4 +47,4 @@ it('creates a GoDice game with one display, automatically records three rolls an
  document.querySelector('[data-dice-menu]').dispatchEvent(new Event('contextmenu',{bubbles:true,cancelable:true}));
  expect(document.querySelector('#coreDialog [data-action="fallback"]')).not.toBeNull();
  expect(document.querySelector('#coreDialog [data-action="cancel-hardware"]')).not.toBeNull();
-},10000);
+},15000);

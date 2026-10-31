@@ -1,0 +1,40 @@
+/* A real lever handle with a forgiving touch target; shaft stays decorative. */
+.yahtz-home .home-slot-machine .slot-cabinet-lever{pointer-events:auto;z-index:4}
+html[data-art=midnight] .yahtz-home .slot-cabinet-lever .slot-lever-handle{position:absolute;top:-14px;right:-5px;width:44px;min-width:44px;height:48px;min-height:48px;padding:0;margin:0;background:transparent;border:0;box-shadow:none;cursor:pointer;touch-action:manipulation}
+.slot-lever-handle i{pointer-events:none}
+.yahtz-home .home-slot-machine .slot-lever-handle i{left:auto;right:1px;top:3px}
+.slot-lever-handle:active{transform:translateY(8px)}
+.slot-lever-handle:focus-visible{outline:3px solid #ffe9ff;outline-offset:2px;border-radius:20px}
+.slot-dice-rain{position:fixed;inset:0;z-index:1600;pointer-events:none;overflow:hidden}
+.rain-field{position:absolute;inset:0}
+.rain-die{position:absolute;left:var(--x);top:-80px;width:var(--size);height:var(--size);animation:slot-die-fall 1.25s cubic-bezier(.4,.1,.8,.9) var(--delay) both;filter:drop-shadow(0 4px 2px #13091b66)}
+.cartoon-die{display:block;width:100%;height:100%}
+@keyframes slot-die-fall{0%{transform:translateY(-80px) rotate(0)}100%{transform:translateY(calc(var(--landing) + 80px)) rotate(var(--spin))}}
+.slot-secret{position:absolute;inset:35% 5% auto;text-align:center;padding:24px 12px;border:5px double #ffe6ff;border-radius:18px;background:#3d164c;color:#ffdbf5;font:900 clamp(28px,8vw,64px)/1.15 system-ui;text-shadow:3px 3px #8b276d;box-shadow:0 0 45px #ee94df99;animation:slot-secret-arrive .35s ease-out}
+@keyframes slot-secret-arrive{from{transform:scale(.8);opacity:.2}to{transform:scale(1);opacity:1}}
+.rain-static .rain-die{top:var(--y);animation:none;transform:rotate(var(--spin))}
+.rain-static .slot-secret{animation:none}
+/* Separate titles from descriptors instead of inline text running together. */
+.core-dialog .midnight-settings-links button{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:8px;min-width:0;padding:15px 16px;white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.core-dialog .midnight-settings-links button strong{display:block;font:800 clamp(17px,4.5vw,22px)/1.2 system-ui;color:var(--club-accent);margin:0}
+.core-dialog .midnight-settings-links button small{display:block;font:450 14px/1.45 system-ui;color:var(--club-text);margin:0;max-width:100%}
+/* Divider width is independent from font-size/pinch preferences. */
+#coreApp .phone-scorecard{position:relative}
+#coreApp .phone-scorecard .phone-category-col{width:var(--category-size,40%)}
+#coreApp .phone-scorecard .phone-own-col{width:var(--own-size,40%)}
+#coreApp .phone-scorecard .phone-comparison-col{width:20%}
+#coreApp .phone-scorecard .scorecard-divider{position:absolute;z-index:6;top:3px;bottom:3px;left:var(--category-size,40%);transform:translateX(-50%);width:20px;min-width:20px;min-height:44px;margin:0;padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;color:var(--club-text);touch-action:none;cursor:col-resize}
+.scorecard-divider::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:var(--club-line)}
+.scorecard-divider span{position:absolute;top:36%;left:0;display:grid;place-items:center;width:20px;height:44px;border:1px solid var(--club-line);border-radius:10px;background:var(--club-panel);font:800 22px/1 system-ui;box-shadow:0 2px 4px #0003}
+.scorecard-divider.resizing::before,.scorecard-divider:focus-visible::before{background:var(--club-accent);width:3px}
+.scorecard-divider:focus-visible{outline:2px solid var(--club-accent);outline-offset:0}
+.upper-category-title .cartoon-die{width:32px;height:34px;flex-shrink:0}
+.upper-category-title{display:block;min-width:0;overflow-wrap:anywhere}
+.category-preferences{display:grid;gap:12px;margin:18px 0;border:1px solid var(--club-line);border-radius:10px;padding:14px}
+.category-preferences legend{font-weight:800}
+.category-preferences label{display:grid;gap:5px;font:650 14px/1.4 system-ui;margin:8px 0}
+.category-preferences input,.category-preferences select{box-sizing:border-box;width:100%;min-width:0;min-height:44px;font:500 16px/1.4 system-ui}
+.category-preferences details p{font:400 13px/1.5 system-ui}
+@media(max-width:380px){.core-dialog .midnight-settings-links button{padding:12px;gap:7px}.core-dialog .midnight-settings-links button small{font-size:13px}}
+@media(prefers-reduced-motion:reduce){.rain-die{top:var(--y);animation:none;transform:rotate(var(--spin))}.slot-secret{animation:none}.slot-lever-handle:active{transform:none}}
+@media(forced-colors:active){.slot-secret{background:Canvas;color:CanvasText;border-color:Highlight;text-shadow:none;box-shadow:none}.scorecard-divider::before{background:CanvasText}.scorecard-divider span{background:Canvas;color:CanvasText;border-color:CanvasText}}

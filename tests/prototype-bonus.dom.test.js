@@ -1,18 +1,20 @@
 // @vitest-environment jsdom
-import { beforeAll, describe, it, expect, vi } from 'vitest';
+import { beforeAll,afterAll, describe, it, expect, vi } from 'vitest';
 
 vi.mock('../src/core-store.js', () => ({
  saveCore: vi.fn(async () => undefined), loadCore: vi.fn(async () => null), listCore: vi.fn(async () => []),
 }));
-const click = selector => { if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click(); const element=document.querySelector(selector); expect(element).not.toBeNull(); element.click(); };
+const click = selector => { if(document.querySelector('[data-score-lock][inert]'))vi.advanceTimersByTime(4100);if(!document.querySelector(selector))document.querySelector('[data-action=game-menu]')?.click(); const element=document.querySelector(selector); expect(element).not.toBeNull(); element.click(); };
 const action = name => click(`[data-action="${name}"]`);
 const waitFor = test => vi.waitFor(test);
 beforeAll(async () => {
+ vi.useFakeTimers({toFake:['Date','setTimeout','clearTimeout']});
  HTMLDialogElement.prototype.showModal=function(){this.open=true;};
  HTMLDialogElement.prototype.close=function(){this.open=false;};
  await import('../src/prototype.js');await vi.waitFor(()=>expect(document.querySelector('.clubhouse-home')).not.toBeNull());(document.querySelector('[data-action=resume-game]')||document.querySelector('[data-action=home-local]')).click();
  await waitFor(()=>expect(document.querySelector('#createCore')).not.toBeNull());
 });
+afterAll(()=>vi.useRealTimers());
 
 async function newGame(mode,hideTotals=false) {
  action('new'); document.querySelector('[name="mode"]').value=mode;
@@ -21,7 +23,7 @@ async function newGame(mode,hideTotals=false) {
  document.querySelector('#createCore').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
  await waitFor(()=>expect(document.querySelector('.core-score-table')).not.toBeNull());
 }
-const bonusRow=()=>[...document.querySelectorAll('tr')].find(r=>r.textContent.includes('Yahtzee bonuses'));
+const bonusRow=()=>[...document.querySelectorAll('tr')].find(r=>r.querySelector('.yahtzee-bonus-under'));
 async function firstYahtzee(weighted=false,value=50) {
  click('[data-action="choose"][data-key="yahtzee"]');
  click(weighted?'[data-action="confirm-score"][data-face="1"]':`[data-action="confirm-score"][data-value="${value}"]`);
@@ -36,8 +38,9 @@ describe('additional Yahtzee scorecard entry',()=>{
   await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="twos"]').textContent).toBe('8'));
   click('[data-action="choose"][data-key="threes"]');
   click('[data-action="confirm-score"][data-value="0"]');
-  await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="threes"] .scratch-value path')).not.toBeNull());
-  expect(document.querySelector('[data-action="edit"][data-key="threes"]').textContent).toBe('');
+  await waitFor(()=>expect(document.querySelector('[data-action="edit"][data-key="threes"] .scratch-mark')?.textContent).toBe('X'));
+  expect(document.querySelector('[data-action="edit"][data-key="threes"]').textContent).toBe('X');
+  expect(document.querySelector('[data-action="edit"][data-key="threes"] svg')).toBeNull();
   expect(document.querySelector('[data-action="edit"][data-key="threes"]').getAttribute('aria-label')).toContain('scratched, zero points');
   expect(document.querySelector('[data-action="edit"][data-key="threes"]').getAttribute('aria-label')).toMatch(/scratched, zero points/i);
  });
@@ -55,14 +58,14 @@ describe('additional Yahtzee scorecard entry',()=>{
   }
   expect(document.querySelector('.hidden-total')).toBeNull();
   expect(document.querySelector('.player-heading strong').textContent).toBe('8');
-  expect(document.querySelector('.compact-result').textContent).toContain('Game complete');
+  expect(document.querySelector('.compact-result').textContent).toContain('Game Complete');
  });
  it('records second and third bonuses in Competition without replacing the first score',async()=>{
   await newGame('competition');await firstYahtzee();
   for(const expected of [100,200]){
    action('another-yahtzee');click('[data-action="repeat-face"][data-face="2"]');action('confirm-another');
    await waitFor(()=>expect(bonusRow().querySelector('.bonus-total').textContent).toBe(String(expected)));
-   expect(bonusRow().querySelector('[data-action="undo-last-score"]')).not.toBeNull();
+   expect(bonusRow().querySelectorAll('.checked')).toHaveLength(expected/100);expect(bonusRow().querySelector('[data-action="undo-last-score"]')).not.toBeNull();
    expect(bonusRow().querySelector('[data-action="another-yahtzee"]')).not.toBeNull();
   }
   expect(document.querySelector('[data-action="edit"][data-key="yahtzee"]').textContent).toBe('50');
