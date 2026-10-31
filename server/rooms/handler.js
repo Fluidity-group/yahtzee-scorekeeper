@@ -19,7 +19,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
    const supportsTournaments=supportsRematch&&await store.tournamentsAvailable?.()===true;
    const supportsCompetition=supportsRematch&&await store.competitionAvailable?.()===true;
    const supportsCommentary=!!commentary && supportsRematch && await store.commentaryAvailable?.()===true;
-   const present=room=>({...room,capabilities:{commentaryAtomicCommit:supportsCommentary,rematch:supportsRematch&&room.source!=='godice',history:supportsRematch,tournaments:supportsTournaments,competitionFinalChain:supportsCompetition,manualAttemptFinish:supportsCompetition,undoScore:supportsRematch},...(room.game?.status==='finished'?{nextStarterId:room.members[nextStarter(room)].userId}:{})});
+   const present=room=>({...room,serverNow:now(),capabilities:{scorePresentation:true,commentaryAtomicCommit:supportsCommentary,rematch:supportsRematch&&room.source!=='godice',history:supportsRematch,tournaments:supportsTournaments,competitionFinalChain:supportsCompetition,manualAttemptFinish:supportsCompetition,undoScore:supportsRematch},...(room.game?.status==='finished'?{nextStarterId:room.members[nextStarter(room)].userId}:{})});
    if(body.operation==='list')return reply({rooms:(await store.list(userId)).map(present)});
    if(['tournaments','sessions'].includes(body.operation)){
     if(body.operation==='tournaments'?!supportsTournaments:!supportsRematch)throw new RoomError('Saved sessions need the current server.',503);
@@ -37,7 +37,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
     if(existing){if(existing.hostId!==userId)throw new RoomError('This room belongs to another host.',403);return reply({room:present(existing)});}
     if(await store.recentCount(userId)>=10)throw new RoomError('Too many new rooms. Please try again later.',429);
     for(let tries=0;tries<4;tries++){
-     const room=createRoom({id:body.requestId,code:randomCode(),userId,name:body.name,mode:body.mode,source:body.source,hideTotals:body.hideTotals,tournament:body.tournament,rulesVersion:body.rulesVersion,time:now()});
+     const room=createRoom({id:body.requestId,code:randomCode(),userId,name:body.name,mode:body.mode,source:body.source,hideTotals:body.hideTotals,tournament:body.tournament,rulesVersion:body.rulesVersion,time:now(),presentationVersion:body.presentationVersion});
      if(await store.insert(room))return reply({room:present(room)});
      // A concurrent retry may have inserted this request ID with another code.
      const accepted=await store.byId(body.requestId);
@@ -92,7 +92,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
       next=startRoom(room,{userId,time:now()});
      }else if(!next&&body.operation==='command'){
       if(body.action?.type==='undo-score'&&!supportsRematch)throw new RoomError('Undo needs the updated history server.',503);
-      next=playRoom(room,{userId,action:body.action,commandId:body.commandId,expectedRevision:body.expectedRevision,gameId:body.gameId,time:now()});
+      next=playRoom(room,{userId,action:body.action,commandId:body.commandId,expectedRevision:body.expectedRevision,gameId:body.gameId,time:now(),presentationVersion:body.presentationVersion});
      }
      else if(!next)throw new RoomError('Unknown operation.');
     }

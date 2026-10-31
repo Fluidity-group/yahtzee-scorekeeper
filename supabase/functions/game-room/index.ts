@@ -386,6 +386,63 @@ function validateCameraCapture(game, capture, dice, held) {
   if (!Number.isFinite(capture.reviewedAtMonotonicMs) || capture.reviewedAtMonotonicMs < (rendered ? o.observedAtMonotonicMs : o.decodedAtMonotonicMs)) fail("Invalid camera review timing.");
 }
 
+// src/game/upper-progress.js
+function upperProgress(sheet = {}) {
+  const subtotal = upperSubtotal(sheet);
+  const open = UPPER.filter(({ key }) => sheet[key] === void 0);
+  const benchmark = UPPER.filter(({ key }) => sheet[key] !== void 0).reduce((n, { face }) => n + 3 * face, 0);
+  const maximum = subtotal + open.reduce((n, { face }) => n + 5 * face, 0);
+  const fourDiceMaximum = subtotal + open.reduce((n, { face }) => n + 4 * face, 0);
+  return {
+    subtotal,
+    threshold: UPPER_BONUS_THRESHOLD,
+    award: UPPER_BONUS_POINTS,
+    needed: Math.max(0, UPPER_BONUS_THRESHOLD - subtotal),
+    pace: subtotal - benchmark,
+    remaining: open.length,
+    maximum,
+    fourDiceMaximum,
+    fourDiceReachable: fourDiceMaximum >= UPPER_BONUS_THRESHOLD,
+    fourDiceState: subtotal >= UPPER_BONUS_THRESHOLD ? "secured" : fourDiceMaximum >= UPPER_BONUS_THRESHOLD ? "reachable" : maximum >= UPPER_BONUS_THRESHOLD ? "needs-five" : "unreachable",
+    state: subtotal >= UPPER_BONUS_THRESHOLD ? "secured" : maximum < UPPER_BONUS_THRESHOLD ? "unreachable" : "possible"
+  };
+}
+
+// src/game/score-presentation.js
+var VENUE_IDS = Object.freeze(["miami", "sydney", "las-vegas", "tokyo"]);
+var SPECIAL_EVENT_MS = 4e3;
+function scorePresentation(before, after, { time, id } = {}) {
+  if (!before || !after || before.id !== after.id) return null;
+  const fresh = (after.events || []).filter((e) => !(before.events || []).some((p) => p.id === e.id));
+  const event = fresh.filter((e) => ["score", "score-correction", "score-undo", "final-chain-roll", "bonus", "final-chain-end"].includes(e.type)).at(-1);
+  if (!event || event.type === "score-undo") return null;
+  const items = [];
+  if (event.type === "score" && event.value === 0 || event.type === "score-correction" && event.value === 0 && event.before !== 0) items.push({ kind: "scratch", seat: event.seat, text: "0 \xB7 Scratch" });
+  if (!after.hideTotals || after.status === "finished") {
+    const scored = ["score", "score-correction"].includes(event.type), newMilestone = event.type !== "score-correction" || event.before <= 24;
+    const bonus = event.bonus > 0 ? event.bonus : ["bonus", "final-chain-roll"].includes(event.type) ? event.value : 0;
+    if (bonus > 0 || scored && event.category === "yahtzee" && event.value > 0 && (event.type !== "score-correction" || event.before === 0)) items.push({ kind: "yahtzee", seat: event.seat, text: bonus > 0 ? `Yahtzee! +${bonus}` : `Yahtzee! ${event.value} points` });
+    if (scored && newMilestone && event.category !== "yahtzee" && LOWER_KEYS.includes(event.category) && event.value > 24) items.push({ kind: "big-score", seat: event.seat, category: event.category, text: `${META[event.category].name} \xB7 ${event.value} points` });
+    if (scored && ["threeKind", "fourKind"].includes(event.category) && event.value > 0 && event.value < 20 && (event.type !== "score-correction" || event.before >= 20 || event.before === 0)) items.push({ kind: "low-kind", seat: event.seat, text: `${META[event.category].name} \xB7 ${event.value} points` });
+  }
+  if (!after.hideTotals || after.status === "finished") for (let seat = 0; seat < after.players.length; seat++) {
+    const was = upperProgress(before.sheets[seat]), next = upperProgress(after.sheets[seat]);
+    if (was.state !== "secured" && next.state === "secured") items.push({ kind: "upper-bonus", seat, text: "+35 \xB7 Upper bonus" });
+    if (was.state !== "unreachable" && next.state === "unreachable") items.push({ kind: "upper-impossible", seat, text: "LOSER LOSER LOSER LOSER" });
+  }
+  if (before.status !== "finished" && after.status === "finished") {
+    const result = results(after);
+    items.push({ kind: "finish", text: result.solo ? "Game complete" : result.winners.length > 1 ? "Tie" : "Winner", winners: result.winners });
+  }
+  if (!items.length) return null;
+  const acceptedAt = Date.parse(time || event.time);
+  if (!Number.isFinite(acceptedAt)) throw Error("Accepted event time required");
+  return { id: id || event.id, gameId: after.id, gameRevision: after.revision, seat: event.seat, acceptedAt: new Date(acceptedAt).toISOString(), expiresAt: new Date(acceptedAt + SPECIAL_EVENT_MS).toISOString(), items };
+}
+function presentationRemaining(event, now = Date.now()) {
+  return event ? Math.max(0, Date.parse(event.expiresAt) - now) : 0;
+}
+
 // src/multiplayer/tournament.js
 function tournamentConfig(value, mode, source, rulesVersion = 1) {
   if (value === void 0 || value === null) return null;
@@ -395,7 +452,8 @@ function tournamentConfig(value, mode, source, rulesVersion = 1) {
   if (!name || name.length > 60) throw new RoomError("Enter a tournament name of 1\u201360 characters.");
   if (!Number.isInteger(value.gameCount) || value.gameCount < 2 || value.gameCount > 20) throw new RoomError("Choose 2\u201320 tournament games.");
   if (!Number.isInteger(value.playerCount) || value.playerCount < 2 || value.playerCount > 8) throw new RoomError("Choose 2\u20138 tournament players.");
-  return { name, gameCount: value.gameCount, playerCount: value.playerCount, status: "playing", rules: gameRules(mode, rulesVersion, source) };
+  if (value.venue !== void 0 && !VENUE_IDS.includes(value.venue)) throw new RoomError("Choose Miami, Sydney, Las Vegas or Tokyo.");
+  return { name, gameCount: value.gameCount, playerCount: value.playerCount, status: "playing", rules: gameRules(mode, rulesVersion, source), ...value.venue ? { venue: value.venue } : {} };
 }
 function requireTournamentPlaying(room) {
   if (room.tournament?.status === "paused") throw new RoomError("The tournament is paused. Ask the host to resume.", 409);
@@ -462,7 +520,7 @@ function requireMember(room, userId) {
   if (seat < 0) fail2("You are not a member of this game.", 403);
   return seat;
 }
-function createRoom({ id, code, userId, name, mode = "standard", source = "manual", hideTotals = false, tournament, rulesVersion = 1, time }) {
+function createRoom({ id, code, userId, name, mode = "standard", source = "manual", hideTotals = false, tournament, rulesVersion = 1, time, presentationVersion }) {
   if (typeof mode !== "string" || !Object.hasOwn(MODES, mode)) fail2("Unknown game mode.");
   if (!["manual", "godice"].includes(source)) fail2("Choose manual or host GoDice.");
   try {
@@ -484,6 +542,7 @@ function createRoom({ id, code, userId, name, mode = "standard", source = "manua
     members: [{ userId, name: playerName(name) }],
     game: null,
     rulesVersion,
+    ...presentationVersion === 1 ? { presentationVersion: 1 } : {},
     ...tournament !== void 0 && tournament !== null ? { tournament: tournamentConfig(tournament, mode, source, rulesVersion) } : {}
   };
 }
@@ -508,7 +567,7 @@ function startRoom(room, { userId, time }) {
   if (game.source === "godice") game = command(game, { type: "start", seat: 0 }, { id: `room:${room.id}:first-turn`, time });
   return { ...room, revision: room.revision + 1, status: "active", game };
 }
-function playRoom(room, { userId, action, commandId: commandId2, expectedRevision, gameId, time }) {
+function playRoom(room, { userId, action, commandId: commandId2, expectedRevision, gameId, time, presentationVersion }) {
   const member = requireMember(room, userId), host = room.hostId === userId;
   requireTournamentPlaying(room);
   if (!room.game) fail2("The host has not started this game.");
@@ -526,6 +585,7 @@ function playRoom(room, { userId, action, commandId: commandId2, expectedRevisio
     return room;
   }
   if (room.revision !== expectedRevision) fail2("The game changed. Refresh and choose your score again.", 409);
+  if (!["correct-score", "undo-score"].includes(action?.type) && presentationRemaining(room.scorePresentation, Date.parse(time)) > 0) fail2("Wait for the shared announcement to finish.", 409);
   if (!action || !["start", "score", "bonus", "final-chain-roll", "correct-score", "undo-score", "roll", "correct-roll", "manual-fallback", "dice-state"].includes(action.type)) fail2("Unsupported game action.");
   const hardware = room.game.source === "godice";
   const receipts = [...room.receipts || [], { id: commandId2, actor: userId }].slice(-100);
@@ -555,7 +615,9 @@ function playRoom(room, { userId, action, commandId: commandId2, expectedRevisio
   if (hardware && game.status === "active" && !game.turn) game = command(game, { type: "start", seat: game.activeSeat, source: "godice" }, { id: `room:${commandId2}:next`, time });
   const last = game.turn?.rolls.filter((r) => !r.excluded).at(-1);
   const liveDice = hardware ? { turnId: game.turn?.id, phase: last ? "settled" : "ready", faces: last?.dice || Array(5).fill(null), moving: Array(5).fill(false), connected: room.liveDice?.connected ?? 0, updatedAt: time } : void 0;
-  return updateTournamentCompletion({ ...room, revision: room.revision + 1, status: game.status, game, receipts, ...["correct-score", "undo-score"].includes(action.type) && room.game.status === "finished" ? { rematch: null } : {}, ...hardware ? { liveDice } : {} });
+  const presentationEnabled = room.presentationVersion === 1 || presentationVersion === 1;
+  const presentation = presentationEnabled ? scorePresentation(room.game, game, { time, id: commandId2 }) : null;
+  return updateTournamentCompletion({ ...room, revision: room.revision + 1, status: game.status, game, receipts, ...presentationEnabled ? { presentationVersion: 1, scorePresentation: presentation } : {}, ...["correct-score", "undo-score"].includes(action.type) && room.game.status === "finished" ? { rematch: null } : {}, ...hardware ? { liveDice } : {} });
 }
 
 // src/commentary/facts.js
@@ -619,7 +681,7 @@ function acceptedOutbox({ before, after, actorId, commandId: id, operation, acce
     const changes = owned.filter((e) => ["score-undo", "score-correction"].includes(e.type));
     if (changes.length) {
       const invalidates = changes.map((e) => ({ eventId: e.id, targetEventId: e.target, reason: e.type }));
-      requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && o.type === "score" && audience[o.seat] === actorId)), "Correction must target accepted own score");
+      requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && (o.type === "score" || e.reason === "score-undo" && ["bonus", "final-chain-roll"].includes(o.type)) && audience[o.seat] === actorId)), "Correction must target accepted own score");
       add("invalidate", "correction", null, invalidates);
       return freeze3(rows);
     }
@@ -653,6 +715,7 @@ function nextStarter(room) {
 function setRematchReady(room, { userId, gameId, gameRevision, ready, commandId: commandId2, nextGameId, time }) {
   requireMember(room, userId);
   requireTournamentPlaying(room);
+  if (presentationRemaining(room.scorePresentation, Date.parse(time)) > 0) throw new RoomError("Wait for the shared announcement to finish.", 409);
   if (room.tournament && (room.gameSequence ?? 1) >= room.tournament.gameCount) throw new RoomError("This tournament is complete. All scheduled games are saved.");
   if (room.source === "godice") throw new RoomError("Play again is currently available for manual tables only.");
   if (room.game?.status !== "finished") throw new RoomError("Finish the current game before playing again.");
@@ -671,7 +734,7 @@ function setRematchReady(room, { userId, gameId, gameRevision, ready, commandId:
   game.players = game.players.map((p, i) => ({ ...p, id: room.members[i].userId }));
   game.activeSeat = starter;
   game.startingSeat = starter;
-  return { ...room, revision: room.revision + 1, status: "active", game, gameSequence: (room.gameSequence ?? 1) + 1, rematch: null, receipts: [], liveDice: void 0 };
+  return { ...room, revision: room.revision + 1, status: "active", game, gameSequence: (room.gameSequence ?? 1) + 1, rematch: null, receipts: [], liveDice: void 0, scorePresentation: null };
 }
 
 // server/rooms/handler.js
@@ -697,7 +760,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const supportsTournaments = supportsRematch && await store2.tournamentsAvailable?.() === true;
       const supportsCompetition = supportsRematch && await store2.competitionAvailable?.() === true;
       const supportsCommentary = !!commentary && supportsRematch && await store2.commentaryAvailable?.() === true;
-      const present = (room) => ({ ...room, capabilities: { commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, manualAttemptFinish: supportsCompetition, undoScore: supportsRematch }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
+      const present = (room) => ({ ...room, serverNow: now(), capabilities: { scorePresentation: true, commentaryAtomicCommit: supportsCommentary, rematch: supportsRematch && room.source !== "godice", history: supportsRematch, tournaments: supportsTournaments, competitionFinalChain: supportsCompetition, manualAttemptFinish: supportsCompetition, undoScore: supportsRematch }, ...room.game?.status === "finished" ? { nextStarterId: room.members[nextStarter(room)].userId } : {} });
       if (body.operation === "list") return reply({ rooms: (await store2.list(userId)).map(present) });
       if (["tournaments", "sessions"].includes(body.operation)) {
         if (body.operation === "tournaments" ? !supportsTournaments : !supportsRematch) throw new RoomError("Saved sessions need the current server.", 503);
@@ -718,7 +781,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
         }
         if (await store2.recentCount(userId) >= 10) throw new RoomError("Too many new rooms. Please try again later.", 429);
         for (let tries = 0; tries < 4; tries++) {
-          const room = createRoom({ id: body.requestId, code: randomCode2(), userId, name: body.name, mode: body.mode, source: body.source, hideTotals: body.hideTotals, tournament: body.tournament, rulesVersion: body.rulesVersion, time: now() });
+          const room = createRoom({ id: body.requestId, code: randomCode2(), userId, name: body.name, mode: body.mode, source: body.source, hideTotals: body.hideTotals, tournament: body.tournament, rulesVersion: body.rulesVersion, time: now(), presentationVersion: body.presentationVersion });
           if (await store2.insert(room)) return reply({ room: present(room) });
           const accepted = await store2.byId(body.requestId);
           if (accepted) {
@@ -778,7 +841,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
             next = startRoom(room, { userId, time: now() });
           } else if (!next && body.operation === "command") {
             if (body.action?.type === "undo-score" && !supportsRematch) throw new RoomError("Undo needs the updated history server.", 503);
-            next = playRoom(room, { userId, action: body.action, commandId: body.commandId, expectedRevision: body.expectedRevision, gameId: body.gameId, time: now() });
+            next = playRoom(room, { userId, action: body.action, commandId: body.commandId, expectedRevision: body.expectedRevision, gameId: body.gameId, time: now(), presentationVersion: body.presentationVersion });
           } else if (!next) throw new RoomError("Unknown operation.");
         }
         if (next !== room && supportsRematch && next.game) next = { ...next, historyVersion: 1 };

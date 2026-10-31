@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'node:path';
 import { VitePWA } from 'vite-plugin-pwa';
 import { ttsProxyPlugin } from './server/ttsProxy.js';
+import { releaseIdentityPlugin } from './scripts/release-identity-plugin.mjs';
 
 // Phase 2+: vanilla JS app, PWA shell, and a dev/preview-only proxy for ElevenLabs TTS
 // (keeps ELEVENLABS_API_KEY server-side, read from .env).
@@ -17,6 +18,7 @@ export default defineConfig(({ mode }) => {
     server: { host: true, port: 8473, strictPort: true },
     preview: { host: true, port: 8474, strictPort: true },
     plugins: [
+      releaseIdentityPlugin(process.cwd(), mode),
       ...(evaluation ? [{name:'local-dice-evaluation',generateBundle(){this.emitFile({type:'asset',fileName:'godice-evaluation.json',source:JSON.stringify({distribution:'local-android-evaluation'})});}}] : []),
       ttsProxyPlugin(getElevenKey),
       VitePWA({

@@ -1,5 +1,11 @@
 # Yahtzee architecture map
 
+31 October SW075: [configurable game/reaction design](plans/SW-075-configurable-game-programs.md) distinguishes rule author, scorer/media subject and recipient audience. src/experience/reactions.js is a tested pure contract foundation only; shared editor/persistence/delivery and a new gameplay-program runtime are not activated. Avatar reload/draft/account fixes follow [independent review](plans/SW-075-independent-review.md). Legacy two-player DOM is now a test fixture rather than the production shell.
+
+31 October recovery candidate: src/profile and server/portraits provide recovered account avatar/private reaction boundaries; src/game/score-presentation.js and src/ui/score-presentation.js provide the existing shared announcement policy; recovered scorecard preferences/fit/divider modules restore UI controls. See [SW074](plans/SW-074-rog-interface-recovery.md). This source does not establish current deployed service identity. SW071 engine/trigger extraction is still proposed and must account for these recovered contracts.
+
+30 October SW071: proposed next architecture and migration boundaries are in [the sprint design](plans/SW-071-versioned-engine-stabilisation-sprint.md) and [decision](decisions/2026-10-30-versioned-engine-and-triggers.md). These are not implemented. Recover the prior phone/ROG baseline and approve mode rules before extraction.
+
 27 October SW068 review: current integrated application is the SW066/SW067 baseline, reviewed at published d3d8037. See plans/SW-068-architecture-phone-readiness.md for verified boundaries, reproduced gaps and next-phone gates. On fg-dev the source is this repository; Windows paths in historical handovers are host-specific. Keep the present stack for the manual POC; application fixes proposed in SW068 are not implemented by that review.
 
 SW046 additive boundary: account-addressed invitations/readiness use the authenticated clubhouse_social RPC and separate social tables/RLS. A locked explicit lobby accept adds a UUID seat; existing membership and score authority remain in clubhouse_rooms. Transient play requests never resume/advance games. Server-only APNs/FCM worker owns notification delivery; notification data is an untrusted navigation hint, never a game command. SW047 is the Playform shared UI layer; it derives bonus geometry from accepted scores.

@@ -14,7 +14,7 @@ function fixture() {
 describe('hosted finished-game results', () => {
  it('renders only finished shared games, preserves final names and scorecard facts', () => {
   const room = fixture();
-  expect(renderHostedResults({ room, userId: 'account-a' })).toContain('Amber wins!');
+  expect(renderHostedResults({ room, userId: 'account-a' })).toContain('Amber Wins!');
   expect(hostedResultHighlights(room.game)[0].detail).toBe('Amber finished 40 points ahead.');
   room.game.status = 'active';
   expect(renderHostedResults({ room })).toBe('');
@@ -30,7 +30,7 @@ describe('hosted finished-game results', () => {
  it('shows shared zero-score victory without claiming an unresolved starter or winning margin', () => {
   const room = fixture(); room.game.sheets[0].largeStraight = 0;
   const html = renderHostedResults({ room, userId: 'account-a' });
-  expect(html).toContain('A shared victory'); expect(html).not.toContain('starts the next');
+  expect(html).toContain('A Shared Victory'); expect(html).not.toContain('starts the next');
   expect(hostedResultHighlights(room.game).some(item => item.title === 'Winning margin')).toBe(false);
   expect(html).toContain('13 zero-scoring categories');
  });

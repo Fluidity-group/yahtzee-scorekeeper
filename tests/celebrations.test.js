@@ -5,7 +5,7 @@ const after=event=>({...before,events:[{id:'event',seat:1,...event}]});
 
 it('explains the accepted game winner, margin, and shared victories',()=>{
  const game={players:[{name:'Keith'},{name:'Amber'}],sheets:[{chance:25},{chance:20}]};
- expect(celebrationMessage({kind:'finish',seat:0},game)).toEqual({title:'Keith wins!',subtitle:'25 points · 5 ahead. Well played!'});
+ expect(celebrationMessage({kind:'finish',seat:0},game)).toEqual({title:'Keith Wins!',subtitle:'25 points · 5 ahead. Well played!'});
  game.sheets[1].chance=25;expect(celebrationMessage({kind:'finish',seat:1},game).subtitle).toBe('Keith & Amber tied on 25 points.');
 });
 describe('confirmed game celebrations',()=>{
@@ -24,7 +24,7 @@ describe('confirmed game celebrations',()=>{
   expect(celebration(before,next)).toMatchObject({kind:'finish',seat:1});
   expect(celebration(next,next)).toBeNull();
   expect(celebration(null,next)).toBeNull();
-  expect(celebrationMessage(celebration(before,next),next).title).toBe('B wins!');
+  expect(celebrationMessage(celebration(before,next),next).title).toBe('B Wins!');
   expect(celebration(before,{...next,status:'active'})).toBeNull();
  });
  it('uses actual bonus values and distinguishes full-house scoring from large straight',()=>{

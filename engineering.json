@@ -9,7 +9,8 @@
     {"id": "native-build", "name": "Native web bundle", "command": "{node}", "args": ["node_modules/vite/bin/vite.js", "build", "--mode", "native", "--outDir", "dist-native"]},
     {"id": "ios-web-build", "name": "iOS manual test web bundle", "command": "{node}", "args": ["node_modules/vite/bin/vite.js", "build", "--mode", "ios-test", "--outDir", "dist-ios-test"]},
     {"id": "commentary-build", "name": "Commentary edge function build", "command": "{node}", "args": ["scripts/build-commentary.mjs"]},
-    {"id": "room-build", "name": "Room function build", "command": "{node}", "args": ["scripts/build-room-function.mjs"]}
+    {"id": "room-build", "name": "Room function build", "command": "{node}", "args": ["scripts/build-room-function.mjs"]},
+    {"id": "portrait-build", "name": "Portrait function build", "command": "{node}", "args": ["scripts/build-portraits.mjs"]}
   ]
 }
 

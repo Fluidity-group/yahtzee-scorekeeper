@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "path": "icons/icon-192.png",
+      "sha256": "796f4204bce1be5d5dbd03eca965dc0b96cc319f7c1a3640f679c57f926fa52f"
+    },
+    {
+      "path": "icons/icon-512.png",
+      "sha256": "aa9c217ae4fc6b04e492ba9a31ba5eaf7256685d1c9a7f7cece28432ec077cb9"
+    },
+    {
+      "path": "icons/maskable-512.png",
+      "sha256": "1103250237ff79d1a1c4cb1e3a649e92d61e63894f02a12a26551e57aba423b4"
+    },
+    {
+      "path": "sounds/bonus.mp3",
+      "sha256": "7f3af9af05a2c59ca31fdbb95fa8904c857d0cec277e8facc43e9d753a9831fc"
+    },
+    {
+      "path": "sounds/bust.mp3",
+      "sha256": "fcaeaa02d974779bdfff90ac9d832d833066506ae7e689332c6cdcbe4f6e6d99"
+    },
+    {
+      "path": "sounds/epic.mp3",
+      "sha256": "2fdd61ef91222cb2c9ab283ec470f7a0c5226de82039a4cd6c7ce0c90f7f87e8"
+    },
+    {
+      "path": "sounds/great.mp3",
+      "sha256": "9bc7c2044e3449e263a725aa4f24360873ab42895d4bff12fab06a0790cccd58"
+    },
+    {
+      "path": "sounds/nice.mp3",
+      "sha256": "d3d00c451552a72e8e419747e7d2d1b3b2483ca02aa6fccd9d0a4dbb4deccaaa"
+    },
+    {
+      "path": "sounds/tick.mp3",
+      "sha256": "10a83d5b549d50e9806d5db0e12b91e47e7998699a35a6c15a0a43773e17c56c"
+    },
+    {
+      "path": "sounds/turnpass.mp3",
+      "sha256": "e47344a6c433094808f648a9f32639cd93de2473d070f603133dd4d4cd41b1da"
+    },
+    {
+      "path": "sounds/yahtzee.mp3",
+      "sha256": "40705a2be92dff8c4f80f0c575ab6b971317ac96d6d82f3ddefab4f99f22d769"
+    },
+    {
+      "path": "portrait-styles/box-art.webp",
+      "sha256": "5afa255b5207bf68c3c9561a832a57c338850bb37b484196e7ba058623387ae9"
+    },
+    {
+      "path": "portrait-styles/neon-airbrush.webp",
+      "sha256": "02a7994089d6073ebe098ab76801680d299aacaa3106d95c75e08f114b4ec3e7"
+    },
+    {
+      "path": "portrait-styles/noir-comic.webp",
+      "sha256": "45d9fbf2dcf7ba0d57095e6d41a72bb0fb402fdbeacdedd548b86a7d2b69268c"
+    },
+    {
+      "path": "portrait-styles/retro-pixel.webp",
+      "sha256": "47f184807f0a47400b5437f907fc1f86ac3fb88b1c9b8961a3dcede8b3bca09a"
+    }
+  ]
+}

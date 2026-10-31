@@ -1,6 +1,7 @@
 import {createCoreGame,results} from '../game/core.js';
 import {requireMember,RoomError} from './room.js';
 import {requireTournamentPlaying} from './tournament.js';
+import{presentationRemaining}from'../game/score-presentation.js';
 
 export function nextStarter(room) {
  const winners=results(room.game).winners;
@@ -11,6 +12,7 @@ export function nextStarter(room) {
 export function setRematchReady(room,{userId,gameId,gameRevision,ready,commandId,nextGameId,time}) {
  requireMember(room,userId);
  requireTournamentPlaying(room);
+ if(presentationRemaining(room.scorePresentation,Date.parse(time))>0)throw new RoomError('Wait for the shared announcement to finish.',409);
  if(room.tournament&&(room.gameSequence??1)>=room.tournament.gameCount)throw new RoomError('This tournament is complete. All scheduled games are saved.');
  if(room.source==='godice')throw new RoomError('Play again is currently available for manual tables only.');
  if(room.game?.status!=='finished')throw new RoomError('Finish the current game before playing again.');
@@ -27,5 +29,5 @@ export function setRematchReady(room,{userId,gameId,gameRevision,ready,commandId
  game.rules=structuredClone(room.game.rules);
  game.players=game.players.map((p,i)=>({...p,id:room.members[i].userId}));
  game.activeSeat=starter;game.startingSeat=starter;
- return {...room,revision:room.revision+1,status:'active',game,gameSequence:(room.gameSequence??1)+1,rematch:null,receipts:[],liveDice:undefined};
+ return {...room,revision:room.revision+1,status:'active',game,gameSequence:(room.gameSequence??1)+1,rematch:null,receipts:[],liveDice:undefined,scorePresentation:null};
 }

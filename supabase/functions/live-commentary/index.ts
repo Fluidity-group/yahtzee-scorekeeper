@@ -525,7 +525,7 @@ function acceptedOutbox({ before, after, actorId, commandId: id2, operation, acc
     const changes = owned.filter((e) => ["score-undo", "score-correction"].includes(e.type));
     if (changes.length) {
       const invalidates = changes.map((e) => ({ eventId: e.id, targetEventId: e.target, reason: e.type }));
-      requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && o.type === "score" && audience[o.seat] === actorId)), "Correction must target accepted own score");
+      requireValue(invalidates.every((e) => old.some((o) => o.id === e.targetEventId && (o.type === "score" || e.reason === "score-undo" && ["bonus", "final-chain-roll"].includes(o.type)) && audience[o.seat] === actorId)), "Correction must target accepted own score");
       add("invalidate", "correction", null, invalidates);
       return freeze2(rows);
     }

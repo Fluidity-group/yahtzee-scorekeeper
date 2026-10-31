@@ -31,7 +31,7 @@ it('renders pause controls only for the host, and disables them while reconnecti
 });
 it('shows final tournament results with no rematch or next-starter promise',()=>{
  const game=createCoreGame({id:'g',names:['Dan','Amber']});game.status='finished';
- const room={game,members:[{userId:'a'},{userId:'b'}],capabilities:{rematch:true,tournaments:true},tournament:{status:'completed'},tournamentStandings:data};
+ const room={game,members:[{userId:'a'},{userId:'b'}],capabilities:{rematch:true,tournaments:true},tournament:{status:'completed',gameCount:3},tournamentStandings:data};
  document.body.innerHTML=renderHostedResults({room,userId:'a'});
  expect(document.body.textContent).toContain('Tournament results');expect(document.querySelector('[data-action="rematch-ready"]')).toBeNull();expect(document.querySelector('.hosted-next-starter')).toBeNull();expect(document.querySelectorAll('.tournament-ranking')).toHaveLength(2);
  room.tournament.status='paused';document.body.innerHTML=renderHostedResults({room,userId:'a'});expect(document.querySelector('[data-action="rematch-ready"]').disabled).toBe(true);expect(document.body.textContent).toContain('Tournament paused');
@@ -45,9 +45,9 @@ it('announces the final game during play and before next-game readiness',()=>{
 it('puts persistent tournament awards before the last game result and explains each winner',()=>{
  const game=createCoreGame({id:'final',names:['Dan','Amber']});game.status='finished';
  const room={game,tournament:{name:'<Cup>',gameCount:3,status:'completed'},tournamentStandings:data};
- document.body.innerHTML=renderHostedResults({room});expect(document.body.firstElementChild.className).toBe('tournament-finish');
- const card=document.querySelector('.tournament-finish');expect(card.textContent).toContain('Tournament complete!');expect(card.textContent).toContain('All 3 games played');expect(card.textContent).toContain('Dan wins with 800 points · 100 points ahead.');expect(card.textContent).toContain('Amber wins with 2 wins · 1 win ahead.');expect(card.querySelector('cup')).toBeNull();
- document.body.innerHTML=renderHostedResults({room});expect(document.querySelectorAll('.tournament-finish')).toHaveLength(1);
+ document.body.innerHTML=renderHostedResults({room});expect(document.body.firstElementChild.className).toBe('tournament-finale');
+ const card=document.querySelector('.tournament-finale');expect(card.textContent).toContain('Tournament complete!');expect(card.textContent).toContain('3 games saved');expect(card.textContent).toContain('Dan wins with 800 points · 100 points ahead.');expect(card.textContent).toContain('Amber wins with 2 wins · 1 win ahead.');expect(card.querySelector('cup')).toBeNull();
+ document.body.innerHTML=renderHostedResults({room});expect(document.querySelectorAll('.tournament-finale')).toHaveLength(1);
 });
 it('announces shared tournament winners and waits for complete standings',()=>{
  const room={tournament:{name:'Cup',gameCount:3,status:'completed'},tournamentStandings:{...data,standings:data.standings.map(row=>({...row,points:800,wins:2}))}};

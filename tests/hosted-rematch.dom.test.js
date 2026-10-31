@@ -29,7 +29,7 @@ beforeEach(async()=>{document.querySelector('#coreDialog')?.close();vi.clearAllM
 it('keeps the finished scorecard at the table while Play again marks only your readiness',async()=>{
  expect(document.querySelector('.hosted-next-starter').textContent).toBe('Amber starts the next game.');
  click('[data-action=rematch-ready]');await vi.waitFor(()=>expect(document.querySelector('[data-action=rematch-withdraw]')).not.toBeNull());
- expect(setOnlineReady).toHaveBeenCalledWith(true);expect(openOnline).toHaveBeenCalledTimes(1);expect(saveCore).not.toHaveBeenCalled();expect(document.querySelector('.core-score-table')).not.toBeNull();expect(document.querySelector('.hosted-rematch-message').textContent).toContain('Waiting for Amber');
+ expect(document.querySelector('#coreNotice').textContent).toBe('');expect(setOnlineReady).toHaveBeenCalledWith(true);expect(openOnline).toHaveBeenCalledTimes(1);expect(saveCore).not.toHaveBeenCalled();expect(document.querySelector('.core-score-table')).not.toBeNull();expect(document.querySelector('.hosted-rematch-message').textContent).toContain('Waiting for Amber');
 });
 it('withdraws readiness without leaving and updates to one fresh guest-started game',async()=>{
  click('[data-action=rematch-ready]');await vi.waitFor(()=>expect(document.querySelector('[data-action=rematch-withdraw]')).not.toBeNull());
@@ -54,3 +54,7 @@ it('exits a paused tournament to the saved list without scoring, restarting or c
  const original=structuredClone(mock.room.game);click('[data-action="tournament-exit"]');
  await vi.waitFor(()=>expect(openOnline).toHaveBeenCalledTimes(2));expect(openOnline.mock.calls.at(-1)[2]).toBe('');expect(openOnline.mock.calls.at(-1)[3]).toBe('sessions');expect(mock.room.game).toEqual(original);expect(setTournamentPaused).not.toHaveBeenCalled();
 });
+
+it('keeps readiness failures visible rather than clearing them as success',async()=>{setOnlineReady.mockRejectedValueOnce(new Error('Connection lost. Try Ready again.'));click('[data-action=rematch-ready]');await vi.waitFor(()=>expect(document.querySelector('#coreNotice').textContent).toContain('Connection lost. Try Ready again.'));expect(document.querySelector('[data-action=rematch-ready]')).not.toBeNull();});
+
+it('keeps the completed tournament scorecard once inside an expandable final-game view across polls',()=>{mock.room={...mock.room,tournament:{name:'Cup',status:'completed',gameCount:1,playerCount:2},tournamentStandings:{final:true,completedGames:1,standings:[{userId:'host',name:'Dan',points:0,wins:0,games:1},{userId:'guest',name:'Amber',points:40,wins:1,games:1}]}};mock.callbacks.game(mock.room,'host',true,true);expect(document.querySelectorAll('.phone-scorecard')).toHaveLength(1);expect(document.querySelector('.phone-scorecard').closest('details').dataset.finaleDetail).toBe('game');expect(document.querySelector('.tournament-banner')).toBeNull();expect(document.querySelector('[data-action=rematch-ready]')).toBeNull();const detail=document.querySelector('[data-finale-detail=game]');detail.open=true;detail.querySelector('summary').focus();mock.callbacks.game(mock.room,'host',true,true);expect(document.querySelector('[data-finale-detail=game]').open).toBe(true);expect(document.activeElement.textContent).toContain('Final game');});

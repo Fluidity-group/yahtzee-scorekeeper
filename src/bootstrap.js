@@ -1,4 +1,4 @@
-// Legacy games retain their original house rules and persistence, without migrating them silently.
+// Current product entry point. Historical two-player DOM is isolated in test fixtures.
 import { Capacitor } from '@capacitor/core';
 import './native.css';
 import { isRecoveryUrl } from './multiplayer/recovery.js';
