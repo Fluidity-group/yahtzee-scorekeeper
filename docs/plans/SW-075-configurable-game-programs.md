@@ -105,11 +105,11 @@ Consolidate #4 phone-install record, #5 design, #6 guards, #7 recovered source a
 | Gate | Required evidence | Current state |
 |---|---|---|
 | Review | Frozen original source, named independent agent, reproductions, separate fix recheck | Original review and final independent source recheck complete;55focused tests passed |
-| Avatar stability | Permanent race/reload/draft/cleanup regressions plus existing privacy/provider coverage | Focused tests and independent recheck pass; clean full gate pending |
+| Avatar stability | Permanent race/reload/draft/cleanup regressions plus existing privacy/provider coverage | Independent recheck55tests plus clean full gate1,318passed/13optional skips; all configured builds passed |
 | Reaction foundation | Author/actor/audience example and rejected unsafe/foreign/retroactive actions | Pure contract implemented;9tests pass; editor/delivery not implemented |
 | Game builder | Approved programs, worked examples, immutable dispatch and complete-game invariants | Design; not implemented; rule decisions remain open |
 | Cleanup | Actual production reachability evidence; legacy coverage retained | Dead shell isolated; broad legacy deletion deferred |
-| Android | Configured gate/native tests, then actual account/avatar/reaction/layout journeys | Local full/native qualification pending for this commit; phone tests deferred |
+| Android | Configured gate/native tests, then actual account/avatar/reaction/layout journeys | Clean source full gate and Android19native tests/compile passed; actual phone tests deferred |
 | iOS | Mac signing/compile, same packaged source and paired phone journeys | Blocked until owner arranges Mac access at deployment stage |
 | Master | Owner accepts identified Android/iOS builds; no required review defects open | Not eligible for promotion yet |
 
@@ -120,3 +120,9 @@ Sources: https://ai.google.dev/gemini-api/docs/image-generation and https://ai.g
 ### Integration candidate
 
 Working integration branch is codex/yahtzee-integration, in the isolated SW075 worktree. It includes all design/safeguard/recovery ancestry and a normal merge of the remaining phone-record branch; conflicts were documentation-only and both dated records were preserved. Master stays9179f73. The candidate PR will supersede the stacked review chain without deleting its branches/history.
+
+### Final source verification
+
+Clean integration commit4befc840da9f5365a7f8db562a23fa6e9e7ef6e8 passed Node24.15.0 full configured gate:1,318tests/13optional camera skips/all configured builds, clean stable source. Source digest05d71f79eec181e880b039243a3469c049f22d6efff9e923d78890ab498a3e6e; evidence artifacts/engineering/2026-10-31T18-13-35-715Z-0315ec48/report.json. An initial run passed all tests/builds but failed source stability because the generated game-room bundle was stale; output was committed and clean gate repeated. No checks were weakened.
+
+Android JDK21 testDebugUnitTest/assembleDebug passed19native tests. Prepared manual files matched APK assets and embedded clean4befc84 identity; this is an offline compile check, not a configured rollout package. Android evidence lives under ignored artifacts/sw075 outside this source checkout. iOS manual web build passed; native Xcode/signing, real avatar/video/reload/account tests, live Gemini trial and paired phone gameplay remain unperformed. No live provider/data/backend/device action occurred.
