@@ -207,3 +207,9 @@ Next action: Dan selects the committed sprint slice and resolves the rule/visual
 - [boardgame.io phases](https://raw.githubusercontent.com/boardgameio/boardgame.io/main/docs/documentation/phases.md), [stages](https://raw.githubusercontent.com/boardgameio/boardgame.io/main/docs/documentation/stages.md) and [reducer](https://github.com/boardgameio/boardgame.io/blob/main/src/core/reducer.ts): explicit allowed moves/stages and central move processing; no framework adoption proposed.
 - [fast-check model-based testing](https://fast-check.dev/docs/advanced/model-based-testing/): generated command sequences against an independent model/invariants.
 - [Git worktree](https://git-scm.com/docs/git-worktree): isolated working directories per task with shared repository metadata; separate clones are also acceptable.
+
+### Design-document validation
+
+Clean design commit `96421c8` passed the Node24.15.0 configured engineering gate: 1,216 tests passed, 13 optional camera tests skipped; all configured web/native-web/manual-web/commentary-edge/room-edge builds passed with stable source. Evidence: `artifacts/engineering/2026-10-31T04-28-50-349Z-9e30169e/report.json` in the isolated design checkout. The UTC evidence timestamp falls on 31 October; local design date remains 30 October America/Chicago. `git diff --check` and new/changed local Markdown links passed. Seventeen pre-existing unresolved link references in historical status/project records remain unchanged; they do not establish current source or deployment state.
+
+This validates the documentation branch against existing checks, not the proposed engine. No new implementation tests, native compilation, device inspection/installation, live backend mutation, rule approval or independent review was performed for this design task.
