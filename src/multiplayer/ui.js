@@ -223,15 +223,6 @@ export async function onlineHistory(){
  }while(before);
  games.set(room.game.id,{...room.game,sequence:room.gameSequence??1});return [...games.values()];
 }
-export async function changeOnlineReactions(body){
- if(!onlineOpen||!room?.game||room.capabilities?.reactions!==true||!connected||working)throw new Error('Reconnect to an updated hosted table before editing reactions.');
- if(body.gameId!==room.game.id)throw new Error('The game changed. Reopen reactions.');
- return mutate({...body,rulesVersion:room.game.rules.version,code:room.code});
-}
-export async function refreshOnlineReactions(){
- if(!onlineOpen||!room?.game||working)throw new Error('Open your hosted table first.');
- return mutate({operation:'read',code:room.code});
-}
 export async function sendHostState(action){
  if(!connected||working||room?.hostId!==user?.id)return false;
  await mutate({operation:'command',code:room.code,gameId:room.game.id,action,expectedRevision:room.revision,commandId:crypto.randomUUID()});

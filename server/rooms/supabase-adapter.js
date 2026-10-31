@@ -1,3 +1,4 @@
+import {RoomError} from '../../src/multiplayer/room.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const row=room=>({id:room.id,code:room.code,host_id:room.hostId,member_ids:room.members.map(m=>m.userId),revision:room.revision,state:room,created_at:room.createdAt});
 
@@ -12,7 +13,19 @@ export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)
    const rows=await response.json();if(!Array.isArray(rows))throw new Error();return rows;
   }catch{throw new Error('Database request failed');}
  }
+ async function studioResource(path,options={}){
+  let response;try{response=await fetchImplementation(`${url}/rest/v1/${path}`,{...options,headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'}});}catch{throw new RoomError('Studio could not connect. Retry with the same request.',503);}
+  if(response.status===404)throw new RoomError('Studio needs the draft-storage server update.',503);
+  if(!response.ok){let code;try{code=(await response.json())?.code;}catch{}if(['40001','23505'].includes(code))throw new RoomError('This draft changed on another computer. Reload it before saving.',409);if(code==='42501')throw new RoomError('Open your own draft in a table you belong to.',403);if(code==='22023')throw new RoomError('Invalid draft or draft limit reached (32).',400);throw new RoomError('Studio could not save this request. Refresh and try again.',503);}
+  try{return await response.json();}catch{throw new RoomError('Unreadable Studio response. Refresh before editing.',503);}
+ }
+ const draftFields='id,room_id,owner_id,revision,base_config_version,content,updated_at';
+ const draftScope=(roomId,ownerId)=>{if(!uuid.test(roomId)||!uuid.test(ownerId))throw new Error('Invalid draft scope');return `room_id=eq.${roomId}&owner_id=eq.${ownerId}&deleted=eq.false`;};
  const store={
+  async reactionDrafts(roomId,ownerId){const rows=await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId,ownerId)}&select=${draftFields}&order=updated_at.desc&limit=32`);if(!Array.isArray(rows))throw new Error('Invalid drafts');return rows;},
+  async reactionDraft(roomId,ownerId,id){if(!uuid.test(id))throw new Error('Invalid draft identity');const rows=await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId,ownerId)}&id=eq.${id}&select=${draftFields}`);if(!Array.isArray(rows))throw new Error('Invalid draft');return rows[0];},
+  async saveReactionDraft({roomId,ownerId,id,expectedRevision,baseVersion,content,requestId}){return studioResource('rpc/clubhouse_save_reaction_draft',{method:'POST',body:JSON.stringify({p_room_id:roomId,p_owner_id:ownerId,p_id:id,p_expected_revision:expectedRevision,p_base_version:baseVersion,p_content:content,p_request_id:requestId})});},
+  async discardReactionDraft(roomId,ownerId,id,expectedRevision){const result=await studioResource('rpc/clubhouse_discard_reaction_draft',{method:'POST',body:JSON.stringify({p_room_id:roomId,p_owner_id:ownerId,p_id:id,p_expected_revision:expectedRevision})});if(result!==true)throw new RoomError('Draft discard could not be confirmed. Refresh Studio.',503);return true;},
   async commentaryAvailable(){
    if(!uuid.test(commentaryScopeId||''))return false;
    try{const response=await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`,{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:'{}'});if(response.status===404)return false;if(!response.ok)throw Error();const available=await response.json();if(typeof available!=='boolean')throw Error();return available;}catch{throw new Error('Database request failed');}
@@ -44,8 +57,9 @@ export function createSupabaseRoomAdapter({url,key,fetchImplementation=(...args)
   async history(roomId,before){
    return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before?`&sequence_number=lt.${before}`:''}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
   },
-  async commit(room,revision,{actor,commandId=null,fingerprint=null,outboxRows=null}={}){
+  async commit(room,revision,{actor,commandId=null,fingerprint=null,outboxRows=null,draft=null}={}){
    if(outboxRows!==null&&!uuid.test(commentaryScopeId||''))throw new Error('Atomic commentary scope unavailable');
+   if(draft){if(outboxRows!==null)throw new Error('Invalid publication commit');const result=await studioResource('rpc/clubhouse_commit_reaction_draft',{method:'POST',body:JSON.stringify({p_room_id:room.id,p_expected_revision:revision,p_state:room,p_actor_id:actor,p_command_id:commandId,p_fingerprint:fingerprint,p_draft_id:draft.id,p_draft_revision:draft.revision})});if(typeof result!=='boolean')throw new Error('Invalid publication result');return result;}
    const result=await resource(outboxRows===null?'rpc/clubhouse_commit_game':'rpc/clubhouse_commit_game_commentary',{method:'POST',body:JSON.stringify({p_room_id:room.id,p_expected_revision:revision,p_state:room,p_actor_id:actor,p_command_id:commandId,p_fingerprint:fingerprint,...(outboxRows!==null?{p_scope:commentaryScopeId,p_outbox:outboxRows}:{})})});
    if(typeof result!=='boolean')throw new Error('Database request failed');return result;
   },

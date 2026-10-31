@@ -123,3 +123,9 @@ Vite `/api/tts` proxy reads it; it is never sent to the browser). Then in ⚙️
 **Use ElevenLabs**, paste a **Voice ID**, pick the model (`eleven_v3` recommended) and stability,
 and hit **Test voice**. The proxy runs in `npm run dev` and `npm run preview` only — on a plain
 static deploy there's no proxy, so it falls back to the device's Web Speech voice automatically.
+
+## Desktop Reaction Studio
+
+Open the configured web app with `?studio=1` and use the same existing game account. Select a started member table, save a private draft, test scores and recipient previews, then review and publish that saved revision. Drafts do not change the game; published reactions apply to future accepted scores. Other players’ rules are read-only. Concurrent draft/settings changes require explicit refresh/review. The game menu exposes a browser-only Studio link; native phones receive published reactions.
+
+Studio requires the additive `202610310001_reaction_studio_drafts.sql` migration and matching room endpoint/web source. See [SW077](docs/plans/SW-077-web-reaction-studio.md) for qualified source, deployment prerequisites and rollback. Source/build success does not mean the live site or phones have been updated.

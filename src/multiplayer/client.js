@@ -27,19 +27,20 @@ export function watchRoom(code,onRoom){
  const channel=client.channel(`room-${code}`).on('postgres_changes',{event:'UPDATE',schema:'public',table:'clubhouse_rooms',filter:`code=eq.${code}`},payload=>onRoom(payload.new.state)).subscribe();
  return ()=>{client.removeChannel(channel);};
 }
-export async function requestRoom(payload){
+export async function requestRoom(payload,{expectedUserId}={}){
  const start=Date.now(),controller=new AbortController();let phase='auth',outcome='failed';
  const within=promise=>waitForOnline(promise,{timeoutMs:Math.max(1,15000-(Date.now()-start)),onTimeout:()=>controller.abort()});
- try{const result=await requestRoomWithin(payload,{within,signal:controller.signal,mark:value=>{phase=value;}});outcome='accepted';return result;}
+ try{const result=await requestRoomWithin(payload,{expectedUserId,within,signal:controller.signal,mark:value=>{phase=value;}});outcome='accepted';return result;}
  finally{controller.abort();if(payload.operation==='command'&&(outcome!=='accepted'||Date.now()-start>1500))console.warn('Clubhouse room request',JSON.stringify({phase,outcome,elapsedMs:Date.now()-start}));}
 }
-async function requestRoomWithin(payload,{within,signal,mark}){
+async function requestRoomWithin(payload,{expectedUserId,within,signal,mark}){
  if(!auth)throw new Error('Online games are not configured. Use Local games.');
  let lookup;
  try{lookup=await within(auth.getSession());}catch(error){throw new Error(onlineErrorMessage(error));}
  if(lookup?.error)throw new Error(onlineErrorMessage(lookup.error));
  const session=lookup?.data?.session;
  if(!session)throw new Error('Please sign in again.');
+ if(expectedUserId&&session.user?.id!==expectedUserId)throw new Error('Your account changed. Reopen Studio for the current account.');
  let response;const body=JSON.stringify(payload),operation=payload.operation;
  // Reuse the exact command ID on an uncertain network retry.
  for(let attempt=0;attempt<2;attempt++){
@@ -55,6 +56,10 @@ async function requestRoomWithin(payload,{within,signal,mark}){
  }
  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('The multiplayer server returned an unreadable response. Try again, or use Local games.');
  if(!response.ok)throw new Error(typeof data.error==='string'&&data.error?data.error:'Could not connect to the game.');
+ const validDraft=d=>d&&typeof d.id==='string'&&typeof d.roomId==='string'&&typeof d.ownerId==='string'&&Number.isSafeInteger(d.revision)&&d.revision>0&&Number.isSafeInteger(d.baseConfigVersion)&&d.baseConfigVersion>=0&&d.content&&['save','remove'].includes(d.content.operation);
+ if(operation==='reaction-draft-list'){if(!Array.isArray(data.drafts)||data.drafts.length>32||!data.drafts.every(validDraft))throw Error('Unreadable Studio drafts. Refresh before editing.');return data;}
+ if(operation==='reaction-draft-save'){if(!validDraft(data.draft))throw Error('Unreadable saved draft. Reload before retrying.');return data;}
+ if(operation==='reaction-draft-discard'){if(data.discarded!==true)throw Error('Draft could not be discarded. Refresh Studio.');return data;}
  const validHistory=()=>Array.isArray(data.games)&&data.games.length<=20&&data.games.every(g=>g&&typeof g.id==='string'&&g.schema===1&&Array.isArray(g.players)&&Array.isArray(g.sheets)&&Array.isArray(g.events))&&(data.nextBefore===null||Number.isInteger(data.nextBefore)&&data.nextBefore>0);
  if(['tournaments','sessions'].includes(operation)){
   const cursor=data.nextBefore;

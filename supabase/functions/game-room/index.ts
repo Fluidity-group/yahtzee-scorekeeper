@@ -95,8 +95,8 @@ function compileReactionSet(input, { memberIds, identityKind = "account", gameId
   fields(input, ["id", "version", "scopeId", "effectiveAfterRevision", "rules"]);
   if (!id(input.id) || !id(input.scopeId) || !version(input.version) || !Number.isSafeInteger(input.effectiveAfterRevision) || input.effectiveAfterRevision < 0) fail("Versioned reaction scope required.");
   if (!Array.isArray(memberIds) || memberIds.length < 1 || memberIds.length > 8 || new Set(memberIds).size !== memberIds.length) fail("Unique roster required.");
-  const uuid4 = /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
-  if (identityKind === "account" ? memberIds.some((v) => !uuid4.test(v)) : identityKind !== "local-seat" || !id(gameId) || memberIds.some((v, i) => v !== `${gameId}:p${i}`)) fail("Use account UUIDs or scoped local-seat identities.");
+  const uuid5 = /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
+  if (identityKind === "account" ? memberIds.some((v) => !uuid5.test(v)) : identityKind !== "local-seat" || !id(gameId) || memberIds.some((v, i) => v !== `${gameId}:p${i}`)) fail("Use account UUIDs or scoped local-seat identities.");
   const member = (v) => memberIds.includes(v), rules = input.rules;
   if (!Array.isArray(rules) || rules.length > 32 || new Set(rules.map((r) => r?.id)).size !== rules.length) fail("Choose at most 32 uniquely identified reactions.");
   for (const r of rules) {
@@ -233,7 +233,7 @@ function scoreOptions(game, dice) {
     combinations: c
   };
 }
-function validateValue(game, category, value) {
+function validateScoreValue(game, category, value) {
   if (!BASE_KEYS.includes(category) || !Number.isInteger(value) || value < 0) fail2("Invalid score.");
   const c = META[category];
   if (c.face && (value > c.face * 5 || value % c.face)) fail2("Choose a count from zero to five.");
@@ -308,7 +308,7 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
     const original = g.events.find((e) => e.id === action.target && e.type === "score");
     if (!original || original.seat !== action.seat) fail2("Choose one of this player\u2019s recorded scores.");
     if (g.events.some((e) => e.type === "score-undo" && e.target === original.id)) fail2("That score was undone. Choose the replacement score.");
-    validateValue(g, original.category, action.value);
+    validateScoreValue(g, original.category, action.value);
     event("score-correction", { target: original.id, seat: original.seat, category: original.category, before: g.sheets[original.seat][original.category], value: action.value });
     g.sheets[original.seat][original.category] = action.value;
   } else {
@@ -410,7 +410,7 @@ function command(game, action, { id: id2, time = (/* @__PURE__ */ new Date()).to
           finishTurn(g, true, time);
         } else {
           if (g.sheets[g.activeSeat][action.category] !== void 0) fail2("That category is already filled.");
-          validateValue(g, action.category, action.value);
+          validateScoreValue(g, action.category, action.value);
           if (options?.extraTurn) fail2("Record the bonus Yahtzee, then take your extra turn.");
           if (options && !(action.category in options.scores)) fail2("Joker placement requires another category.");
           if (options && action.value !== options.scores[action.category] && !(action.value === 0 && !options.joker)) fail2("Score does not match the dice.");
@@ -776,6 +776,57 @@ function compactIntents(intents) {
   return [...grouped.values()];
 }
 
+// server/rooms/reaction-drafts.js
+var uuid2 = /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i;
+var fail4 = (message, status = 400) => {
+  throw new RoomError(message, status);
+};
+var fields2 = (v, allowed) => v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).every((k) => allowed.includes(k));
+var draftOperations = ["reaction-draft-list", "reaction-draft-save", "reaction-draft-discard"];
+function validateDraftContent(room, userId, content) {
+  if (!fields2(content, ["operation", "rule", "ruleId"])) fail4("Invalid draft content.");
+  const prior = room.reactions?.rules.find((r) => r.id === (content.operation === "save" ? content.rule?.id : content.ruleId));
+  if (prior && prior.authorId !== userId) fail4("You can only change reactions you created.", 403);
+  if (content.operation === "remove") {
+    if (content.rule !== void 0 || !prior) fail4("That published reaction no longer exists. Refresh Studio.", 409);
+  } else if (content.operation === "save") {
+    if (content.ruleId !== void 0 || !fields2(content.rule, ["id", "enabled", "when", "audience", "actions"])) fail4("Invalid draft reaction.");
+    try {
+      compileReactionSet({ id: room.id, version: 1, scopeId: room.id, effectiveAfterRevision: 0, rules: [{ ...content.rule, authorId: userId, version: 1 }] }, { memberIds: room.members.map((m) => m.userId) });
+    } catch (e) {
+      fail4(e.message);
+    }
+  } else fail4("Choose a draft action.");
+  return structuredClone(content);
+}
+function draftView(row2) {
+  return { id: row2.id, roomId: row2.room_id, ownerId: row2.owner_id, revision: Number(row2.revision), baseConfigVersion: Number(row2.base_config_version), content: row2.content, updatedAt: row2.updated_at };
+}
+async function handleRoomDraft({ store: store2, room, userId, body }) {
+  if (!room.game) fail4("Start this hosted game before editing its reactions.", 409);
+  if (typeof store2.reactionDrafts !== "function" || typeof store2.saveReactionDraft !== "function") fail4("Studio needs the matching server update.", 503);
+  if (body.operation === "reaction-draft-list") return { drafts: (await store2.reactionDrafts(room.id, userId)).map(draftView) };
+  if (!uuid2.test(body.draftId || "") || !Number.isSafeInteger(body.expectedDraftRevision) || body.expectedDraftRevision < 0) fail4("Invalid draft revision.");
+  if (body.operation === "reaction-draft-discard") {
+    await store2.discardReactionDraft(room.id, userId, body.draftId, body.expectedDraftRevision);
+    return { discarded: true };
+  }
+  if (!uuid2.test(body.requestId || "") || !Number.isSafeInteger(body.baseConfigVersion) || body.baseConfigVersion < 0 || body.baseConfigVersion > (room.reactions?.version || 0)) fail4("Invalid saved draft. Refresh the published settings.");
+  const content = validateDraftContent(room, userId, body.content);
+  const draft = await store2.saveReactionDraft({ roomId: room.id, ownerId: userId, id: body.draftId, expectedRevision: body.expectedDraftRevision, baseVersion: body.baseConfigVersion, content, requestId: body.requestId });
+  return { draft: draftView(draft) };
+}
+async function publishRoomDraft({ store: store2, room, userId, body, time }) {
+  if (typeof store2.reactionDraft !== "function") fail4("Studio needs the matching server update.", 503);
+  if (!uuid2.test(body.draftId || "") || !Number.isSafeInteger(body.draftRevision) || body.draftRevision < 1) fail4("Choose a saved draft revision.");
+  const draft = await store2.reactionDraft(room.id, userId, body.draftId);
+  if (!draft || draft.owner_id !== userId || draft.room_id !== room.id || draft.deleted || Number(draft.revision) !== body.draftRevision) fail4("The saved draft changed. Reload it before publishing.", 409);
+  if (Number(draft.base_config_version) !== body.configVersion) fail4("Review the latest published settings before publishing.", 409);
+  const content = validateDraftContent(room, userId, draft.content);
+  const next = changeRoomReactions(room, { ...body, userId, operation: content.operation === "save" ? "reaction-save" : "reaction-remove", rule: content.rule, ruleId: content.ruleId });
+  return { ...next, reactionPublication: { authorId: userId, draftId: draft.id, draftRevision: Number(draft.revision), commandId: body.commandId, configVersion: next.reactions.version, publishedAt: time } };
+}
+
 // src/commentary/facts.js
 var freeze3 = (value) => {
   if (value && typeof value === "object") {
@@ -796,7 +847,7 @@ function acceptedFacts(game, eventId, accountIds, { identityKind = "account", ow
 }
 
 // server/commentary/accepted-outbox.js
-var uuid2 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+var uuid3 = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 var commandId = /^[A-Za-z0-9_-]{8,100}$/;
 var freeze4 = (value) => {
   if (value && typeof value === "object") {
@@ -810,19 +861,19 @@ var requireValue = (value, message) => {
 };
 var scoreTypes = ["score", "bonus", "final-chain-end", "final-chain-roll"];
 function acceptedOutbox({ before, after, actorId, commandId: id2, operation, acceptedAt, openingFacts: openingFacts2, priorGame = null } = {}) {
-  requireValue(before && after && uuid2.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
-  requireValue(uuid2.test(actorId) && commandId.test(id2 || ""), "Accepted UUID actor and command ID required");
+  requireValue(before && after && uuid3.test(after.id) && before.id === after.id, "Matching room UUID snapshots required");
+  requireValue(uuid3.test(actorId) && commandId.test(id2 || ""), "Accepted UUID actor and command ID required");
   requireValue(Number.isFinite(Date.parse(acceptedAt)), "Accepted server timestamp required");
   requireValue(Number.isSafeInteger(before.revision) && Number.isSafeInteger(after.revision), "Room revisions required");
   requireValue(Array.isArray(after.members) && after.members.length >= 1 && after.members.length <= 8, "Bounded roster required");
   const audience = after.members.map((m) => m.userId);
-  requireValue(audience.every((v) => uuid2.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
+  requireValue(audience.every((v) => uuid3.test(v)) && new Set(audience).size === audience.length && audience.includes(actorId), "Unique member UUIDs and member actor required");
   requireValue(JSON.stringify(before.members.map((m) => m.userId)) === JSON.stringify(audience) && before.hostId === after.hostId, "Acceptance cannot change ownership or seats");
   if (after === before || after.revision === before.revision) return freeze4([]);
   requireValue(after.revision === before.revision + 1, "Exactly one accepted room revision required");
   if (!["command", "start", "resume", "ready"].includes(operation)) return freeze4([]);
   if (!after.game) return freeze4([]);
-  requireValue(uuid2.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
+  requireValue(uuid3.test(after.game.id) && after.game.players.length === audience.length && after.game.players.every((p, i) => p.id === audience[i]), "Game UUID and authoritative seat UUIDs required");
   requireValue(Number.isSafeInteger(after.game.rules?.version) && after.game.rules.version > 0, "Versioned game rules required");
   const rows = [];
   const add = (kind, purpose2, facts2, invalidates = []) => rows.push({ schemaVersion: 1, idempotencyKey: JSON.stringify([after.id, after.game.id, id2, kind, purpose2]), roomId: after.id, gameId: after.game.id, commandId: id2, actorId, expectedRoomRevision: before.revision, acceptedRoomRevision: after.revision, acceptedAt, kind, purpose: purpose2, audience: [...audience], facts: facts2, invalidates, dispatch: "after-transaction-commit-only" });
@@ -954,10 +1005,10 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
       const lifecycleDurable = ["ready", "pause", "resume"].includes(body.operation);
       const atomicOperation = !!commentary && ["command", "start", "resume", "ready"].includes(body.operation);
       if (atomicOperation && !supportsCommentary) throw new RoomError("Live commentary needs the atomic game server update.", 503);
-      const reactionOperation = reactionOperations.includes(body.operation);
+      const reactionOperation = reactionOperations.includes(body.operation) || body.operation === "reaction-publish";
       if (reactionOperation && !supportsReactions) throw new RoomError("Fun reactions need the updated game server.", 503);
       const durable = lifecycleDurable || atomicOperation || supportsReactions && (reactionOperation || body.operation === "command");
-      const fingerprint = reactionOperation ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, configVersion: body.configVersion, rule: body.rule, ruleId: body.ruleId, enabled: body.enabled }) : body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : body.operation === "command" && durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, action: body.action }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
+      const fingerprint = body.operation === "reaction-publish" ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, configVersion: body.configVersion, draftId: body.draftId, draftRevision: body.draftRevision }) : reactionOperation ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, configVersion: body.configVersion, rule: body.rule, ruleId: body.ruleId, enabled: body.enabled }) : body.operation === "ready" ? JSON.stringify({ operation: "ready", gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready }) : body.operation === "command" && durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision, action: body.action }) : durable ? JSON.stringify({ operation: body.operation, gameId: body.gameId, expectedRevision: body.expectedRevision }) : null;
       for (let attempt = 0; attempt < 3; attempt++) {
         const room = await store2.get(code);
         if (!room) throw new RoomError("Room not found. Check the code.", 404);
@@ -971,6 +1022,10 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
         if (body.operation === "join") next = joinRoom(room, { userId, name: body.name, time: now() });
         else {
           requireMember(room, userId);
+          if (draftOperations.includes(body.operation)) {
+            if (!supportsReactions) throw new RoomError("Studio needs the matching game server.", 503);
+            return reply(await handleRoomDraft({ store: store2, room, userId, body }));
+          }
           if (body.operation === "read") return reply({ room: present(room) });
           if (body.operation === "standings") {
             if (!supportsTournaments) throw new RoomError("Tournament standings need a server update.", 503);
@@ -995,7 +1050,8 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
             }
             if (lifecycleDurable) next = body.operation === "ready" ? setRematchReady(room, { userId, gameId: body.gameId, gameRevision: body.gameRevision, ready: body.ready, commandId: body.commandId, nextGameId, time: now() }) : setTournamentPaused(room, { userId, gameId: body.gameId, expectedRevision: body.expectedRevision, paused: body.operation === "pause", time: now() });
           }
-          if (!next && reactionOperation) next = changeRoomReactions(room, { ...body, userId });
+          if (!next && body.operation === "reaction-publish") next = await publishRoomDraft({ store: store2, room, userId, body, time: now() });
+          else if (!next && reactionOperation) next = changeRoomReactions(room, { ...body, userId });
           if (!next && body.operation === "start") {
             if (room.status === "lobby" && body.expectedRevision !== room.revision) throw new RoomError("The lobby changed. Review the players and start again.", 409);
             next = startRoom(room, { userId, time: now() });
@@ -1014,7 +1070,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
           const greeting = outboxRows.find((row2) => ["opening", "return", "next-game"].includes(row2.purpose));
           if (greeting) next = { ...next, commentaryLifecycle: { commandId: greeting.commandId, purpose: greeting.purpose, acceptedRoomRevision: next.revision, gameId: next.game.id } };
         }
-        const saved = next === room || await (supportsRematch && next.game ? store2.commit(next, room.revision, { actor: userId, ...durable ? { commandId: body.commandId, fingerprint } : {}, ...outboxRows !== null ? { outboxRows } : {} }) : store2.update(next, room.revision));
+        const saved = next === room || await (supportsRematch && next.game ? store2.commit(next, room.revision, { actor: userId, ...body.operation === "reaction-publish" ? { draft: { id: body.draftId, revision: body.draftRevision } } : {}, ...durable ? { commandId: body.commandId, fingerprint } : {}, ...outboxRows !== null ? { outboxRows } : {} }) : store2.update(next, room.revision));
         if (saved) return reply({ room: present(next), ...durable && next !== room ? { acceptedCommandId: body.commandId, acceptedRoomRevision: next.revision } : {} });
       }
       throw new RoomError("The game changed. Please try again.", 409);
@@ -1027,7 +1083,7 @@ function roomHandler({ store: store2, authenticate: authenticate2, now = () => (
 }
 
 // server/rooms/supabase-adapter.js
-var uuid3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var uuid4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var row = (room) => ({ id: room.id, code: room.code, host_id: room.hostId, member_ids: room.members.map((m) => m.userId), revision: room.revision, state: room, created_at: room.createdAt });
 function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) => fetch(...args), now = () => Date.now(), commentaryScopeId = null }) {
   async function db(path, options = {}) {
@@ -1042,9 +1098,58 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       throw new Error("Database request failed");
     }
   }
+  async function studioResource(path, options = {}) {
+    let response;
+    try {
+      response = await fetchImplementation(`${url}/rest/v1/${path}`, { ...options, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } });
+    } catch {
+      throw new RoomError("Studio could not connect. Retry with the same request.", 503);
+    }
+    if (response.status === 404) throw new RoomError("Studio needs the draft-storage server update.", 503);
+    if (!response.ok) {
+      let code;
+      try {
+        code = (await response.json())?.code;
+      } catch {
+      }
+      if (["40001", "23505"].includes(code)) throw new RoomError("This draft changed on another computer. Reload it before saving.", 409);
+      if (code === "42501") throw new RoomError("Open your own draft in a table you belong to.", 403);
+      if (code === "22023") throw new RoomError("Invalid draft or draft limit reached (32).", 400);
+      throw new RoomError("Studio could not save this request. Refresh and try again.", 503);
+    }
+    try {
+      return await response.json();
+    } catch {
+      throw new RoomError("Unreadable Studio response. Refresh before editing.", 503);
+    }
+  }
+  const draftFields = "id,room_id,owner_id,revision,base_config_version,content,updated_at";
+  const draftScope = (roomId, ownerId) => {
+    if (!uuid4.test(roomId) || !uuid4.test(ownerId)) throw new Error("Invalid draft scope");
+    return `room_id=eq.${roomId}&owner_id=eq.${ownerId}&deleted=eq.false`;
+  };
   const store2 = {
+    async reactionDrafts(roomId, ownerId) {
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&select=${draftFields}&order=updated_at.desc&limit=32`);
+      if (!Array.isArray(rows)) throw new Error("Invalid drafts");
+      return rows;
+    },
+    async reactionDraft(roomId, ownerId, id2) {
+      if (!uuid4.test(id2)) throw new Error("Invalid draft identity");
+      const rows = await studioResource(`clubhouse_reaction_drafts?${draftScope(roomId, ownerId)}&id=eq.${id2}&select=${draftFields}`);
+      if (!Array.isArray(rows)) throw new Error("Invalid draft");
+      return rows[0];
+    },
+    async saveReactionDraft({ roomId, ownerId, id: id2, expectedRevision, baseVersion, content, requestId }) {
+      return studioResource("rpc/clubhouse_save_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id2, p_expected_revision: expectedRevision, p_base_version: baseVersion, p_content: content, p_request_id: requestId }) });
+    },
+    async discardReactionDraft(roomId, ownerId, id2, expectedRevision) {
+      const result = await studioResource("rpc/clubhouse_discard_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: roomId, p_owner_id: ownerId, p_id: id2, p_expected_revision: expectedRevision }) });
+      if (result !== true) throw new RoomError("Draft discard could not be confirmed. Refresh Studio.", 503);
+      return true;
+    },
     async commentaryAvailable() {
-      if (!uuid3.test(commentaryScopeId || "")) return false;
+      if (!uuid4.test(commentaryScopeId || "")) return false;
       try {
         const response = await fetchImplementation(`${url}/rest/v1/rpc/clubhouse_commentary_atomic_available`, { method: "POST", headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: "{}" });
         if (response.status === 404) return false;
@@ -1081,7 +1186,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       }
     },
     async tournamentGames(roomId) {
-      if (!uuid3.test(roomId)) throw new Error("Database request failed");
+      if (!uuid4.test(roomId)) throw new Error("Database request failed");
       const games = await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null&select=state,sequence_number&order=sequence_number.asc&limit=20`);
       if (!Array.isArray(games)) throw new Error("Database request failed");
       return games;
@@ -1104,8 +1209,14 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
     async history(roomId, before) {
       return await resource(`clubhouse_games?room_id=eq.${roomId}&ended_at=not.is.null${before ? `&sequence_number=lt.${before}` : ""}&select=state,sequence_number&order=sequence_number.desc&limit=20`);
     },
-    async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null } = {}) {
-      if (outboxRows !== null && !uuid3.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+    async commit(room, revision, { actor, commandId: commandId2 = null, fingerprint = null, outboxRows = null, draft = null } = {}) {
+      if (outboxRows !== null && !uuid4.test(commentaryScopeId || "")) throw new Error("Atomic commentary scope unavailable");
+      if (draft) {
+        if (outboxRows !== null) throw new Error("Invalid publication commit");
+        const result2 = await studioResource("rpc/clubhouse_commit_reaction_draft", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, p_draft_id: draft.id, p_draft_revision: draft.revision }) });
+        if (typeof result2 !== "boolean") throw new Error("Invalid publication result");
+        return result2;
+      }
       const result = await resource(outboxRows === null ? "rpc/clubhouse_commit_game" : "rpc/clubhouse_commit_game_commentary", { method: "POST", body: JSON.stringify({ p_room_id: room.id, p_expected_revision: revision, p_state: room, p_actor_id: actor, p_command_id: commandId2, p_fingerprint: fingerprint, ...outboxRows !== null ? { p_scope: commentaryScopeId, p_outbox: outboxRows } : {} }) });
       if (typeof result !== "boolean") throw new Error("Database request failed");
       return result;
@@ -1120,13 +1231,13 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       return (await db(`?member_ids=cs.{${userId}}&select=state&order=created_at.desc&limit=30`)).map((r) => r.state);
     },
     async openTournaments(userId, before) {
-      if (!uuid3.test(userId)) throw new Error("Database request failed");
-      if (before && (!uuid3.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid4.test(userId)) throw new Error("Database request failed");
+      if (before && (!uuid4.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const cursor = before ? `&or=(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id}))` : "";
       return await db(`?member_ids=cs.{${userId}}&state->tournament=not.is.null&state->tournament->>status=neq.completed${cursor}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
     },
     async sessions(userId, view, before) {
-      if (!uuid3.test(userId) || !["open", "completed"].includes(view) || before && (!uuid3.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
+      if (!uuid4.test(userId) || !["open", "completed"].includes(view) || before && (!uuid4.test(before.id || "") || typeof before.createdAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(before.createdAt) || !Number.isFinite(Date.parse(before.createdAt)))) throw new Error("Database request failed");
       const classification = view === "open" ? "and(state->tournament.is.null,state->>status.neq.finished),state->tournament->>status.neq.completed" : "and(state->tournament.is.null,state->>status.eq.finished),state->tournament->>status.eq.completed";
       const filter = before ? `and=(or(${classification}),or(created_at.lt.${before.createdAt},and(created_at.eq.${before.createdAt},id.lt.${before.id})))` : `or=(${classification})`;
       return await db(`?member_ids=cs.{${userId}}&${filter}&select=state,created_at,id&order=created_at.desc,id.desc&limit=20`);
@@ -1157,7 +1268,7 @@ function createSupabaseRoomAdapter({ url, key, fetchImplementation = (...args) =
       const response = await fetchImplementation(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: authorization } });
       if (!response.ok) return null;
       const user = await response.json();
-      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid3.test(user.id) ? user.id : null;
+      return user?.email_confirmed_at && !user.is_anonymous && typeof user.id === "string" && uuid4.test(user.id) ? user.id : null;
     } catch {
       throw new Error("Authentication request failed");
     }

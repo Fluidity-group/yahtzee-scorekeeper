@@ -1,3 +1,4 @@
+import {draftOperations,handleRoomDraft,publishRoomDraft} from './reaction-drafts.js';
 import {reactionOperations,changeRoomReactions,withAcceptedReactions} from '../../src/experience/room-reactions.js';
 import { createRoom, joinRoom, startRoom, playRoom, requireMember, RoomError } from '../../src/multiplayer/room.js';
 import {acceptedOutbox} from '../commentary/accepted-outbox.js';
@@ -53,10 +54,10 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
    const lifecycleDurable=['ready','pause','resume'].includes(body.operation);
    const atomicOperation=!!commentary&&['command','start','resume','ready'].includes(body.operation);
    if(atomicOperation&&!supportsCommentary)throw new RoomError('Live commentary needs the atomic game server update.',503);
-   const reactionOperation=reactionOperations.includes(body.operation);
+   const reactionOperation=reactionOperations.includes(body.operation)||body.operation==='reaction-publish';
    if(reactionOperation&&!supportsReactions)throw new RoomError('Fun reactions need the updated game server.',503);
    const durable=lifecycleDurable||atomicOperation||supportsReactions&&(reactionOperation||body.operation==='command');
-   const fingerprint=reactionOperation?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision,configVersion:body.configVersion,rule:body.rule,ruleId:body.ruleId,enabled:body.enabled}):body.operation==='ready'?JSON.stringify({operation:'ready',gameId:body.gameId,gameRevision:body.gameRevision,ready:body.ready}):body.operation==='command'&&durable?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision,action:body.action}):durable?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision}):null;
+   const fingerprint=body.operation==='reaction-publish'?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision,configVersion:body.configVersion,draftId:body.draftId,draftRevision:body.draftRevision}):reactionOperation?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision,configVersion:body.configVersion,rule:body.rule,ruleId:body.ruleId,enabled:body.enabled}):body.operation==='ready'?JSON.stringify({operation:'ready',gameId:body.gameId,gameRevision:body.gameRevision,ready:body.ready}):body.operation==='command'&&durable?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision,action:body.action}):durable?JSON.stringify({operation:body.operation,gameId:body.gameId,expectedRevision:body.expectedRevision}):null;
    for(let attempt=0;attempt<3;attempt++){
     const room=await store.get(code);if(!room)throw new RoomError('Room not found. Check the code.',404);
     if((room.game?.rules.version??room.rulesVersion)===2&&!['read','history','standings','join'].includes(body.operation)){
@@ -69,6 +70,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
     if(body.operation==='join')next=joinRoom(room,{userId,name:body.name,time:now()});
     else{
      requireMember(room,userId);
+     if(draftOperations.includes(body.operation)){if(!supportsReactions)throw new RoomError('Studio needs the matching game server.',503);return reply(await handleRoomDraft({store,room,userId,body}));}
      if(body.operation==='read')return reply({room:present(room)});
      if(body.operation==='standings'){
       if(!supportsTournaments)throw new RoomError('Tournament standings need a server update.',503);
@@ -91,7 +93,8 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
       if(receipt){if(receipt.actor_id!==userId||receipt.fingerprint!==fingerprint)throw new RoomError('This command belongs to another request.',403);return reply({room:present(room)});}
       if(lifecycleDurable)next=body.operation==='ready'?setRematchReady(room,{userId,gameId:body.gameId,gameRevision:body.gameRevision,ready:body.ready,commandId:body.commandId,nextGameId,time:now()}):setTournamentPaused(room,{userId,gameId:body.gameId,expectedRevision:body.expectedRevision,paused:body.operation==='pause',time:now()});
      }
-     if(!next&&reactionOperation)next=changeRoomReactions(room,{...body,userId});
+     if(!next&&body.operation==='reaction-publish')next=await publishRoomDraft({store,room,userId,body,time:now()});
+     else if(!next&&reactionOperation)next=changeRoomReactions(room,{...body,userId});
      if(!next&&body.operation==='start'){
       if(room.status==='lobby'&&body.expectedRevision!==room.revision)throw new RoomError('The lobby changed. Review the players and start again.',409);
       next=startRoom(room,{userId,time:now()});
@@ -111,7 +114,7 @@ export function roomHandler({store,authenticate,now=()=>new Date().toISOString()
      const greeting=outboxRows.find(row=>['opening','return','next-game'].includes(row.purpose));
      if(greeting)next={...next,commentaryLifecycle:{commandId:greeting.commandId,purpose:greeting.purpose,acceptedRoomRevision:next.revision,gameId:next.game.id}};
     }
-    const saved=next===room||await (supportsRematch&&next.game?store.commit(next,room.revision,{actor:userId,...(durable?{commandId:body.commandId,fingerprint}:{}),...(outboxRows!==null?{outboxRows}: {})}):store.update(next,room.revision));
+    const saved=next===room||await (supportsRematch&&next.game?store.commit(next,room.revision,{actor:userId,...(body.operation==='reaction-publish'?{draft:{id:body.draftId,revision:body.draftRevision}}:{}),...(durable?{commandId:body.commandId,fingerprint}:{}),...(outboxRows!==null?{outboxRows}: {})}):store.update(next,room.revision));
     if(saved)return reply({room:present(next),...(durable&&next!==room?{acceptedCommandId:body.commandId,acceptedRoomRevision:next.revision}:{})});
    }
    throw new RoomError('The game changed. Please try again.',409);
