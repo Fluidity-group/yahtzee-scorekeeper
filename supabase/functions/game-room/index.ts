@@ -691,6 +691,8 @@ function playRoom(room, { userId, action, commandId: commandId2, expectedRevisio
 }
 
 // src/experience/room-reactions.js
+var REACTION_LIVE_MS = 15e3;
+var REACTION_QUEUE_LIMIT = 16;
 var commandPattern = /^[\w-]{8,100}$/;
 var reject = (text, status = 400) => {
   throw new RoomError(text, status);
@@ -731,19 +733,23 @@ function changeRoomReactions(room, { userId, operation, gameId, expectedRevision
     reject(error.message);
   }
   const disabledIds = new Set(rules.filter((r) => !r.enabled).map((r) => r.id));
-  const reactionIntents = (room.reactionIntents || []).filter((i) => tableEnabled && !disabledIds.has(i.ruleId) && rules.some((r) => r.id === i.ruleId));
-  return { ...room, revision: room.revision + 1, reactions, reactionIntents };
+  const keep = (i) => tableEnabled && !disabledIds.has(i.ruleId) && rules.some((r) => r.id === i.ruleId);
+  const reactionIntents = (room.reactionIntents || []).filter(keep);
+  const reactionQueue = (room.reactionQueue || []).map((entry) => ({ ...entry, intents: entry.intents.filter(keep) }));
+  return { ...room, revision: room.revision + 1, reactions, reactionIntents, reactionQueue };
 }
 function withAcceptedReactions(before, after, time) {
   if (after === before || !after.game) return after;
   const game = after.game, previous = before.game;
-  if (!previous || previous.id !== game.id) return { ...after, reactionPopup: null, reactionIntents: [] };
+  if (!previous || previous.id !== game.id) return { ...after, reactionPopup: null, reactionIntents: [], reactionQueue: [] };
   const fresh = game.events.filter((e) => !previous.events.some((old) => old.id === e.id));
   const invalid = new Set(game.events.filter((e) => ["score-undo", "score-correction"].includes(e.type)).map((e) => e.target));
   const score = fresh.filter((e) => e.type === "score" && !invalid.has(e.id)).at(-1);
+  const clock = Date.parse(time);
+  const reactionQueue = (after.reactionQueue || []).filter((entry) => !invalid.has(entry.popup.eventId) && Date.parse(entry.expiresAt) > clock);
   if (!score) {
-    if (before.reactionPopup && invalid.has(before.reactionPopup.eventId)) return { ...after, reactionPopup: null, reactionIntents: [] };
-    return after;
+    if (before.reactionPopup && invalid.has(before.reactionPopup.eventId)) return { ...after, reactionPopup: null, reactionIntents: [], reactionQueue };
+    return { ...after, reactionQueue };
   }
   const actorId = game.players[score.seat]?.id;
   if (!after.members.some((m) => m.userId === actorId)) reject("Score has no authoritative table member.", 500);
@@ -754,9 +760,20 @@ function withAcceptedReactions(before, after, time) {
   let reactionIntents = [];
   if (after.reactions?.enabled) {
     const set = compiled(after, after.reactions);
-    reactionIntents = evaluateReactions(set, { type: "score-recorded", scopeId: after.id, gameId: game.id, eventId: score.id, actorId, category: score.category, value: score.value, acceptedAt: popup.acceptedAt, roomRevision: after.revision }, { now: acceptedAt });
+    reactionIntents = compactIntents(evaluateReactions(set, { type: "score-recorded", scopeId: after.id, gameId: game.id, eventId: score.id, actorId, category: score.category, value: score.value, acceptedAt: popup.acceptedAt, roomRevision: after.revision }, { now: acceptedAt }));
   }
-  return { ...after, reactionPopup: popup, reactionIntents };
+  reactionQueue.push({ popup, intents: reactionIntents, expiresAt: new Date(acceptedAt + REACTION_LIVE_MS).toISOString() });
+  return { ...after, reactionPopup: popup, reactionIntents, reactionQueue: reactionQueue.slice(-REACTION_QUEUE_LIMIT) };
+}
+function compactIntents(intents) {
+  const winners = /* @__PURE__ */ new Map();
+  for (const intent of intents) for (const action of intent.actions) winners.set(intent.recipientId + ":" + action.type, { intent, action });
+  const grouped = /* @__PURE__ */ new Map();
+  for (const { intent, action } of winners.values()) {
+    if (!grouped.has(intent.intentId)) grouped.set(intent.intentId, { ...intent, actions: [] });
+    grouped.get(intent.intentId).actions.push(action);
+  }
+  return [...grouped.values()];
 }
 
 // src/commentary/facts.js
