@@ -5,7 +5,7 @@ export function createUpdateController({config,bridge,getInfo,storage,fetcher=fe
  function read(){let s;try{const raw=storage.getItem(UPDATE_STORAGE);if(raw&&raw.length>48000)throw Error();s=raw?JSON.parse(raw):{schema:1,highest:0};if(s.schema!==1||!Number.isSafeInteger(s.highest)||s.highest<0)throw Error();}catch{throw Error('Update history is unavailable. Keep the current version.');}return s;}
  const write=s=>{try{storage.setItem(UPDATE_STORAGE,JSON.stringify(s));}catch{throw Error('Could not save update history. The running version is unchanged.');}};
  const exclusive=fn=>async(...args)=>{if(operation)throw Error('An update operation is already running.');operation=true;try{return await fn(...args);}finally{operation=false;}};
- const verify=(e,info,highest)=>verifyManifest(e,config,{nativeInfo:info,highest,now:now(),cryptoApi});
+ const verify=async(e,info,highest)=>verifyManifest(e,config,{nativeInfo:info,highest,now:now(),cryptoApi,runningVersion:(await bridge.current()).bundle.version});
  const safe=()=>{if(!canActivate())throw Error('Return to Home and finish any pending score or save before switching versions.');};
  async function status(){const s=read(),current=await bridge.current(),info=await getInfo();return{current:current.bundle,native:info,staged:s.staged?.manifest?.version||null,previous:s.previous?.version||null,failure:s.failure||null,configured:!!config};}
  const check=exclusive(async()=>{
