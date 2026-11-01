@@ -1,5 +1,7 @@
 # SW079: Local update hosting and signing handover
 
+1 November SW079 signed device installation: Amber built/signed locally in Xcode for her physical iPhone. Verified deep/strict signature, app ID `com.fluiditygroup.diceclubhouse.dev`, unchanged team `2YD8HRPQ93`, target-device inclusion, entitlements and profile expiry `2026-11-08T20:52:45Z`. All 57 qualified web assets match source `3ff068b`; two additional Capacitor Cordova stubs are empty. Same-ID in-place install succeeded and fresh device metadata confirms version1.0/build79 replacing build70. No uninstall, app-data clearing, container read or remote signing occurred. Launch is blocked by iOS security (untrusted profile/invalid signature/inadequate entitlements); local package checks passed and Amber has been asked to trust the Developer App profile on her iPhone. Launch and owner account/avatar/game retention acceptance remain pending. Feed publication/physical OTA rollback tests remain pending; Android, web/backend and master are unchanged. This supersedes earlier unsigned/not-installed notes below.
+
 ## Current build checkout and server — 1 November 2026
 
 Mac build checkout: **`/Users/ambercavanaugh/Developer/yahtzee-sw079-3ff068b/source`**, clean detached qualified commit `3ff068b490a587a636b888522b6da1fe5b95b3f5`, cloned through a Git source bundle so build identity is preserved. Earlier source tar archives contain no `.git`; use this real checkout for build tooling. Old Mac checkouts were preserved.
