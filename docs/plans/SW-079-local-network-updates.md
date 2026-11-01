@@ -1,6 +1,6 @@
 # SW079: Manual local-network iPhone updates
 
-1 November 2026. Owner: Dan. Implementer: Codex/fluidity. State: implemented; qualification in progress. Isolated `codex/sw079-local-app-updates`, based on SW078 `67159a2`. Phone installation waits for tests and fresh Mac/signing/device checks. No backend/database/web deployment or Android installation is in scope.
+1 November 2026. Owner: Dan. Implementer: Codex/fluidity. State: implemented and automatically verified; not deployed/physically accepted. Isolated `codex/sw079-local-app-updates`, based on SW078 `67159a2`. Phone installation waits for tests and fresh Mac/signing/device checks. No backend/database/web deployment or Android installation is in scope.
 
 ## Requirements and acceptance
 
@@ -26,3 +26,5 @@ Sources checked 1 November: https://capgo.app/docs/plugins/updater/self-hosted/m
 ## Evidence and remaining gates
 
 Focused verification passed 59 tests across 9 files (including the existing build-identity tests), covering signed metadata, native/config/persistence fingerprint, corrupt/offline downloads, checksum mismatch, sequence replay, startup identity, watchdog restoration, explicit rollback, pending-save and dialog races, signing failures/concurrent publishers and private-file serving. First development full run found the existing shared build counter mismatch; aligned Settings/iOS/Android package metadata to build79 without weakening the invariant. Clean initial implementation c29517e passed the full gate; final semantic anti-downgrade refinements and synthetic actual-bundle qualification are being verified before review. Runtime dependency audit reports zero advisories. See ../handovers/SW-079-local-updates-admin.md for concrete TLS/key/packaging and physical acceptance steps. No native compilation, installation, key provisioning or server configuration has occurred.
+
+Final clean source 3ff068b: 1,456 tests/13 optional camera skips/all configured builds/source stable. Synthetic actual 57-file native bundle ZIP/signature/runtime roundtrip passed without a private-key file or real endpoint. See ../releases/SW-079-local-network-updates.md. Mac/signing, real HTTPS/trust settings and physical rollback/data acceptance remain open. No phone installed.
