@@ -1,6 +1,6 @@
 # SW078: Live migration baseline audit result
 
-31 October 2026, America/Chicago. Owner: Dan; operator/reviewer: Codex/fluidity. Original comparison was audit only. The authorised history repair and subsequent read-only checks are recorded below; no migration SQL, deployment or device action has run.
+31 October 2026, America/Chicago. Owner: Dan; operator/reviewer: Codex/fluidity. Original comparison was audit only. The authorised history repair and subsequent read-only checks are recorded below; the subsequently authorised Studio migration is recorded below. No Edge Function/web deployment or device action has run.
 
 **Result: the cumulative application schema and access controls match all 16 baseline migrations in the administrator-released export.** 262 catalog objects match, with 0 missing, 0 drifted and 0 extra application objects. The exact history-repair candidate list is [SW-078-history-repair-candidates.txt](SW-078-history-repair-candidates.txt). Dan subsequently approved the 16 baseline versions; the vetted history-only repair succeeded as recorded below. Studio 202610310001 is new work and is deliberately excluded.
 
@@ -86,3 +86,13 @@ Two subsequent migration listings, including one pinned to Studio commit `a3c522
 The vetted `db-push-dry-run --ref a3c5225e40e70ace0e6357b2733b143150bed9ef` exited 0 and listed only `202610310001_reaction_studio_drafts.sql`. It issued approval ID **`ab1c8bb7aa680829`** for that exact commit. Dan must OK this ID with Home Network before the administrator enables the one-use `db-push`; no apply has run. Do not substitute a later documentation commit/ref. The latest instruction explicitly holds deployments and phone updates.
 
 Evidence: `artifacts/sw078/schema-audit/history-repair-result.json` records command outcomes, versions, scope and the approval ID without credentials or application rows. Existing application data, jobs, permissions and buckets were not modified by this history-only operation. Backfills and cron commands remain unverified as above. Earlier approval/next-action instructions in this audit are the pre-repair sequence and are superseded by this result. This record update changes documentation only; the clean-code 1,404-test gate above remains the qualification evidence.
+
+## Approved Studio migration applied
+
+31 October 2026, America/Chicago (verification observed 1 November 00:00 UTC): the administrator confirmed Dan's one-use approval `ab1c8bb7aa680829` was enabled for commit `a3c5225e40e70ace0e6357b2733b143150bed9ef` and independently checked its single pending migration. The vetted `db-push --ref a3c5225e40e70ace0e6357b2733b143150bed9ef` ran once and exited 0, reporting application of only `202610310001_reaction_studio_drafts.sql`. This approval is spent. No retry or other migration was attempted.
+
+The requested default `migrations-list` showed all 17 versions recorded remotely. It lists Studio only on the Remote side because the shared coordination checkout remains the preserved 16-migration `bbfdec4` baseline. A further read-only listing pinned to the applied Studio ref confirmed all 17 matching Local/Remote entries, including `202610310001`. The shared branch was not switched or modified.
+
+Evidence: `artifacts/sw078/schema-audit/studio-migration-result.json`. These checks establish successful migration application and ledger recording, not complete Studio account-flow or post-deployment acceptance. No Edge Function was deployed, no web bundle was published and neither phone was touched. The latest explicit hold on those deployments remains in force; Studio is not yet live for existing-account testing. The preceding approval-pending notes are the historical pre-apply state.
+
+Documentation-only record checks: engineering inspection and whitespace validation; the prior clean 1,404-test/all-build gate remains the code qualification evidence and was not repeated for this record update.
