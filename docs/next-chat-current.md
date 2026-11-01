@@ -1,5 +1,7 @@
 # Current Yahtzee work: consolidated integration candidate
 
+SW079 actual Mac checkout prepared: `/Users/ambercavanaugh/Developer/yahtzee-sw079-3ff068b/source` at clean qualified3ff068b, with validated real public update/phone config and unsigned iOS device build passed (57 compiled assets matched). Amber signs locally; no install or release publication. Admin HTTPS service is up with an empty feed404; per-bundle signing/submission command is not announced. Read SW079 release/admin handover before further work.
+
 Mac connection is verified: `ssh amber-mac` as fluidity; do not use the IP directly. Portable Node24.19.0/Xcode27.1 and the connected physical iPhone were read-only checked. Amber must sign locally at the Mac; do not unlock the SSH-session keychain or use a signing workaround. Real updater HTTPS/public-key configuration, native compilation and owner-local signing/install remain. Read handovers/SW-079-local-updates-admin.md.
 
 SW079 active iPhone-update task: isolated codex/sw079-local-app-updates at artifacts/sw079/source, based on SW078 67159a2. Native updater source is qualified at 3ff068b (1,456 tests/13 optional skips/all builds plus synthetic signed release); no iPhone install or server deployment. Read plans/SW-079-local-network-updates.md and handovers/SW-079-local-updates-admin.md. Do not confuse a prepared native web bundle with a signed physical-iPhone build; TLS/key and Mac/device/signing gates remain.

@@ -1,5 +1,20 @@
 # SW079: Local update hosting and signing handover
 
+## Current build checkout and server — 1 November 2026
+
+Mac build checkout: **`/Users/ambercavanaugh/Developer/yahtzee-sw079-3ff068b/source`**, clean detached qualified commit `3ff068b490a587a636b888522b6da1fe5b95b3f5`, cloned through a Git source bundle so build identity is preserved. Earlier source tar archives contain no `.git`; use this real checkout for build tooling. Old Mac checkouts were preserved.
+
+The approved public `.updates.local.json` has already been copied there, together with validated public-only `.env.ios-test.local`. No private key/session was copied. Public trust settings hash matches fg-dev: `1d0a16a7f9b323879b9be66ffa349ed3359b98b6b1fc21f5a8a3bbb8076a8f2f`. Real manifest endpoint is `https://fg-dev.taila7bb48.ts.net/yahtzee/ios-test.json`, channel `ios-test`, RSA-3072 public SPKI. Administrator-owned private signing key stays on fg-dev; public copies are under `/srv/yahtzee-updates/public/`. The administrator reports `yahtzee-updates.service` running pinned3ff068b on Node24.22.2/loopback8475 behind nginx, serving `/srv/yahtzee-updates/releases`. Normal TLS and expected empty-feed404 were independently checked from both fg-dev and Mac; no redirects or TLS exceptions. No manifest or bundle was published.
+
+Actual Mac preparation (`npm ci` with project-local cache; preflight; Vite ios-test build; five-plugin SPM sync) and unsigned generic iOS device compilation succeeded. Build outputs/dependencies are scoped under the new project. `CODE_SIGNING_ALLOWED=NO` and `CODE_SIGNING_REQUIRED=NO`; no keychain command/workaround or signing/provisioning update was attempted. App at `artifacts/sw079/DerivedData/Build/Products/Debug-iphoneos/App.app` is unsigned/unprovisioned and **must not be treated as installable**. Native bundle ID remains `com.fluiditygroup.diceclubhouse.dev`, version1.0/build79; all57 prepared/synced/compiled assets match.
+
+Configured native runtime (same independently computed on fg-dev and Mac): `clubhouse-ios-updates-1:bf0fd70d0af5dddb702d33990163290bd4c0cdd75651f990ccaf79fcbc44ef09`. Do not substitute the synthetic-test runtime. Source digest remains `ebf71f8d4037c61d2d615650ae57faa1e7b2315ec7342f57a48bec9c11878125`. Mac evidence: `artifacts/sw079/unsigned-device-build.log`, `unsigned-build-report.json`, `configured-assets.json`; sanitized reports also preserved in fg-dev task artifacts. Executable SHA-256 before signing: `cce332b30671b1854a741a11dd1ce096a3ea605951fedc16410aa2beccfcaa95`. Signing will change relevant package identities and needs fresh readback.
+
+Amber's local next step is opening `ios/App/App.xcodeproj` in this checkout, checking the existing team/app ID and physical iPhone, then signing/building through her normal unlocked local session. She handles Apple prompts. No signed build or installation has happened.
+
+**Update publication is not open.** The administrator will announce a fixed command with Dan approval per bundle ID. Do not invent/implement a submission protocol, use the raw signing-key CLI as Codex, access the private key or publish diagnostic/synthetic artifacts. The generic packaging examples below describe implementation capabilities, not an approved current publication procedure.
+
+
 ## Verified Mac connection — 1 November 2026
 
 From fg-dev as `fluidity`, use **`ssh amber-mac '<command>'`**. The administrator configured its identity and strict host-key entry. Direct-IP SSH is not equivalent and fails by design; do not rediscover/copy keys or weaken host checks. Fresh verification returned `ambercavanaugh`, host `amber-mac.home.arpa`, Apple Silicon macOS26.6.2 and Xcode27.1 (27A9275), selected at `/Applications/Xcode.app/Contents/Developer`. `devicectl` sees Amber's physical iPhone17Pro connected; simulator entries are separate and are not installation targets.

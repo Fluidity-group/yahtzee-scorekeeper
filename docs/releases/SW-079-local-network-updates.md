@@ -1,6 +1,6 @@
 # SW079: Local-network iPhone updater qualification
 
-1 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. **Implemented and automatically verified; not installed, signed or physically accepted.** Isolated branch `codex/sw079-local-app-updates`, stacked on SW078/PR #11 at `67159a2`. Shared coordination checkout, deployed web/backend and installed phones remain unchanged.
+1 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. **Implemented, automatically verified and unsigned native-device compilation verified; not installed, signed or physically accepted.** Isolated branch `codex/sw079-local-app-updates`, stacked on SW078/PR #11 at `67159a2`. Shared coordination checkout, deployed web/backend and installed phones remain unchanged.
 
 ## Qualified source and checks
 
@@ -43,3 +43,11 @@ Mac SSH is now verified through `amber-mac`, with Node24.19.0, Xcode27.1 and the
 OTA does not extend Apple provisioning. The supported alternative to free Personal Team's seven-day profile is Apple Developer Program membership, currently US$99/year/local equivalent, and an appropriate distribution method. TestFlight provides up to 90 days per build; publish replacements thereafter. Preserve existing app/team identity when choosing enrolment/signing, and review any team migration before installation. Owner handles membership/payment/Apple credentials; Codex has not purchased, enrolled or changed accounts.
 
 Sources checked: [Apple membership](https://developer.apple.com/programs/) and [TestFlight overview](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview/).
+
+## Real trust configuration and unsigned Mac compilation
+
+1 November: the administrator configured trusted HTTPS hosting and public RSA-3072 verification settings, and reserved signing/publication for a future fixed Dan-approved per-bundle command. No submission procedure has been announced; no keys were accessed or release submitted. The release feed is empty and returns404 normally over trusted HTTPS.
+
+Prepared clean actual Git checkout `/Users/ambercavanaugh/Developer/yahtzee-sw079-3ff068b/source` at qualified3ff068b. Its ignored updater/app configs were copied and validated without private material. Normal TLS/empty-feed reachability and exact public-config hash match were verified on both hosts. Mac Node24.19.0/Xcode27.1 preparation/SPM sync passed. Generic iOS-device build succeeded with signing explicitly off and project-local build/package paths. All57 compiled assets match prepared/synced files and source/build identity; app ID unchanged, version1.0/build79. Unsigned app has neither code signature nor embedded provision. No phone installed; this is not signing/device-acceptance evidence.
+
+Actual native runtime is `clubhouse-ios-updates-1:bf0fd70d0af5dddb702d33990163290bd4c0cdd75651f990ccaf79fcbc44ef09`, identically computed on Mac/fg-dev from the real public configuration. Evidence: `artifacts/sw079/live-trust-check.json`, `configured-runtime.json`, `mac-unsigned-build-report.json`, `mac-configured-assets.json`; full unsigned build log remains in the Mac checkout. See the updated administrator/Mac handover for exact paths and owner-local signing steps. Earlier missing-server/Mac gates above are historical; remaining gates are Amber-local signing and physical storage/update/rollback acceptance plus the administrator's announced signing/publication procedure.
