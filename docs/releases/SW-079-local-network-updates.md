@@ -36,7 +36,7 @@ Ignored `artifacts/sw079/handoff/yahtzee-sw079-3ff068b-source.tar.gz`, tracked q
 
 Dan authorises this feature in the next iPhone build and tests before installation. Automated checks are complete; next obtain the actual HTTPS hostname/public verification key and Mac access, then build fresh configured assets with those exact inputs, compile/sign for Amber's physical iPhone, compare identity/team/profile and install without uninstall/data clearing. Verify accounts/avatars/games retained, staging during play/offline behavior, explicit Home activation and deliberately broken synthetic startup fallback. Only physical evidence can close those gates. No need to re-ask the same feature/install permission; ask only for missing access, owner-local Apple prompts or a material signing/app-identity change.
 
-Current real TLS/key and Mac/signing/device access remain unavailable. Do not install a disabled-trust or synthetic-key build to complete the task. Existing owner phone data stays untouched. No independent review, device acceptance, live server publication, Android update or master promotion is implied by this source qualification.
+Mac SSH is now verified through `amber-mac`, with Node24.19.0, Xcode27.1 and the physical iPhone connected. Signing remains owner-local because the SSH keychain is locked; no unlock/workaround is authorised. Actual HTTPS/public-key trust configuration and native compilation/signing/physical acceptance remain outstanding. Do not install a disabled-trust or synthetic-key build to complete the task. Existing owner phone data stays untouched. No independent review, device acceptance, live server publication, Android update or master promotion is implied by this source qualification.
 
 ## Seven-day signing limit
 

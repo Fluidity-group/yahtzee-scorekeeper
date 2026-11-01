@@ -1,5 +1,14 @@
 # SW079: Local update hosting and signing handover
 
+## Verified Mac connection — 1 November 2026
+
+From fg-dev as `fluidity`, use **`ssh amber-mac '<command>'`**. The administrator configured its identity and strict host-key entry. Direct-IP SSH is not equivalent and fails by design; do not rediscover/copy keys or weaken host checks. Fresh verification returned `ambercavanaugh`, host `amber-mac.home.arpa`, Apple Silicon macOS26.6.2 and Xcode27.1 (27A9275), selected at `/Applications/Xcode.app/Contents/Developer`. `devicectl` sees Amber's physical iPhone17Pro connected; simulator entries are separate and are not installation targets.
+
+Node is absent from the default noninteractive SSH PATH. The previously documented portable toolchain was verified: `/Users/ambercavanaugh/Developer/yahtzee-tools/node-v24.19.0-darwin-arm64/bin` provides Node24.19.0/npm11.17.0; system Git is2.54.0. Prepend that directory per build shell; do not install a global runtime or edit startup files.
+
+The owner/administrator states that Amber's login keychain is locked in SSH sessions. **Signing must be performed by Amber locally at the Mac.** SSH is available for read-only checks and project preparation/unsigned compilation; do not attempt keychain unlock, credential transfer or a desktop-session signing workaround. No signing, installation, remote file edit or keychain command was performed by these checks. Real update HTTPS/public-key configuration remains outstanding before the enabled native build.
+
+
 The owner requests manual local-network updates in the next iPhone build. Source implements the updater; this document is a setup specification, not evidence of deployment. Server administration, deployment-key provisioning, Mac compilation/signing and physical phone validation are still needed. Never install an unconfigured updater build merely to complete a task.
 
 ## Public native trust configuration
