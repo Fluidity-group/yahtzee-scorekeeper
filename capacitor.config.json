@@ -9,6 +9,20 @@
   "plugins": {
     "SystemBars": {
       "insetsHandling": "disable"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "updateUrl": "",
+      "statsUrl": "",
+      "channelUrl": "",
+      "autoDeletePrevious": false,
+      "autoDeleteFailed": false,
+      "resetWhenUpdate": true,
+      "httpsOnly": true,
+      "allowHttpsToHttpRedirect": false,
+      "allowModifyUrl": false,
+      "allowPreview": false,
+      "appReadyTimeout": 30000
     }
   },
   "ios": {
@@ -18,7 +32,8 @@
       "@capacitor/app",
       "@capacitor/haptics",
       "@capacitor/push-notifications",
-      "@capacitor/status-bar"
+      "@capacitor/status-bar",
+      "@capgo/capacitor-updater"
     ],
     "contentInset": "never"
   }

@@ -10,8 +10,9 @@ const path=resolve(root,'.env.ios-test.local');
 if(!existsSync(path))throw Error('Missing .env.ios-test.local. Use the public configuration supplied with the Mac test handoff.');
 const fields=validateIosTestConfig(readFileSync(path,'utf8'));
 for(const pkg of['core','cli','ios']){const version=JSON.parse(readFileSync(resolve(root,'node_modules/@capacitor/'+pkg+'/package.json'),'utf8')).version;if(version!=='8.5.2')throw Error('Expected Capacitor '+pkg+' 8.5.2, found '+version);}
+if(JSON.parse(readFileSync(resolve(root,'node_modules/@capgo/capacitor-updater/package.json'),'utf8')).version!=='8.54.0')throw Error('Expected qualified updater 8.54.0.');
 const ios=JSON.parse(readFileSync(resolve(root,'capacitor.config.json'),'utf8'));
-if(JSON.stringify(ios.ios?.includePlugins)!==JSON.stringify(['@capacitor/app','@capacitor/haptics','@capacitor/push-notifications','@capacitor/status-bar']))throw Error('Only qualified App, Haptics, Push and StatusBar adapters belong in the manual iOS target.');
+if(JSON.stringify(ios.ios?.includePlugins)!==JSON.stringify(['@capacitor/app','@capacitor/haptics','@capacitor/push-notifications','@capacitor/status-bar','@capgo/capacitor-updater']))throw Error('Only qualified App, Haptics, Push, StatusBar and Updater adapters belong in the manual iOS target.');
 console.log('Node '+process.versions.node+'; Capacitor 8.5.2; public app config valid; voice disabled.');
 console.log('Multiplayer backend: '+new URL(fields.VITE_SUPABASE_URL).hostname+' (no keys printed).');
 if(mac){const r=spawnSync('xcodebuild',['-version'],{encoding:'utf8'});if(r.status!==0)throw Error('Open Xcode once to finish its setup, then select Xcode in Settings > Locations > Command Line Tools.');const match=r.stdout.match(/Xcode\s+(\d+)/);if(!match||Number(match[1])<26)throw Error('Xcode 26 or later is required by this Capacitor target.');console.log(r.stdout.trim());}

@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import { resolve } from 'node:path';
 import { VitePWA } from 'vite-plugin-pwa';
 import { ttsProxyPlugin } from './server/ttsProxy.js';
+import {readUpdateConfig} from './scripts/updates-config.mjs';
 import { releaseIdentityPlugin } from './scripts/release-identity-plugin.mjs';
 
 // Phase 2+: vanilla JS app, PWA shell, and a dev/preview-only proxy for ElevenLabs TTS
@@ -12,13 +13,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), ''); // load all vars (incl. unprefixed ELEVENLABS_API_KEY)
   const getElevenKey = () => process.env.ELEVENLABS_API_KEY || env.ELEVENLABS_API_KEY || '';
   return {
+    define: {__YAHTZ_UPDATE_CONFIG__:JSON.stringify(readUpdateConfig(process.cwd(),mode))},
     resolve: { alias: { '#dice-panel': resolve(evaluation ? 'local-evaluation/godice/panel.js' : 'src/dice/connection-ui.js') } },
     base: native ? '/' : (env.VITE_PUBLIC_BASE || '/'),
     // Bind to all interfaces so the dev server is reachable from a phone on the LAN.
     server: { host: true, port: 8473, strictPort: true },
     preview: { host: true, port: 8474, strictPort: true },
     plugins: [
-      releaseIdentityPlugin(process.cwd(), mode),
+      releaseIdentityPlugin(process.cwd(), mode,Object.fromEntries(['VITE_SUPABASE_URL','VITE_SUPABASE_ANON_KEY','VITE_GAME_WEB_URL','VITE_PUSH_ENABLED','VITE_COMMENTARY_URL','VITE_EMAIL_OTP_ENABLED'].map(key=>[key,env[key]||'']))),
       ...(evaluation ? [{name:'local-dice-evaluation',generateBundle(){this.emitFile({type:'asset',fileName:'godice-evaluation.json',source:JSON.stringify({distribution:'local-android-evaluation'})});}}] : []),
       ttsProxyPlugin(getElevenKey),
       VitePWA({
