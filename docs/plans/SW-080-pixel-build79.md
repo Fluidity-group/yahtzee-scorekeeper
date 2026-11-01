@@ -1,6 +1,6 @@
 # SW080: Align the Pixel with qualified iPhone build79
 
-1 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Software release task; preparation in progress, not installed or physically accepted. Branch `codex/sw080-pixel-build79`, base `5345722` on SW079/PR #12. Shared coordination checkout remains untouched.
+1 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Software release task; qualified, installed and launched; owner data/gameplay acceptance pending. Branch `codex/sw080-pixel-build79`, base `5345722` on SW079/PR #12. Shared coordination checkout remains untouched.
 
 ## Purpose and requirements
 
@@ -17,8 +17,8 @@ Reproduced the clean source web bundle on fg-dev because the Mac became unreacha
 
 ## Verification and execution bounds
 
-Installed Pixel build71 and public APK are preserved under ignored `/srv/yahtzee/main/artifacts/sw080/`. Current certificate SHA256 `e65e9ca5a9dbb4b3596c4482186076c58212f747accc00214af3785f506ffba8`. Preparation assets match57/57; Android native build/tests and clean-source engineering gate are pending. Do not install on test, identity or signer failure. No private app container, credentials or gameplay commands are needed.
+Installed Pixel build71 and public APK are preserved under ignored `/srv/yahtzee/main/artifacts/sw080/`. Current certificate SHA256 `e65e9ca5a9dbb4b3596c4482186076c58212f747accc00214af3785f506ffba8`. Preparation assets match57/57; Android19native tests and clean b6519f9 full gate1,456tests/13optional camera skips/all builds/source stable passed. Do not install on test, identity or signer failure. No private app container, credentials or gameplay commands are needed.
 
 ## Completion
 
-Pending: native/full checks, candidate verification, same-ID/signer install and launch. See the identified release record for resulting artifact hashes and device evidence. Codex self-review is not independent acceptance.
+Completed: native/full checks, same-signer/57-asset verification, install-r and exact installed APK readback, preserved UID/first-install timestamp and successful cold launch. Existing account/avatar/saved-game and paired gameplay acceptance remain owner checks. See ../releases/SW-080-pixel-build79.md for exact identities and evidence. Codex self-review is not independent acceptance.
