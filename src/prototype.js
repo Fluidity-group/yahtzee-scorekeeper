@@ -499,7 +499,7 @@ async function openMultiplayer(joinCode='',landing='home'){clearSlotRain();
    onlineRoom=room;onlineUserId=userId;onlineConnected=connected;game=room.game;syncHostedCommentary();
    if(redraw){render();celebrate(previous,game);}
   },
-  connection(connected){onlineConnected=connected;syncHostedCommentary();if(onlineRoom)render();},
+  connection(connected){if(onlineConnected===connected)return;onlineConnected=connected;syncHostedCommentary();if(onlineRoom)render();},
  },joinCode,landing);
 }
 function cancelBonus(){if(dialog.dataset.bonusConfirmation){delete dialog.dataset.bonusConfirmation;reportedFace=0;render();}}

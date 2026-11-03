@@ -3,7 +3,7 @@ import{portraitSession,requestPortrait}from'./portrait-api.js';
 import{setAccountAvatar,setPeerAvatars}from'./avatar-view.js';
 let ticket=0,lastOwner=null;
 export async function refreshAccountAvatar(){const token=++ticket;if(!configured||!auth)return;try{const session=await portraitSession();if(token!==ticket)return;if(!session){lastOwner=null;setAccountAvatar(null);return;}if(lastOwner!==session.user.id){setAccountAvatar(null);lastOwner=session.user.id;}const {profile}=await requestPortrait({operation:'profile'},{timeoutMs:15000,expectedOwner:session.user.id});if(token===ticket&&profile.ownerId===session.user.id)setAccountAvatar(profile);}catch{/* Existing avatar/preset remains usable during a connection failure. */}}
-export async function refreshTableAvatars(code){try{const data=await requestPortrait({operation:'peers',code},{timeoutMs:15000});setPeerAvatars(data.profiles);return true;}catch{return false;}}
+export async function refreshTableAvatars(code){try{const data=await requestPortrait({operation:'peers',code},{timeoutMs:15000});return setPeerAvatars(data.profiles);}catch{return false;}}
 export function watchAccountAvatars(onChange=()=>{}){
  if(!configured||!auth)return()=>{};
  const refresh=()=>{if(!document.hidden)void refreshAccountAvatar();};
