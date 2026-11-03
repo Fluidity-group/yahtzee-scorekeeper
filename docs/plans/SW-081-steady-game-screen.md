@@ -1,6 +1,6 @@
 # SW081: Stop idle game-screen redraws
 
-3 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Software defect fix; implemented with focused synthetic coverage, full qualification pending. Isolated `codex/sw081-steady-game-screen` at `artifacts/sw081/source`, based on stack tip `bc1db15` (`codex/sw080-pixel-build79`, PR #13). Amber's worktree/branch are untouched. Installed phones remain build79; no deployment is authorised by this fix task.
+3 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Software defect fix; implemented and automatically qualified; physical acceptance pending. Isolated `codex/sw081-steady-game-screen` at `artifacts/sw081/source`, based on stack tip `bc1db15` (`codex/sw080-pixel-build79`, PR #13). Amber's worktree/branch are untouched. Installed phones remain build79; no deployment is authorised by this fix task.
 
 ## Report and reproduction
 
@@ -18,7 +18,7 @@ Avatar setters now distinguish visible identity (owner/kind/preset/avatar ID/ima
 - UI2: genuine new portraits/image availability and real room revisions still display; offline/reconnect still blocks/restores scoring, repeated offline polls do not redraw. Covered in the product-controller regression.
 - UI3: local manual scorecard remains mounted over65seconds; own/peer caches retain renewed URLs and newest revisions, account clear/replacement still works, failed avatar requests preserve saved graphics. Seven focused avatar-cache tests plus the integrated idle test. Review additionally reproduced a delayed own-avatar display after suppressing forced polls; real own-avatar changes now refresh the relevant scorecard while unchanged reads remain silent. The integrated local/shared-avatar assertions fail without this follow-up; evidence: `../own-avatar-reproduction.log`.
 - Focused gate:67tests across11files passed, including avatar stability/animation, account-session, scoring, reactions, lobby and commentary wiring. Evidence: `../focused.log`; synthetic fixtures only, no live requests or phone data.
-- Full configured Node24 gate: pending. Physical iOS/Android idle graphics, scoring and reconnect acceptance remains required after an independently authorised build/install.
+- Clean `1f5bbad3202a24a97295683d755254e0dc52467e` Node24.15.0 full gate passed: **1,464 tests,13 optional camera skips, all configured web/native-web/Edge builds, unchanged source**. Source digest `60658be529536111c459720797bfb1f04b4e569db3d161dadc59beab51b05fde`; evidence `artifacts/engineering/2026-11-03T15-12-59-145Z-47e85dc0/report.json`. No native compilation or physical phone testing was performed for this shared-JavaScript fix. Physical iOS/Android idle graphics, scoring and reconnect acceptance remains required after an independently authorised build/install.
 
 ## Completion and rollback
 
