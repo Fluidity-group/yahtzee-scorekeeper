@@ -40,7 +40,7 @@ async function requestRoomWithin(payload,{expectedUserId,within,signal,mark}){
  if(lookup?.error)throw new Error(onlineErrorMessage(lookup.error));
  const session=lookup?.data?.session;
  if(!session)throw new Error('Please sign in again.');
- if(expectedUserId&&session.user?.id!==expectedUserId)throw new Error('Your account changed. Reopen Studio for the current account.');
+ if(expectedUserId&&session.user?.id!==expectedUserId)throw new Error('Your account changed. Reopen this page for the current account.');
  let response;const body=JSON.stringify(payload),operation=payload.operation;
  // Reuse the exact command ID on an uncertain network retry.
  for(let attempt=0;attempt<2;attempt++){

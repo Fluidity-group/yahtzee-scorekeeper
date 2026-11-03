@@ -5,7 +5,7 @@ import {readMidnight,saveMidnight} from '../ui/midnight-profile.js';
 import {setAccountAvatar,setPeerAvatars} from '../profile/avatar-view.js';
 import {onlineErrorMessage,waitForOnline} from '../multiplayer/connection.js';
 
-export function mountReactionStudio(root,{auth,configured,request,watch=()=>()=>{},avatars=async()=>[],emailOtpEnabled=false,homeUrl='/',syncPreview=syncScorePresentation,clearPreview=clearScorePresentation}={}){
+export function mountReactionStudio(root,{auth,configured,request,watch=()=>()=>{},avatars=async()=>[],emailOtpEnabled=false,homeUrl='/',reportsUrl=null,syncPreview=syncScorePresentation,clearPreview=clearScorePresentation}={}){
  let generation=0,accountEvents=0,disposed=false,stopWatching=()=>{},poll=null,saveRetry=null,publishRetry=null,dialogState=null,authMode='password',accountTimer=null;
  const s={user:null,rooms:[],room:null,drafts:[],selected:null,dirty:false,busy:false,loading:false,status:'',configConflict:false,draftConflict:false,published:false,preview:{recipientId:'',value:25}};
  const current=t=>!disposed&&t===generation;
@@ -17,7 +17,7 @@ export function mountReactionStudio(root,{auth,configured,request,watch=()=>()=>
  function message(text){s.status=text;const e=root.querySelector('[data-studio-status]');if(e)e.textContent=text;}
  function buttons(){const review=root.querySelector('[data-studio-action="review"]');if(review)review.disabled=s.busy||!s.selected?.revision||s.dirty||s.configConflict||s.draftConflict||s.published;}
  function busy(value){s.busy=value;root.querySelectorAll('form input,form select,form textarea,form button,[data-studio-table],.studio-toolbar button,.studio-library button').forEach(e=>e.disabled=value);if(!value){updateFormControls(root);if(s.selected?.readonly)root.querySelectorAll('.studio-reaction-form fieldset').forEach(e=>e.disabled=true);}buttons();}
- function draw(){stopPreview();dialogState=null;root.innerHTML=s.user?studioView(s,{homeUrl,muted:readMidnight().muted}):gateView({configured,emailOtpEnabled,authMode,homeUrl,status:s.status});const rule=selectedRule();if(rule)populateRuleForm(root,s.room,rule);buttons();if(s.user&&rule)preview(false);}
+ function draw(){stopPreview();dialogState=null;root.innerHTML=s.user?studioView(s,{homeUrl,reportsUrl,muted:readMidnight().muted}):gateView({configured,emailOtpEnabled,authMode,homeUrl,status:s.status});const rule=selectedRule();if(rule)populateRuleForm(root,s.room,rule);buttons();if(s.user&&rule)preview(false);}
  function capture(){if(s.selected&&!s.selected.readonly&&root.querySelector('[data-studio-form="reaction"]'))s.selected.content=readRuleForm(root,s.selected);}
  function clearTable(){generation++;clearTimeout(accountTimer);stopWatching();stopWatching=()=>{};clearTimeout(poll);stopPreview();s.room=null;s.drafts=[];s.selected=null;s.dirty=false;s.busy=false;s.loading=false;s.configConflict=false;s.draftConflict=false;s.published=false;saveRetry=null;publishRetry=null;dialogState=null;}
  function showDialog(html,state){dialogState=state;const dialog=root.querySelector('[data-studio-dialog]');dialog.innerHTML=html;try{dialog.showModal();}catch{dialog.setAttribute('open','');}dialog.querySelector('button')?.focus();}
