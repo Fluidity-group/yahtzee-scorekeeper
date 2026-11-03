@@ -1,5 +1,9 @@
 # Amber: start here
 
+Reporting is live: [Clubhouse Reports](https://fluidity-group.github.io/yahtzee-scorekeeper/?reports=1). Sign in with your existing game account. Test **Overall tournament results** against one completed tournament, then **Player patterns** for each player under a matching rules contract. Use Refresh reports after a saved game changes. Reports include accessible saved online tables; local-only phone games stay on their devices. Missing-history warnings are evidence gaps, not zero scores. Do not create replacement accounts or reinstall either app.
+
+PR #17 has landed the consolidated source into master; your PR #18 now targets master. Your worktree and commits are unchanged. Commit your own edits before fetching and merging `origin/master` in your own worktree; stop on conflicts and ask for help rather than reset/rebase. Keep phone deployment held.
+
 3 November 2026. Use `/srv/yahtzee/amber` on **fg-dev** and your own
 `amber/` topic branch; `/srv/yahtzee/main` is coordination-only. Read `AGENTS.md`,
 [latest handover](next-chat-current.md) and [status](status.md) first.
