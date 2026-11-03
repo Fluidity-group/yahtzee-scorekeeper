@@ -1,6 +1,6 @@
 # SW082: Overall tournament results and player patterns
 
-3 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Isolated `codex/sw082-clubhouse-reports`, base `11852da` (SW081/PR #15). State: implemented with focused regression coverage; full qualification pending. Owner approves the reporting concept, existing accounts/saved games, tests and PR; phone deployment stays held. Amber's worktree/branch are untouched.
+3 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Isolated `codex/sw082-clubhouse-reports`, base `11852da` (SW081/PR #15). State: implemented and automatically qualified; browser/live-account acceptance pending. Owner approves the reporting concept, existing accounts/saved games, tests and PR; phone deployment stays held. Amber's worktree/branch are untouched.
 
 ## Scope and contracts
 
@@ -34,8 +34,7 @@ use full canonical contracts rather than names or hashes. Missing sequence gaps,
 unavailable archives and incomplete completed tournaments remain explicit.
 
 Focused final run:117tests/13files passed (including56new reporting cases and
-adjacent transport/account/Studio/tournament/idle-screen checks). Full Node24 gate
-is pending. Evidence under ignored `/srv/yahtzee/main/artifacts/sw082/` includes
+adjacent transport/account/Studio/tournament/idle-screen checks). Final full Node24 gate passed; see exact evidence below. Evidence under ignored `/srv/yahtzee/main/artifacts/sw082/` includes
 `focused-final.log` and the synthetic browser harness/driver. No real account
 history was fetched during development.
 
@@ -46,6 +45,16 @@ runner was requested through fluidity-msg; `browser-check-blocked.json` records 
 limit. Viewport320/390/1024 checks/screenshots remain pending, not passed. DOM and
 routing tests cover both browser entry and exclusion of native reports activation.
 
-Remaining: clean full gate, review PR, approved web rollout and real existing-account
+Remaining: review PR, approved web rollout and real existing-account
 browser acceptance. Phone deployment and physical acceptance remain held. No
 independent review, default-branch promotion or production readiness is inferred.
+
+## Final qualification and completion
+
+Clean `8653b59206a6e1608f9450be8c29e0272f55156f` Node24.15.0 full gate: **1,520 tests passed,13 optional camera skips, all configured web/native-web/Edge builds passed, source unchanged**. Source digest `17b36ffa14afc91978613b497d3c388edc17592d3ff02452fc1d9575439df6e7`. Evidence: `artifacts/engineering/2026-11-03T22-07-34-771Z-a9496b21/report.json`. Later changes record documentation only.
+
+The requested overall-results and player-patterns source implementation is complete.
+Manual browser visual/live-account acceptance remains open because the native
+Chromium sandbox cannot launch on this host. No screenshots or physical acceptance
+are claimed. Full-suite/code checks, read-only/auth-race regressions and documented
+coverage pass; this does not authorise deploying the prepared source or phones.
