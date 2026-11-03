@@ -1,7 +1,7 @@
 # Amber: start here
 
-2 November 2026. Use `/srv/yahtzee/amber` on **fg-dev**, branch
-`amber/bug-testing`; `/srv/yahtzee/main` is coordination-only. Read `AGENTS.md`,
+3 November 2026. Use `/srv/yahtzee/amber` on **fg-dev** and your own
+`amber/` topic branch; `/srv/yahtzee/main` is coordination-only. Read `AGENTS.md`,
 [latest handover](next-chat-current.md) and [status](status.md) first.
 
 ## Run your edits
@@ -16,7 +16,7 @@ git branch --show-current
 git fetch origin
 ```
 
-Expect `amber` and `amber/bug-testing`. If dirty or unexpected, stop and identify
+Expect user `amber` and the topic branch you started. If dirty or unexpected, stop and identify
 the work; do not stash, reset or switch over it. Use **Node24** (`node --version`),
 run `npm ci`, and ask Dan/admin to provision the validated, ignored public-only
 `.env.ios-test.local` in your worktree. Never paste its values into chat or Git.
@@ -75,10 +75,12 @@ steps, expected/actual result, frequency and a redacted screenshot/video. Use
 synthetic player labels/scores; omit personal data, tokens and reset/invite links.
 
 Keep fixes scoped, add a regression test and commit before handing over. Push
-explicitly: `git push -u origin amber/bug-testing`. Target the **newest confirmed
-stack branch**, not master; currently `codex/sw080-pixel-build79`
-([PR13](https://github.com/Fluidity-group/yahtzee-scorekeeper/pull/13)). Check the
-open stack before each PR, link the bug and report checks/untested cases.
+explicitly with `git push -u origin <your-branch>` (substitute your actual branch
+name). New PRs target **master** after the SW083 landing; check
+[the current status](status.md) before starting. Fetch current master and integrate
+it with a normal merge on your own branch when your work is committed and safe;
+preserve edits and never reset/rebase shared history to catch up. Link the bug and
+report checks/untested cases.
 Full gate: Node24, `npm ci --prefix device/pi`, then
 `node scripts/engineering-check.mjs verify`; report optional camera skips.
 Never force-push or deploy phones/backend as part of an ordinary bug fix.
