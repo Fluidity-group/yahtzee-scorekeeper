@@ -1,6 +1,23 @@
 {
-  "published": false,
+  "published": true,
   "reportsUrl": "https://fluidity-group.github.io/yahtzee-scorekeeper/?reports=1",
-  "sourceCommit": null,
-  "phoneDeployment": "held"
+  "sourceCommit": "e083be4e23668c3aed24abb22a8fb1c147c8f476",
+  "phoneDeployment": "held",
+  "pagesCommit": "f455a9826d353b5937de30895d9773adad3ca508",
+  "sourceSha256": "cc951b4941cac2d0cf37ea2a6616b47cd8970084427959630bebf99397233138",
+  "publishedFileCount": 65,
+  "verifiedAt": "2026-11-03T22:30:29Z",
+  "rollbackPagesCommit": "17182646517759c29f68c29455450d58fb4667a3",
+  "backendDeployment": "unchanged",
+  "authenticatedOwnerAcceptance": "pending",
+  "ciRuns": {
+    "candidate": 41730206993,
+    "master": 41730756072
+  },
+  "evidenceSha256": {
+    "web-dist-manifest.json": "ca1d83f2e4f188057f4b3fea6871286f283a802435ee3f9c233f33721b5d6f0c",
+    "live-readback.json": "cc629a120c37577f3be4abee788563ee29b062b1bac8ee263f65fe9154787487",
+    "production-local-browser.json": "d317ecad4896886352b3c07fe78af217b4ef9606b83bd7a59b4ee8a0d398bec3",
+    "live-browser.json": "d317ecad4896886352b3c07fe78af217b4ef9606b83bd7a59b4ee8a0d398bec3"
+  }
 }

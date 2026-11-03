@@ -1,5 +1,7 @@
 # SW082: Overall tournament results and player patterns
 
+3 November SW083 follow-through: browser qualification passed, PR #17 is merged into master and reporting is live on the existing Pages website. The former browser blocker below is historical. See [SW083 release](../releases/SW-083-reporting-web-rollout.md) for exact source/assets, CI, rollback and owner-acceptance boundaries. Phone deployment remains held.
+
 3 November 2026. Owner: Dan. Implementer/self-review: Codex/fluidity. Isolated `codex/sw082-clubhouse-reports`, base `11852da` (SW081/PR #15). State: implemented and automatically qualified; browser/live-account acceptance pending. Owner approves the reporting concept, existing accounts/saved games, tests and PR; phone deployment stays held. Amber's worktree/branch are untouched.
 
 ## Scope and contracts
