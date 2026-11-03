@@ -1,0 +1,49 @@
+/* Player identity has the same strong ink as recorded scores. Preserve name casing. */
+#coreApp .player-name,.ribbon-player-name,.mp-roster strong,.saved-session-roster>span,
+.result-player,.home-profile-heading h2,.home-opponent-list strong,
+.tournament-standings tbody th,.tournament-standings td:first-child,
+.finale-honours figcaption,.finale-ledger tbody th,.score-actors figcaption,.celebration-copy>span{font-family:system-ui,sans-serif;font-weight:800}
+
+/* One line per ribbon label, including long account names. */
+html[data-art=midnight] .yahtz-home .home-ribbon{grid-template-columns:38px minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1fr) 32px;gap:2px}
+.home-ribbon button>span:not(.ribbon-player-avatar),.home-ribbon button>small,
+.home-ribbon .ribbon-player-name,.home-ribbon .ribbon-player-copy small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal}
+.home-ribbon .ribbon-player-copy{flex:1;min-width:0}
+.home-ribbon button:not(.home-theme-toggle)>span{font-size:clamp(10px,2.7vw,12px)}
+.home-ribbon button small{font-size:10px}
+@media(max-width:380px){.home-ribbon .ribbon-player-avatar{flex-basis:18px;width:18px;height:25px}}
+
+.resume-queue{position:relative;overflow:hidden;border-radius:5px;margin-bottom:13px;background:var(--club-second)}
+.resume-swipe-backdrop{position:absolute;inset:0;display:grid;align-content:center;padding:14px;font:800 14px system-ui;color:#24122f}
+html[data-art=midnight] .yahtz-home .resume-queue .home-resume{position:relative;z-index:1;margin:0;transform:translateX(var(--resume-drag,0px));touch-action:pan-y;will-change:transform}
+.resume-queue .resume-remove{position:relative;z-index:2;display:block;width:100%;min-height:44px;margin:0;border:0;border-radius:0;background:var(--club-panel);color:var(--club-text);font:650 12px system-ui;text-align:right;padding:8px 14px}
+.resume-removed{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;margin-bottom:13px;border:1px solid var(--club-line);border-radius:5px;font:500 13px/1.4 system-ui;color:var(--club-text)}
+.resume-removed button{min-height:44px;min-width:52px;font-weight:800}
+
+/* Printed holographic foil and raised sticker borders; text sits on quiet ink. */
+html[data-art=midnight] .yahtz-home .home-slot-machine{
+ background:radial-gradient(circle at 12% 14%,#fff7fd 0 1px,transparent 2px) 0 0/23px 29px,
+ radial-gradient(circle at 80% 40%,#ffb4f5 0 1px,transparent 2px) 8px 10px/31px 37px,
+ linear-gradient(125deg,#6b35a0,#a94594 28%,#453478 50%,#934ba7 72%,#e979bc);
+ border:3px solid #eec7ff;box-shadow:inset 0 0 0 4px #32184c,inset 0 0 0 7px #f39edb,0 6px 0 #241336,0 9px 0 #090b19,0 0 22px #bf65d73a}
+.yahtz-home .home-slot-machine::before{border-color:#fbcfff}
+.yahtz-home .home-slot-machine .slot-machine-top{border-color:#e9b7ff;background:linear-gradient(135deg,#29163e,#18152e);box-shadow:inset 0 0 0 4px #a452a5,0 3px 0 #24122f,0 0 14px #ed95f04d}
+.yahtz-home .home-slot-machine .slot-machine-top h2{color:#ffe9ff;text-shadow:1px 1px 0 #a93c88,2px 2px 0 #a93c88,3px 3px 0 #281433,0 0 13px #e5a4ff50}
+.yahtz-home .home-slot-machine .slot-machine-top::before{background-image:radial-gradient(circle,#ecc5ff 2px,#c484e099 3px,transparent 4px),radial-gradient(circle,#ff9fd5 2px,transparent 4px)}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{border-color:#e6b9f9;background:#261735}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card{border-color:#a56caf;border-block-color:#c387c6;background:linear-gradient(#967a9f,#f1ddf4 19%,#fff0fa 48%,#f0dced 81%,#a380aa)!important;box-shadow:inset 0 7px 10px #30183a40,inset 0 -7px 10px #30183a40,0 2px 0 #201329}
+.yahtz-home .home-slot-machine .slot-mode-symbol{color:#743a86;filter:drop-shadow(0 2px 0 #fff9)}
+.yahtz-home .home-slot-machine .slot-cabinet-lever i{background:#ff91d5;box-shadow:inset 3px 3px 0 #ffe3f6,0 0 12px #e49cff66,0 3px 0 #21102d}
+.yahtz-home .home-slot-machine .slot-machine-base>span{color:#fbd2ff}
+
+#coreApp .yahtzee-checks{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:3px;line-height:1.1;padding:2px 0}
+.bonus-check-history{display:flex;align-items:center;gap:3px;flex-wrap:wrap;justify-content:center}
+#coreApp .bonus-check{box-sizing:border-box;display:inline-grid;place-items:center;width:19px;height:19px;min-height:19px;min-width:19px;border:2px solid currentColor;border-radius:3px;font:800 15px/1 system-ui;color:var(--club-text);background:var(--club-panel)}
+#coreApp button.add-yahtzee.bonus-check{width:32px;height:32px;min-height:32px;min-width:32px;padding:0;box-shadow:none;border-style:dashed;cursor:pointer;font-size:25px}
+#coreApp .yahtzee-checks .bonus-total{font:800 12px/1.1 system-ui;color:var(--club-text)}
+#coreApp .yahtzee-checks .hidden-total{font-size:10px}
+#coreApp .yahtzee-bonus-under{display:block}
+#coreApp .yahtzee-bonus-under:has(.yahtzee-checks:empty){display:none}
+#coreApp .yahtzee-checks .bonus-undo{min-height:30px;padding:2px 4px;font-size:10px;margin:0}
+.score-presentation .upper-failure-note{font:650 clamp(13px,3.4vw,16px)/1.4 system-ui;margin:6px 0;color:#ffe0ed}
+@media(forced-colors:active){html[data-art=midnight] .yahtz-home .home-slot-machine,html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card,.yahtz-home .home-slot-machine .slot-machine-top{background:Canvas!important;color:CanvasText;border-color:CanvasText;box-shadow:none}.yahtz-home .home-slot-machine .slot-machine-top h2,.yahtz-home .home-slot-machine .home-game-card strong{color:CanvasText;text-shadow:none}.score-presentation .upper-failure-note{color:CanvasText}}

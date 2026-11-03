@@ -41,3 +41,21 @@ At handover record branch/commit, PR/dependencies, design decisions, check resul
 ## Automation boundaries
 
 Scripts automate inspection and deterministic tests/builds. Skills direct Codex to reconcile task memory and investigate failures. CI rechecks pushed work. No background Codex schedule, auto-commit, auto-merge, deployment or device testing is enabled by this setup. Those need a concrete purpose and suitable authorization. Human decisions, measurements, listening and physical acceptance remain explicit.
+
+## Required public assets and build identity (SW072)
+
+Production Vite builds validate public-assets.required.json before bundling and emit build-identity.json. Review path/hash changes in that contract alongside intended asset changes; builds reject missing, altered or undeclared public runtime assets. Optional camera runtimes are explicitly separate. This inventory covers known current assets, not unrecovered ROG/phone features. Baseline source/feature comparison and owner acceptance remain required.
+
+The application embeds the same commit, source state/digest and build profile and exposes them under clubhouse menu → More tools → About this build. Native app version/build comes separately from Capacitor App; active-game mode/rules labels are separate again. Modified builds are labelled. Ignored public configuration and final signed-package hashes are not part of the source digest; record their permitted release identities independently. Do not infer a complete or qualified product from build metadata alone.
+
+## Canonical integration after ROG recovery
+
+Use Fluidity-group/yahtzee-scorekeeper master as the single integration source. fg-dev hosts that repository; each Codex account uses a separate task worktree/branch and independent dependencies/build output. Worktrees are isolated development views of the same Git history, not competing product masters. Laptop/Mac source is an input archive or selected-commit build checkout, never an independent source to copy over master. Preserve original archives until recovery is reviewed.
+
+SW074 recovery is stacked on safeguards PR #6 and design PR #5. Human integration must reconcile that dependency order, retarget stacked PRs after squash merges and inspect their final diffs. Update clean developer bases normally after review, then verify source/profile/rules identity before testing. Code recovery does not update phones or services. Historical ROG and fg-dev SW numbers overlap; identify work by host/topic/commit and qualified artifacts.
+
+## Active consolidated candidate (SW075)
+
+Until Android/iOS phone acceptance, codex/yahtzee-integration is the single candidate base for isolated developer/task branches. It includes the normally merged phone record and the full design/safeguard/recovery chain. Superseded PRs are closed only after the consolidated PR is published; their branches/history are preserved. Master remains the last accepted integration baseline until the owner-approved phone gate and promotion. Both accounts must fetch/check the selected candidate commit before starting, use independent working folders and review normal merges; never simultaneously edit the candidate checkout.
+
+Current onboarding/handoff: docs/next-chat-current.md. Consolidated draft PR #8 supersedes PRs4–7; no master promotion occurred. Shared root is the coordination candidate checkout, while independent task worktrees hold edits for each developer/account.

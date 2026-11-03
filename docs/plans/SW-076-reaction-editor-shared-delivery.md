@@ -1,0 +1,51 @@
+# SW076: Table reaction editor and shared score popups
+
+31 October 2026. Owner: Dan. Implementer: Codex (fluidity on fg-dev). Independent development-agent review: independent_engine_avatar_review; findings/recheck recorded below. Human release approval is separate.
+
+State: implemented and automatically verified; not deployed or physically accepted.
+Baseline: bbfdec4630bc676d700b241bef2b8870d0a0c414 on codex/yahtzee-integration. Isolated implementation: codex/sw076-reaction-editor-delivery in artifacts/sw076/source. Shared coordination checkout stays untouched. Parent review is draft PR #8; master remains9179f73 until owner-approved Android/iOS testing.
+
+## Requirements and acceptance
+
+| ID | Observable requirement | Verification / actual evidence |
+|---|---|---|
+| RX1 | Author chooses scorer UUID, frame and any/exact/at-least/at-most/inclusive-range score condition. Chance=23 supports “Michael Jordan’s number!”. | configurable-reactions.test.js and reaction-editor.dom.test.js cover exact23/neighbours, range boundaries, invalid bounds and actual form payload. |
+| RX2 | One score popup contains scorer/frame/value and scorer avatar. Selected accounts receive custom caption/animation/sound; other members retain standard popup. | reaction-delivery.dom.test.js uses the production renderer with synthetic members; no separate custom popup system. |
+| RX3 | Settings survive reads/reloads and table rematches; future-only configuration revisions. Each member edits/removes only its own rules; host can pause all custom reactions. | room-reactions.test.js real HTTP handler, actual SQL persistence/RLS script; rematch coverage to be recorded. |
+| RX4 | Accepted score and delivery intents commit atomically with history and durable request receipt. Reject stale game/room/config, unauthorised actor and changed-payload retries. Corrections/Undo cancel rather than re-trigger. | room-reactions.test.js; scripts/test-room-reactions-db.mjs passes6disposable PostgreSQL checks. |
+| RX5 | Delivery retires on room/account/game/visibility changes; repeated snapshots/reloads cannot repeat a claimed popup. Explicit silent/still choices and device mute/reduced motion apply. | reaction-delivery.dom.test.js; avatar-video-presentation.dom.test.js; multiplayer-ui.dom.test.js. |
+| RX6 | Run full configured gate, preserve phone/backend state and report actual platform limits. | Clean76b96e9 Node24 engineering gate passed1,351tests/13optional camera skips/all configured builds/source stable. No device/backend/provider actions authorised or performed. |
+
+## Design and boundaries
+
+src/experience/reactions.js compiles immutable definitions and evaluates accepted facts without DOM/network/score mutation. Exact values and inclusive min/max conditions are independent of score legality; the existing game engine remains authoritative. The game-rule builder/versioned gameplay interpreter from SW075 is still a later slice, not implemented by this editor.
+
+src/experience/room-reactions.js applies authenticated ownership and config/room/game revision checks. server/rooms/handler.js validates the request, obtains a durable receipt, then commits room settings or accepted-score popup/intents through the existing room/history/receipt transaction. No schema migration, second database, realtime channel or client write permission is added. The generated game-room bundle is rebuilt from server sources. Competition v2 requests retain the current rulesVersion contract.
+
+Settings belong to the table, survive its next games and are bounded to32rules with at most one action of each type. Account UUIDs determine author/scorer/audience; aliases are display labels. Supported audiences: scorer, all others, everyone, selected members. All members can read shared room settings; targeted playback is not confidential messaging. Last saved matching action wins per action type in deterministic rule order. Delete/disable/host pause cancels pending custom actions while retaining default score presentation. Edits otherwise affect future accepted scores only.
+
+One renderer supplies both standard and customised popups, retaining the scorer/frame/value line and bonus/completion information. Ordinary score popups do not add a scoring lock; recovered special announcements keep their existing four-second authoritative pacing. The editor previews text/avatar locally without posting a score, creating media or invoking paid providers. Registered existing avatar clips are optional; a static avatar/motion fallback remains usable when a clip is unavailable. Sound and reduced-motion preferences remain local.
+
+Persistent claim-before-play stores only event identifiers and expiry locally, scoped per authenticated account/device. It establishes at-most-once attempts, not exactly-once audible output or offline push delivery. No browser autoplay, network or OS guarantee is invented. Fail closed on unavailable claim storage. A bounded queue retains16recent accepted scores for15seconds each, draining unseen events in acceptance order with up to4seconds of local display. An unusually large/old backlog expires rather than becoming offline replay. Winning actions are compacted per recipient/type with original rule attribution, bounding payload growth and allowing cancellation without rewriting accepted facts. Queue timestamps separate immutable acceptance from local playback start so delayed short video clips still play. Shared scoring locks expire at the original server deadline independently of queued display. Realtime carries the shared state; updated clients poll every3seconds as fallback rather than the older15second interval.
+
+## Evidence and remaining gates
+
+Focused editor/handler/pure matcher/delivery/multiplayer tests:51passed before final review changes. Actual SQL via PGlite0.5.11 and existing room/history/tournament migrations:6checks passed (config/receipt, score/popup/intents atomicity, replay collisions, stale-CAS no-write, member read/nonmember denial, client write/RPC denial). Synthetic data only; no hosted database touched. Report: artifacts/sw076/reaction-sql-report.json in the task worktree.
+
+Initial unrestricted-scope Vitest attempt under the sandbox passed1,336tests/13optional camera skips but failed4existing HTTP/Git boundary tests because listeners/child Git were denied. This is not a passing full gate. Re-run with the required reviewed execution permissions; do not weaken tests or change their timeouts.
+
+Independent review identified a Competition v2 request missing rulesVersion; the mutation adapter now sends the current game’s version, with handler and client regressions. First clean fed6063 gate passed1,343tests/13optional skips/all configured builds/source stable (artifacts/engineering/2026-10-31T18-40-07-652Z-44283a9c/report.json). Independent review then identified overwritten close-together scores and stale-clock lock extension. A bounded live queue, calibrated playback clock, separate lock deadline and permanent regressions address these; short delayed clips now use local playback start while acceptance remains immutable. Slow editor refresh disables controls to preserve drafts. Final independent67testrecheck and clean76b96e9 gate are recorded below.
+
+Android APK compilation, iOS Xcode/signing, real cross-phone animation/audio/account return and complete played-game acceptance remain distinct. No phone installation, account/avatar generation, backend function publication, database migration or provider configuration occurred. Owner holds deployment; Mac secure access is not ready.
+
+## Independent fix recheck
+
+Separate agent independent_engine_avatar_review independently tested fed6063d562ff39a308d785a552690197f1530a0 plus the queue/clock/editor/video fix tree,31October2026. Final67tests/7files passed: configurable-reactions, room-reactions, reaction-delivery.dom, reaction-editor.dom, multiplayer-ui.dom, score-presentation.dom, avatar-video-presentation.dom. Reviewer found no remaining blocker within this code scope. Original issues: missing Competitionv2 rulesVersion; overwritten accepted events before polling (P1); cached server time extending scoring lock (P2); delayed short video seeking past its end (P2); slow refresh overwriting typed input. Fixes are separately covered by permanent regressions. Per-account renderer delivery keys prevent global sound suppression across account changes. Reviewer performed no edits, live/provider calls, device actions or release approval. Final committed-source gate evidence follows.
+
+## Final qualification
+
+Clean code76b96e9eea110583215bd054f2b27c8cbbc35d7f, Node24.15.0:1,351Vitest tests passed/13optional camera skips (171passedfiles/1skipped); all configured web, native-web, iOS-manual-web and room/commentary/portrait function builds passed. Source stayed clean and unchanged. Evidence: artifacts/engineering/2026-10-31T18-44-47-894Z-57ae7ee9/report.json. Existing JSDOM canvas/navigation notices are environmental simulation limitations, not physical acceptance.
+
+Android JDK21 offline testDebugUnitTest/assembleDebug passed19native tests. APK build76 embeds clean76b96e9/native identity;49prepared public files match the APK exactly. APK SHA2562ad9582602c93449a1af20ec256078c1e30c7287ef96098d1e16ca0b7aa7fce6. Report artifacts/sw076/android-report.json; compile log artifacts/sw076-android-build.log. The wrapper is invoked through bash because its executable bit is unset; no permission/system change was made. This is an offline compile artifact, not a configured/signing-qualified rollout package.
+
+Disposable SQL rerun after queue fixes passed6checks, including persisted queue/popup/intents, using existing migrations and synthetic users. Physical Android/iOS cross-phone playback, foreground/background/OS audio behaviour, profile continuity and complete gameplay remain untested. iOS web build passed; Xcode/signing/device tests need Amber’s Mac. No backend, provider, database or handset activation occurred. Later qualification/publication record commits change documentation only.

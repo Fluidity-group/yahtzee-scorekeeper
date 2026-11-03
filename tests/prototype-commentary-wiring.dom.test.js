@@ -4,7 +4,7 @@ import {createRoom,joinRoom,startRoom,playRoom} from '../src/multiplayer/room.js
 const host='11111111-1111-4111-8111-111111111111',guest='22222222-2222-4222-8222-222222222222',roomId='33333333-3333-4333-8333-333333333333';
 const mock=vi.hoisted(()=>({callbacks:null,room:null,request:vi.fn(),getAccessToken:vi.fn(),update:vi.fn(),open:vi.fn(async()=>true),dispose:vi.fn(),allowGreeting:vi.fn(async()=>true),auth:{getSession:vi.fn()}}));
 vi.mock('../src/core-store.js',()=>({saveCore:vi.fn(async()=>{}),loadCore:vi.fn(async()=>null),listCore:vi.fn(async()=>[])}));
-vi.mock('../src/multiplayer/client.js',()=>({auth:mock.auth}));
+vi.mock('../src/multiplayer/client.js',()=>({auth:mock.auth,configured:false}));
 vi.mock('../src/commentary/authenticated-transport.js',()=>({createAuthenticatedCommentaryTransport:vi.fn(()=>({request:mock.request,getAccessToken:mock.getAccessToken}))}));
 vi.mock('../src/ui/hosted-commentary-session.js',()=>({createHostedCommentarySession:vi.fn(()=>({update:mock.update,open:mock.open,dispose:mock.dispose,allowGreeting:mock.allowGreeting}))}));
 vi.mock('../src/multiplayer/ui.js',()=>({

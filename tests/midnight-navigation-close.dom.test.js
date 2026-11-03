@@ -21,7 +21,7 @@ it('keeps replacement avatar, venue and sound panels interactive after queued na
  };
  await openFromMenu('midnight-avatar');
  click('[data-value="character-4"]');click('[data-midnight="confirm-avatar"]');
- expect(readMidnight().avatar).toBe('character-4');
+ await vi.waitFor(()=>expect(readMidnight().avatar).toBe('character-4'));
  await openFromMenu('midnight-locations');
  click('[data-venue-index="1"]');click('[data-venue-confirm]');
  expect(readMidnight().location).toBe('sydney');
@@ -30,11 +30,12 @@ it('keeps replacement avatar, venue and sound panels interactive after queued na
  click('[data-midnight="sound"]');expect(readMidnight().muted).toBe(true);
  // A real close without replacement must still clean up private photo resources.
  click('#coreDialog [data-action="midnight-avatar"]');
- URL.createObjectURL=vi.fn(()=> 'blob:close-preview');URL.revokeObjectURL=vi.fn();
- const input=document.querySelector('[data-midnight-photo]');
- Object.defineProperty(input,'files',{value:[{size:100,type:'image/png',slice:()=>({arrayBuffer:async()=>new Uint8Array([137,80,78,71]).buffer})}]});
+ vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width:128,height:128,close:vi.fn()})));
+ vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()});vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue('data:image/jpeg;base64,YQ==');
+ const input=document.querySelector('[data-portrait-photo]');
+ Object.defineProperty(input,'files',{value:[{size:100,type:'image/png'}]});
  input.dispatchEvent(new Event('change',{bubbles:true}));
- await vi.waitFor(()=>expect(document.querySelector('[data-photo-preview] img')).not.toBeNull());
+ await vi.waitFor(()=>expect(document.querySelector('[data-original-preview] img')).not.toBeNull());
  document.querySelector('#coreDialog').close();
- await vi.waitFor(()=>expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:close-preview'));
+ await vi.waitFor(()=>expect(document.querySelector('[data-original-preview] img')).toBeNull());expect(JSON.stringify({...localStorage})).not.toContain('data:image');
 });

@@ -3,19 +3,37 @@
   "appName": "Dice Clubhouse Dev",
   "webDir": "dist-native",
   "android": {
+    "zoomEnabled": true,
     "backgroundColor": "#0b141c"
   },
   "plugins": {
     "SystemBars": {
       "insetsHandling": "disable"
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "updateUrl": "",
+      "statsUrl": "",
+      "channelUrl": "",
+      "autoDeletePrevious": false,
+      "autoDeleteFailed": false,
+      "resetWhenUpdate": true,
+      "httpsOnly": true,
+      "allowHttpsToHttpRedirect": false,
+      "allowModifyUrl": false,
+      "allowPreview": false,
+      "appReadyTimeout": 30000
     }
   },
   "ios": {
+    "zoomEnabled": true,
     "backgroundColor": "#0b141c",
     "includePlugins": [
       "@capacitor/app",
+      "@capacitor/haptics",
       "@capacitor/push-notifications",
-      "@capacitor/status-bar"
+      "@capacitor/status-bar",
+      "@capgo/capacitor-updater"
     ],
     "contentInset": "never"
   }

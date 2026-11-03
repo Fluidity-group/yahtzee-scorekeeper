@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Boots the real main.js against the real index.html DOM and drives clicks, to catch
+// Boots the real main.js against its preserved legacy DOM fixture and drives clicks, to catch
 // integration/wiring bugs the pure-logic tests can't. Audio/confetti/speech are stubbed.
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ class FakeAudioContext {
 }
 
 beforeAll(async () => {
-  const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+  const html = readFileSync(resolve(process.cwd(), 'tests/fixtures/legacy-shell.html'), 'utf8');
   const body = html.match(/<body>([\s\S]*)<\/body>/)[1].replace(/<script[\s\S]*?<\/script>/g, '');
   document.body.innerHTML = body;
 

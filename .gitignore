@@ -33,3 +33,6 @@ android/.kotlin/
 dist-lab/
 dist-phone-preview/
 *.p8
+
+# Public LAN update trust configuration (no private signing keys here)
+.updates.local.json

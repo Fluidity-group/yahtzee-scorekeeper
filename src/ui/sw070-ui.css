@@ -1,0 +1,62 @@
+/* Pair the solid fill with its text independently from the decorative glint. */
+html[data-art=midnight] :is(.core-primary,.bigbtn.score,.hosted-rematch-button:not(.hosted-withdraw)){background-color:var(--club-accent);color:var(--club-on-accent)}
+html[data-art=midnight][data-theme=light] :is(.core-primary,.bigbtn.score,.hosted-rematch-button:not(.hosted-withdraw)){background-image:linear-gradient(115deg,transparent 35%,#00000010 50%,transparent 65%)}
+html[data-art=midnight] .hosted-results .hosted-withdraw{background:var(--club-soft);color:var(--club-text);border-color:var(--club-accent)}
+html[data-art=midnight] .hosted-rematch-button:disabled{opacity:1;background-color:var(--club-soft);color:var(--club-muted);background-image:none;box-shadow:none;border-color:var(--club-line);cursor:not-allowed}
+.core-dialog input:is([type=checkbox],[type=radio]){width:22px;min-width:22px;height:22px;min-height:22px;margin:0;padding:0;accent-color:var(--club-accent)}
+.core-dialog .portrait-style{display:grid;color:var(--club-text);margin:0;min-height:44px}
+.core-dialog .portrait-style:has(input:checked){background:var(--club-soft);color:var(--club-text);border-color:var(--club-accent)}
+.portrait-flow label:has([data-portrait-retain]){display:flex;align-items:flex-start;gap:10px;min-height:44px;color:var(--club-text)}
+.scorecard-player-avatar{display:inline-block;width:32px;height:32px;overflow:hidden;border-radius:9px;flex-shrink:0}
+.scorecard-player-avatar svg{width:100%;height:100%;display:block}
+#coreApp .phone-own-heading .player-summary{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:2px 5px;align-items:center;text-align:left}
+#coreApp .phone-own-heading .scorecard-player-avatar{grid-column:1;grid-row:1/4}
+#coreApp .phone-own-heading .player-name{grid-column:2;text-align:left}
+#coreApp .phone-own-heading .player-summary strong{grid-column:3;grid-row:1/4}
+#coreApp .phone-peer-headings .scorecard-player-avatar{width:24px;height:24px;margin:auto;display:block}
+/* Long labels use one readable, narrower line rather than two large lines. */
+#coreApp .phone-score-table .lower-section tr:not(.summary-row)>th:first-child{font-family:'Arial Narrow','Roboto Condensed','Aptos Narrow',system-ui,sans-serif;font-size:clamp(10px,3.1vw,15px);font-stretch:condensed;line-height:1.25;white-space:nowrap;padding-inline:5px}
+.score-category-name{display:block;white-space:nowrap}
+.phone-scorecard,.phone-scorecard .phone-peer-window{touch-action:pan-y}
+#coreApp[data-scorecard-size=compact]{--score-label:.8rem;--score-number:1.35rem;--peer-number:1rem;--score-meta:.65rem}
+#coreApp[data-scorecard-size=compact] .phone-score-table :is(th,td){padding-block:2px;min-height:34px}
+#coreApp[data-scorecard-size=compact] .phone-score-table td>:is(button,.recorded-score){min-height:34px;height:34px}
+#coreApp[data-scorecard-size=fit]{--score-label:var(--fit-label,11px);--score-number:var(--fit-number,20px);--peer-number:var(--fit-number,20px);--score-meta:10px}
+#coreApp[data-scorecard-size=fit] .phone-score-table tbody :is(th,td){height:var(--fit-row,28px);min-height:0;padding:0 4px;line-height:1}
+#coreApp[data-scorecard-size=fit] .phone-score-table tbody tr:not(.summary-row)>th:first-child{font-size:var(--fit-label,11px);line-height:1.1}
+#coreApp[data-scorecard-size=fit] .phone-score-table td>:is(button,.recorded-score),#coreApp[data-scorecard-size=fit] .phone-score-table .phone-peer-score{min-height:24px;height:calc(var(--fit-row,28px) - 2px);line-height:1;display:flex;align-items:center;justify-content:center;font-size:var(--fit-number,20px);padding:0}
+#coreApp[data-scorecard-size=fit] .phone-score-table thead th{height:var(--fit-header,48px);padding:2px;vertical-align:middle}
+#coreApp[data-scorecard-size=fit] .header-bonus-graphic{height:var(--fit-header,48px);min-height:24px}
+#coreApp[data-scorecard-size=fit] .upper-category-label{flex-direction:row;align-items:center;justify-content:space-between;gap:2px}
+#coreApp[data-scorecard-size=fit] .upper-category-indicator{width:42px;height:16px}
+#coreApp[data-scorecard-size=fit] .phone-score-table .compact-upper-total .upper-total-guide{height:var(--fit-row,28px);min-height:24px;padding:0;flex-direction:row;gap:3px}
+#coreApp[data-scorecard-size=fit] .upper-total-guide strong{font-size:var(--fit-number,20px)}
+#coreApp[data-scorecard-size=fit] .phone-peer-slot{padding:0;min-height:0}
+#coreApp[data-scorecard-size=fit] .phone-own-heading .player-summary{grid-template-columns:24px minmax(0,1fr) auto;gap:1px 3px}
+#coreApp[data-scorecard-size=fit] .scorecard-player-avatar{width:24px;height:24px}
+#coreApp[data-scorecard-size=fit] .phone-peer-headings .scorecard-player-avatar{width:18px;height:18px}
+#coreApp[data-scorecard-size=fit] .phone-scorecard .player-name{font-size:11px;line-height:1.1}
+#coreApp[data-scorecard-size=fit] .phone-peer-headings .player-name{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#coreApp[data-scorecard-size=fit] .phone-score-table .summary-row th{font-size:10px}
+#coreApp .phone-score-table :is(button,span).scratched-score{background:#642b47!important;color:#fff2e5!important;border:2px solid #ffb8c6!important;box-shadow:none}
+html[data-theme=light] #coreApp .phone-score-table :is(button,span).scratched-score{background:#f7cdd5!important;color:#57203a!important;border-color:#9a3b57!important}
+.scratch-mark{position:static;display:inline-block;font:800 1em/1 system-ui,sans-serif;letter-spacing:0}
+.score-actors{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.score-actors figure{margin:0;min-width:0;max-width:100px}
+.score-actors figcaption{font-size:13px;line-height:1.3;overflow-wrap:anywhere;margin-top:5px;color:inherit}
+.score-actors:has(figure:nth-child(3)) figure{flex:0 1 54px;max-width:54px}
+.score-actors:has(figure:nth-child(3)) .score-actor-avatar{width:44px;height:44px;border-radius:10px}
+.score-actors:has(figure:nth-child(3)) figcaption{font-size:11px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.score-actor-avatar{display:block;width:78px;height:78px;border-radius:16px;overflow:hidden;border:2px solid currentColor;margin:auto;animation:avatar-cheer 1.1s ease-in-out 2;transform-origin:50% 90%}
+.score-actor-avatar svg{width:100%;height:100%;display:block}
+.score-actor-avatar{position:relative}
+.score-actor-avatar video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.score-actor-avatar.has-avatar-video{animation:none}
+.score-actor-avatar.has-avatar-video video{opacity:1}
+.score-event-red .score-actor-avatar{animation:avatar-shrug 1.2s ease-in-out 2}
+.score-presentation{top:max(12px,8dvh);padding:1rem;max-height:84dvh;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;pointer-events:auto;overscroll-behavior:contain}
+.score-zero-slot{width:50px;height:50px;font-size:36px;background:#642b47;color:#fff2e5}
+@keyframes avatar-cheer{0%,100%{transform:none}30%{transform:translateY(-8px) rotate(-5deg)}65%{transform:translateY(-3px) rotate(5deg)}}
+@keyframes avatar-shrug{0%,100%{transform:none}35%{transform:rotate(-6deg)}70%{transform:rotate(6deg)}}
+@media(prefers-reduced-motion:reduce){.score-actor-avatar{animation:none!important;transform:none!important}.score-actor-avatar video{display:none!important}}
+@media(forced-colors:active){html[data-art=midnight] :is(.core-primary,.bigbtn.score,.hosted-rematch-button){background:ButtonFace;color:ButtonText;border:2px solid ButtonText;box-shadow:none}html[data-art=midnight] .hosted-rematch-button:disabled{color:GrayText;border-color:GrayText}#coreApp .phone-score-table :is(button,span).scratched-score{background:Canvas!important;color:CanvasText!important;border-color:Highlight!important}.score-actor-avatar{animation:none;border-color:Highlight}}

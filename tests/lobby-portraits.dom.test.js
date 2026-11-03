@@ -1,0 +1,14 @@
+// @vitest-environment jsdom
+import{it,expect,vi,beforeEach,afterEach}from'vitest';
+import{createRoom,joinRoom}from'../src/multiplayer/room.js';
+const state=vi.hoisted(()=>({room:null,deferred:null}));
+vi.mock('qrcode',()=>({default:{toCanvas:vi.fn(async()=>{})}}));
+vi.mock('../src/multiplayer/client.js',()=>({configured:true,emailOtpEnabled:true,webUrl:'https://clubhouse.test/',auth:{getSession:vi.fn(async()=>({data:{session:{user:{id:'guest',email:'guest@example.test'}}}}))},watchRoom:vi.fn(()=>()=>{}),requestRoom:vi.fn(async()=>({room:state.room}))}));
+vi.mock('../src/profile/avatar-sync.js',()=>({refreshTableAvatars:vi.fn(async()=>{if(state.deferred)await state.deferred;const {setPeerAvatars}=await import('../src/profile/avatar-view.js');setPeerAvatars([{ownerId:'host',kind:'generated',url:'https://images.test/confirmed-host.jpg',preset:'character-1'}]);return true;})}));
+import{refreshTableAvatars}from'../src/profile/avatar-sync.js';
+import{openOnline,leaveOnline}from'../src/multiplayer/ui.js';
+beforeEach(()=>{localStorage.clear();document.body.innerHTML='<main id="root"></main>';state.deferred=null;state.room=joinRoom(createRoom({id:'room',code:'ABCDEFGH',userId:'host',name:'Host',time:'2026-10-24T19:00:00Z',tournament:{name:'Fixture',gameCount:2,playerCount:2,venue:'tokyo'}}),{userId:'guest',name:'Guest',time:'2026-10-24T19:00:00Z'});vi.clearAllMocks();});
+afterEach(()=>leaveOnline());
+async function enter(){const callbacks={game:vi.fn(),notice:vi.fn(),connection:vi.fn(),exit:vi.fn()};await openOnline(document.querySelector('#root'),callbacks,'','join');document.querySelector('[name="code"]').value='ABCDEFGH';document.querySelector('[name="name"]').value='Guest';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));return callbacks;}
+it('loads a confirmed peer portrait and fixed venue in a fresh lobby before starting',async()=>{const callbacks=await enter();await vi.waitFor(()=>expect(document.querySelector('[data-avatar-account="host"] img')?.getAttribute('src')).toBe('https://images.test/confirmed-host.jpg'));expect(refreshTableAvatars).toHaveBeenCalledWith('ABCDEFGH');expect(document.querySelector('.mp-shared-venue').getAttribute('aria-label')).toContain('Tokyo');expect(document.querySelector('[data-action="midnight-avatar"]')).not.toBeNull();expect(state.room.game).toBeNull();expect(callbacks.game).not.toHaveBeenCalled();});
+it('a late portrait response cannot replace the screen after leaving the lobby',async()=>{let release;state.deferred=new Promise(r=>{release=r;});await enter();await vi.waitFor(()=>expect(refreshTableAvatars).toHaveBeenCalled());leaveOnline();document.querySelector('#root').innerHTML='<h1>Local game</h1>';release();await new Promise(r=>setTimeout(r,0));expect(document.querySelector('#root').textContent).toBe('Local game');expect(document.querySelector('.mp-avatar')).toBeNull();});

@@ -1,0 +1,59 @@
+/* One compact finale; two equally weighted honours, never an overall ranking. */
+.tournament-finale{color:var(--club-text);padding:12px;border:1px solid var(--club-accent);border-radius:20px;background:radial-gradient(ellipse at 50% 0%,color-mix(in srgb,var(--club-accent) 12%,transparent),transparent 65%),var(--club-panel);box-shadow:0 12px 34px #0002}
+.finale-heading{display:flex;align-items:center;gap:12px;padding:4px 2px 16px}
+.finale-heading>span{font-size:36px;color:var(--club-accent)}
+.finale-heading h2{font-size:clamp(22px,6vw,28px);line-height:1.1;margin:0;color:var(--club-accent)}
+.finale-heading p{font-size:12px;margin:6px 0 0;overflow-wrap:anywhere}
+.finale-honours{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.finale-honour{text-align:center;padding:12px 7px;border:1px solid var(--club-line);border-top:3px solid var(--club-accent);border-radius:14px;background:var(--club-soft);min-width:0}
+.finale-honour h3{font-size:14px;margin:0 0 10px}
+.finale-winners{display:flex;justify-content:center;flex-wrap:wrap;gap:6px}
+.finale-winners figure{margin:0;max-width:100%;min-width:0}
+.finale-avatar{display:inline-block;overflow:hidden;width:64px;height:64px;border-radius:16px;flex-shrink:0;vertical-align:middle}
+.finale-avatar :is(svg,img){width:100%;height:100%;object-fit:cover;display:block}
+.finale-winners figcaption{font-size:14px;font-weight:750;overflow-wrap:anywhere;margin-top:5px}
+.finale-winners:has(figure:nth-child(2)) .finale-avatar{width:42px;height:42px;border-radius:10px}
+.finale-value{display:block;font-size:clamp(28px,8vw,38px);line-height:1.15;margin:8px 0 3px;font-variant-numeric:tabular-nums;color:var(--club-accent)}
+.finale-value small{display:block;font-size:12px;color:var(--club-text)}
+.finale-award-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--club-accent)}
+.finale-honour p{font-size:11px;line-height:1.45;margin:6px 0 0;overflow-wrap:anywhere}
+.finale-ledger{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;font-variant-numeric:tabular-nums;table-layout:fixed}
+.finale-ledger caption{text-align:left;font-size:12px;padding:0 0 7px}
+.finale-ledger :is(th,td){padding:8px 4px;border-bottom:1px solid var(--club-line);text-align:right}
+.finale-ledger th:first-child{width:52%;text-align:left;overflow-wrap:anywhere}
+.finale-ledger .finale-avatar{width:28px;height:28px;border-radius:7px;margin-right:7px}
+.finale-ledger td{font-size:18px;font-weight:750}
+.finale-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.finale-actions button{min-height:44px;font-size:12px;padding:8px;white-space:normal;border-radius:12px}
+.tournament-finale details{border-top:1px solid var(--club-line)}
+.tournament-finale summary{min-height:44px;padding:13px 4px;box-sizing:border-box;font-size:13px;font-weight:700;cursor:pointer}
+.tournament-finale details>p{font-size:13px;line-height:1.5}
+.tournament-finale .hosted-results{margin:0 0 12px;padding:12px}
+.tournament-finale .hosted-results h2{font-size:23px}
+.tournament-finale :is(summary,button):focus-visible{outline:3px solid var(--club-accent);outline-offset:2px}
+/* Larger count tiles without changing scorecard rows or the pinch-to-fit floor. */
+#coreApp[data-scorecard-size=fit] .upper-category-indicator{width:62px;height:22px;flex-shrink:0}
+.upper-category-indicator .empty{opacity:.7}
+/* Portrait and announcement share a single stage and event accent. */
+.score-presentation{--celebration-accent:#f7cf70;--celebration-bg:#241b31;border-color:var(--celebration-accent);background:var(--celebration-bg);color:#fff3d8;width:min(92vw,520px);padding:12px;border-radius:24px;box-shadow:0 16px 70px #0009,0 0 28px #f7cf7030}
+.score-presentation.score-event-red{--celebration-accent:#ffb8c6;--celebration-bg:#351c30;box-shadow:0 16px 70px #0009,0 0 28px #ffb8c630}
+.score-presentation .celebration-stage{display:grid;gap:12px;padding:12px;border-radius:16px;background:radial-gradient(ellipse at 50% 20%,color-mix(in srgb,var(--celebration-accent) 20%,transparent),transparent 75%);animation:celebration-arrival .32s ease-out both}
+.score-presentation .score-actors{gap:10px;align-items:start}
+.score-presentation .score-actors figure{position:relative;max-width:200px;width:min(48vw,200px);flex:0 1 auto;border-radius:18px;border:2px solid var(--celebration-accent);overflow:hidden;box-shadow:0 0 20px color-mix(in srgb,var(--celebration-accent) 24%,transparent)}
+.score-presentation .score-actor-avatar{width:100%;height:auto;aspect-ratio:9/16;max-width:none;border:0;border-radius:0;animation:none}
+.score-presentation .score-actor-avatar :is(img,svg){width:100%;height:100%;object-fit:cover}
+.score-presentation .score-actors figcaption{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,#140e23 40%);padding:22px 6px 8px;margin:0;color:#fff3d8;font-size:16px;font-weight:750;text-align:center;overflow-wrap:anywhere;line-height:1.2}
+.score-presentation .score-actors:has(figure:nth-child(2)) figure{width:min(34vw,160px);max-width:160px;flex:0 1 auto}
+.score-presentation .score-actors:has(figure:nth-child(3)) figure{width:74px;max-width:74px;flex:0 1 auto}
+.score-presentation .score-actors:has(figure:nth-child(3)) .score-actor-avatar{width:100%;height:auto;border-radius:0}
+.score-presentation .score-actors:has(figure:nth-child(3)) figcaption{font-size:11px;padding:18px 3px 5px}
+.score-presentation .celebration-copy{display:grid;gap:6px;text-align:center;color:var(--celebration-accent)}
+.score-presentation .celebration-copy strong{font-size:clamp(24px,7vw,36px);line-height:1.12;margin:0;animation:none;text-shadow:0 2px 16px #0006;overflow-wrap:anywhere}
+.score-presentation .celebration-copy .score-loser-marquee{white-space:normal;transform:none;font-size:clamp(20px,6vw,30px)}
+.score-presentation .celebration-copy span{font-size:15px;line-height:1.2;color:#fff3d8}
+.score-presentation .score-zero-slot{margin:0 auto;width:36px;height:36px;font-size:28px;border:1px solid var(--celebration-accent);border-radius:9px}
+.score-presentation .celebration-hint{display:block;background:transparent;font-size:11px;line-height:1.4;color:#fff3d8;margin-top:8px}
+@keyframes celebration-arrival{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+@media(max-height:650px){.score-presentation .score-actors figure{width:140px}.score-presentation .score-actors:has(figure:nth-child(2)) figure{width:120px}.score-presentation .celebration-copy strong{font-size:24px}}
+@media(prefers-reduced-motion:reduce){.score-presentation .celebration-stage{animation:none}}
+@media(forced-colors:active){.tournament-finale,.finale-honour,.score-presentation,.score-presentation .score-actors figure{background:Canvas;color:CanvasText;border:2px solid CanvasText;box-shadow:none}.score-presentation .celebration-copy,.score-presentation .celebration-copy span,.score-presentation .celebration-hint{color:CanvasText}.finale-value,.finale-heading h2,.finale-award-label{color:CanvasText}}

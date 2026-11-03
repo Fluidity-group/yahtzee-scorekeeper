@@ -10,7 +10,7 @@ it('draws the recorded dice counts against the three-dice guide and distinguishe
 it('uses horizontal three-dice benchmarks and point-weighted surplus, with five matching dice treated specially',()=>{
  const sheet={fives:10,sixes:24};document.body.innerHTML=renderBonusGraphic(sheet)+renderUpperCategoryIndicator(sheet,'fives')+renderUpperCategoryIndicator(sheet,'sixes');
  expect(document.querySelector('[data-bonus-face="5"] .upper-pace-delta').textContent).toBe('-5');expect(document.querySelector('[data-bonus-face="6"] .upper-pace-delta').textContent).toBe('+6');expect(document.querySelector('.bonus-net-pace').textContent).toBe('+1');
- const segments=[...document.querySelector('[data-bonus-face="6"]').querySelectorAll('rect')];expect(segments.map(e=>e.getAttribute('x'))).toEqual(['1','7','13','19']);expect(segments.every(e=>e.getAttribute('y')==='3')).toBe(true);
+ const segments=[...document.querySelector('[data-bonus-face="6"]').querySelectorAll('rect')];expect(segments.map(e=>e.getAttribute('x'))).toEqual(['1','8','15','22']);expect(segments.every(e=>e.getAttribute('y')==='2')).toBe(true);
  document.body.innerHTML=renderUpperCategoryIndicator({sixes:30},'sixes');expect(document.querySelectorAll('rect')).toHaveLength(4);expect(document.querySelector('.upper-yahtzee-star')).not.toBeNull();expect(document.querySelector('svg').getAttribute('aria-label')).toContain('Yahtzee result placed in this upper box');
 });
 it('communicates secured and unreachable using both state symbols and exact accessible descriptions',()=>{

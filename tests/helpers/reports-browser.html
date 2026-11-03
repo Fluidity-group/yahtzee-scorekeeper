@@ -1,0 +1,13 @@
+<!doctype html><html lang="en" data-theme="dark"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reports synthetic browser qualification</title></head><body><div id="clubhouseReports"></div><script type="module">
+import {mountReports} from '/src/reports/controller.js';
+import '/src/reports/reports.css';
+import {reportGame,reportTable} from '/tests/helpers/report-fixtures.js';
+const upper={aces:3,twos:6,threes:9,fours:12,fives:15,sixes:18};
+const games=Array.from({length:6},(_,i)=>reportGame('standard-'+i,{time:`2026-10-${10+i}T18:00:00.000Z`,patches:[{...upper,chance:20+i,fullHouse:i%2?25:0,smallStraight:30,largeStraight:40},{chance:18+i,fullHouse:25,threeKind:22,smallStraight:30}]}));
+const standard=reportTable('standard',games),competition=reportTable('competition',[reportGame('competition-1',{mode:'competition',rulesVersion:2}),reportGame('competition-2',{mode:'competition',rulesVersion:2})],{status:'playing',count:3});competition.room.code='JKLMNPQR';
+const incomplete=reportTable('incomplete',[reportGame('partial')],{count:2});incomplete.room.code='STUVWXYZ';
+const entries=[standard,competition,incomplete];window.reportCalls=[];
+const auth={getSession:async()=>({data:{session:{user:{id:'one',user_metadata:{display_name:'Example account'}}}}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}})};
+const request=async(body,options)=>{window.reportCalls.push({operation:body.operation,owner:options.expectedUserId});if(!['sessions','history','read'].includes(body.operation)||options.expectedUserId!=='one')throw Error('Unexpected request');if(body.operation==='sessions')return{rooms:entries.filter(e=>(body.view==='completed')===(e.room.tournament.status==='completed')).map(e=>structuredClone(e.room)),nextBefore:null};const entry=entries.find(e=>e.room.code===body.code);return body.operation==='history'?{games:structuredClone(entry.snapshots),nextBefore:null}:{room:structuredClone(entry.room)};};
+window.disposeReport=mountReports(document.querySelector('#clubhouseReports'),{auth,configured:true,request,homeUrl:'/',studioUrl:'/?studio=1'});
+</script></body></html>

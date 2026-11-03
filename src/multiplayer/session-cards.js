@@ -32,12 +32,12 @@ function renderCard(room, userId) {
  const activeId = activePlayer?.id ?? members[turnSeat]?.userId;
  let clue;
  if (complete) clue = 'Finished results are saved. Reopen to view this table.';
- else if (state.key === 'paused') clue = host ? 'Progress saved. Reopening keeps it paused; use Resume tournament at the table when you’re ready.' : 'Progress saved. Reopening keeps it paused until the host resumes the tournament.';
+ else if (state.key === 'paused') clue = host ? 'Progress saved. Reopening keeps it paused; use Resume Tournament at the table when you’re ready.' : 'Progress saved. Reopening keeps it paused until the host resumes the tournament.';
  else if (room.game?.status === 'finished' && tournament) clue = 'This game is finished. Return to the same group and get ready for the next game.';
  else if (!room.game) clue = host ? 'Your table is saved. Continue hosting and start when your players are ready.' : 'Your place is saved. Return to the lobby and wait for the host to start.';
  else if (activePlayer) clue = activeId === userId ? `Your turn · ${activePlayer.name}` : `${activePlayer.name} to play. Your place at the table is saved.`;
  else clue = 'Return to the same table and continue your saved game.';
- const action = complete ? 'View results' : host ? 'Continue hosting' : tournament ? 'Resume tournament' : 'Resume game';
+ const action = complete ? 'View Results' : host ? 'Continue Hosting' : tournament ? 'Resume Tournament' : 'Resume Game';
  const roster = players.map((player,seat) => `<span>${esc(player.name)}${player.id === userId ? ' <small>· You</small>' : ''}${room.game?.sheets?.[seat]?` <small>· ${filled(room.game.sheets[seat])}/13 scored</small>`:''}</span>`).join('');
  if(state.key==='paused'&&activePlayer)clue+=` Next turn after resuming: ${activePlayer.name}${activeId===userId?' (you)':''}.`;
  return `<button class="saved-session-card saved-session-${state.key}" data-mp="resume" data-code="${esc(room.code)}"><span class="saved-session-top"><span class="saved-session-kind"><span aria-hidden="true">${tournament ? '♜' : '⚄'}</span> ${tournament ? 'Tournament' : 'Game'}</span><span class="saved-session-status">${esc(state.label)}</span></span><strong class="saved-session-name">${esc(name)}</strong><span class="saved-session-meta">${esc(mode)} · ${esc(progress)}</span><span class="saved-session-role">${host ? 'You host this table' : 'You joined this table'} · ${members.length}${tournament ? ` / ${esc(tournament.playerCount)}` : ''} ${members.length === 1 && !tournament ? 'player' : 'players'}</span><span class="saved-session-roster" aria-label="Players">${roster}</span><span class="saved-session-clue">${esc(clue)}</span><span class="saved-session-cta">${action} <span aria-hidden="true">→</span></span></button>`;

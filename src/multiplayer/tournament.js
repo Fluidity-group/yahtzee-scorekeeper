@@ -1,5 +1,6 @@
 import {gameRules,results} from '../game/core.js';
 import {RoomError,requireMember} from './room.js';
+import{VENUE_IDS}from'../game/score-presentation.js';
 
 export function tournamentConfig(value,mode,source,rulesVersion=1) {
  if(value===undefined||value===null)return null;
@@ -9,7 +10,8 @@ export function tournamentConfig(value,mode,source,rulesVersion=1) {
  if(!name||name.length>60)throw new RoomError('Enter a tournament name of 1–60 characters.');
  if(!Number.isInteger(value.gameCount)||value.gameCount<2||value.gameCount>20)throw new RoomError('Choose 2–20 tournament games.');
  if(!Number.isInteger(value.playerCount)||value.playerCount<2||value.playerCount>8)throw new RoomError('Choose 2–8 tournament players.');
- return {name,gameCount:value.gameCount,playerCount:value.playerCount,status:'playing',rules:gameRules(mode,rulesVersion,source)};
+ if(value.venue!==undefined&&!VENUE_IDS.includes(value.venue))throw new RoomError('Choose Miami, Sydney, Las Vegas or Tokyo.');
+ return {name,gameCount:value.gameCount,playerCount:value.playerCount,status:'playing',rules:gameRules(mode,rulesVersion,source),...(value.venue?{venue:value.venue}:{})};
 }
 
 export function requireTournamentPlaying(room) {

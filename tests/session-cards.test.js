@@ -19,7 +19,7 @@ describe('saved account session cards',()=>{
   expect(open).not.toContain('data-code="finished"');expect(open).not.toContain('data-code="final"');
   expect(open).toContain('Between games');expect(open).toContain('Game 2 of 5');
   expect(completed).toContain('data-code="finished"');expect(completed).toContain('data-code="final"');
-  expect(completed).not.toContain('data-code="between"');expect(completed).toContain('View results');
+  expect(completed).not.toContain('data-code="between"');expect(completed).toContain('View Results');
  });
  it('sorts paused before active and lobbies without mutating input',()=>{
   const list=[room('lobby',{status:'lobby',game:null}),room('active'),room('paused',{tournament:tournament({status:'paused'})})];
@@ -32,9 +32,9 @@ describe('saved account session cards',()=>{
  it('makes pause status and unchanged lifecycle explicit for host and guest',()=>{
   const paused=room('paused',{tournament:tournament({status:'paused'})});
   expect(savedSessionState(paused)).toEqual({key:'paused',label:'Paused'});
-  expect(renderSavedSessions([paused],'a')).toContain('Reopening keeps it paused; use Resume tournament');
+  expect(renderSavedSessions([paused],'a')).toContain('Reopening keeps it paused; use Resume Tournament');
   expect(renderSavedSessions([paused],'b')).toContain('until the host resumes');
-  expect(renderSavedSessions([paused],'b')).toContain('Resume tournament');
+  expect(renderSavedSessions([paused],'b')).toContain('Resume Tournament');
   expect(paused.tournament.status).toBe('paused');
  });
  it('uses authenticated player UUID for your turn, preserving frozen nicknames and hiding scores',()=>{
@@ -46,7 +46,7 @@ describe('saved account session cards',()=>{
  });
  it('shows correct lobby context, role and explicit kind without pretending play started',()=>{
   const lobby=room('waiting',{status:'lobby',game:null,tournament:tournament()});
-  expect(renderSavedSessions([lobby],'a')).toContain('Continue hosting');
+  expect(renderSavedSessions([lobby],'a')).toContain('Continue Hosting');
   expect(renderSavedSessions([lobby],'b')).toContain('You joined this table');
   expect(renderSavedSessions([lobby],'a')).toContain('5 games planned');
   expect(renderSavedSessions([lobby],'a')).not.toContain('Game 1 of 5');
