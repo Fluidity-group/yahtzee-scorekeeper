@@ -18,6 +18,15 @@
     "web-dist-manifest.json": "ca1d83f2e4f188057f4b3fea6871286f283a802435ee3f9c233f33721b5d6f0c",
     "live-readback.json": "cc629a120c37577f3be4abee788563ee29b062b1bac8ee263f65fe9154787487",
     "production-local-browser.json": "d317ecad4896886352b3c07fe78af217b4ef9606b83bd7a59b4ee8a0d398bec3",
-    "live-browser.json": "d317ecad4896886352b3c07fe78af217b4ef9606b83bd7a59b4ee8a0d398bec3"
+    "live-browser.json": "d317ecad4896886352b3c07fe78af217b4ef9606b83bd7a59b4ee8a0d398bec3",
+    "node24-reproduction.json": "025d93560b53d77ff475a86763cb1904cea7147068f82cc6969d435166074970"
+  },
+  "reproductionNode": "24.22.2",
+  "followupGate": {
+    "commit": "0f95b42c61e7059a572a5758fc26f152607429d9",
+    "node": "v24.22.2",
+    "passed": true,
+    "evidence": "artifacts/sw083/source/artifacts/engineering/2026-11-03T22-34-24-506Z-d776f2dc",
+    "sourceChangedDuringRun": false
   }
 }

@@ -86,6 +86,12 @@ user acceptance.
   Only allowlisted public configuration is accepted; push/live commentary remain
   disabled.65 assets passed the private-key/secret-key pattern scan, contained
   the Reports entry and no test HTML/environment file.
+- A follow-up shell selected the server default Node22. The exact clean
+  application source was independently rebuilt with pinned Node24.22.2; all65
+  published asset hashes are identical. The clean release-record gate at
+  `0f95b42` was rerun with Node24.22.2 and passed all configured checks
+  (1,520 tests/14 explicit skips). The original Node22 run is retained as
+  non-gating evidence, not represented as the Node24 gate.
 - Published via existing asset publisher to `gh-pages` commit
   `f455a9826d353b5937de30895d9773adad3ca508`. Pages reports `built`, completed
   22:30:02UTC. All65 HTTPS file bytes/hash values and build identity matched at
