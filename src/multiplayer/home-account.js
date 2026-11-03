@@ -1,3 +1,4 @@
+import {selectHomeTables} from '../ui/home-table.js';
 import {tournamentStandings} from './tournament.js';
 import {computeTotals} from '../game/scoring.js';
 import {recordedYahtzees} from '../game/personal-records.js';
@@ -42,7 +43,7 @@ export function summarizeHomeAccount(userId,tables){
  return {gamesPlayed:games.size,personalBests:[...bests.values()],razzies:[...lowest.values()],trophies:{total,points,wins,completed},people:[...people.values()].sort((a,b)=>b.lastPlayed.localeCompare(a.lastPlayed)||a.name.localeCompare(b.name))};
 }
 
-export async function loadHomeAccount({client:provided}={}){
+export async function loadHomeAccount({client:provided,preferredTableId}={}){
  if(previewProvider)return {...await previewProvider(),preview:true,status:'ready'};
  const client=provided||await import('./client.js');
  const session=await client.auth?.getSession();if(session?.error)throw session.error;
@@ -75,7 +76,7 @@ export async function loadHomeAccount({client:provided}={}){
   }
  }));
  const current=await client.auth?.getSession();if(current?.data?.session?.user?.id!==user.id)return {status:'signed-out'};
- return {status:'ready',preview:false,user:{id:user.id,name:user.user_metadata?.display_name||'Your account'},...summarizeHomeAccount(user.id,entries)};
+ return {status:'ready',preview:false,user:{id:user.id,name:user.user_metadata?.display_name||'Your account'},...summarizeHomeAccount(user.id,entries),...selectHomeTables(user.id,entries,preferredTableId)};
 }
 
 export async function watchHomeAccount(callback){

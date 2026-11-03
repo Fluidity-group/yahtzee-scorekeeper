@@ -1,0 +1,50 @@
+/* Dimensional cabinet finish; game choices and lever remain real controls. */
+html[data-art=midnight] .yahtz-home .home-slot-machine{
+ padding-right:48px;border:3px solid #d9bbdf;
+ background:linear-gradient(105deg,#fff5 0,transparent 3%,#120b23aa 5%,transparent 7%,transparent 89%,#fff6 94%,#311b43 98%),linear-gradient(145deg,#c393cb,#5f346e 22%,#b779b2 48%,#472953 73%,#e3b5d1);
+ box-shadow:inset 0 0 0 3px #351d45,inset 0 0 0 6px #ecc4e6,inset 0 0 18px 9px #140e2480,0 8px 16px #0007,0 2px 2px #fff6;
+}
+.yahtz-home .home-slot-machine .slot-machine-top{
+ border:3px solid #dbc3e7;
+ background:radial-gradient(ellipse at 35% 0,#65427666,transparent 65%),linear-gradient(#22142e,#110e20);
+ box-shadow:inset 0 2px 4px #fff7,inset 0 -3px 7px #000b,0 2px 3px #0009;
+}
+.yahtz-home .home-slot-machine .slot-machine-top h2{
+ text-shadow:1px 2px 0 #9b286b,2px 3px 0 #281433,0 0 7px #ffc5ef80,0 0 17px #e5a4ff50;
+}
+.yahtz-home .midnight-cover h1{filter:drop-shadow(0 0 5px #ffcce65c)}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-grid{
+ border:3px solid #c8b1ce;box-shadow:inset 0 5px 12px #000c,0 1px 0 #fff9;
+}
+html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card{
+ border:3px solid #b489ba;border-block-color:#ead1e8;
+ background:linear-gradient(100deg,#5c426333,transparent 15%,#fff6 48%,transparent 85%,#50305533),linear-gradient(#715b7d,#eedbee 20%,#fff5fc 47%,#ead5eb 80%,#7b6086)!important;
+ box-shadow:inset 0 8px 12px #24152a66,inset 0 -8px 12px #24152a55,0 3px 5px #0009;
+}
+.yahtz-home .home-slot-machine .slot-mode-symbol{stroke-width:2.2;filter:drop-shadow(0 1px 0 #fff) drop-shadow(0 2px 1px #3d224033)}
+.yahtz-home .home-slot-machine .slot-cabinet-lever{
+ right:19px;top:145px;width:13px;height:140px;border:1px solid #352b40;border-radius:9px;
+ background:linear-gradient(90deg,#443d50,#eee8f1 30%,#a49eae 55%,#fdf9ff 70%,#524657);
+ box-shadow:3px 5px 5px #0008,inset 0 0 2px #fff;
+}
+html[data-art=midnight] .yahtz-home .slot-cabinet-lever .slot-lever-handle{width:52px;min-width:52px;height:58px;min-height:58px;right:-19px;top:-23px}
+.yahtz-home .home-slot-machine .slot-lever-handle i{
+ width:40px;height:42px;right:5px;top:3px;border:1px solid #6d275c;
+ background:radial-gradient(ellipse at 30% 24%,#fff8fd 0,#ffe2f5 7%,#ff9bd9 22%,#c63d91 55%,#76154e 78%,#330d31 100%);
+ box-shadow:inset -4px -6px 8px #310b3977,inset 2px 2px 4px #fff9,3px 7px 8px #0008,0 0 9px #f99cda44;
+}
+.yahtz-home .home-slot-machine .slot-payout-tray{background:linear-gradient(#080710,#322d39);border:3px ridge #b4a7bb;box-shadow:inset 0 4px 7px #000,0 2px 0 #fae9fc}
+.home-tournament-return{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:64px;margin-top:14px;padding:12px 16px;border:1px solid #d8a7db;border-radius:10px;background:linear-gradient(120deg,#4f2e5c,#251d35);color:#fff0fa;text-align:left}
+.home-tournament-return strong,.home-tournament-return small{display:block;overflow-wrap:anywhere}
+.home-tournament-return small{margin-top:4px;color:#e0c4e6}
+.home-tournament-return>span:first-child{font-size:28px}
+.yahtz-home .home-ribbon .home-venue-select{flex:0 0 44px;min-width:44px;padding-inline:3px}
+.home-venue-select>span{font-size:23px}
+.yahtz-home .midnight-cover{position:relative}
+.home-featured-player{position:absolute;right:3%;bottom:0;z-index:3;width:25%;box-sizing:border-box;margin:0;padding:6px;background:#171425ed;color:#fff0fa;text-align:center;overflow-wrap:anywhere;pointer-events:none}
+.home-featured-player small,.home-featured-player strong{display:block;font-size:clamp(10px,2.3vw,14px);line-height:1.3}
+.home-featured-player small{font-size:clamp(9px,1.8vw,11px);color:#f5c7ea}
+@media(max-width:380px){html[data-art=midnight] .yahtz-home .home-slot-machine{padding-right:42px;padding-left:7px}.yahtz-home .home-slot-machine .slot-cabinet-lever{right:15px}.yahtz-home .home-slot-machine .slot-machine-top h2{font-size:clamp(22px,6.5vw,28px)}.home-featured-player{width:31%;right:2%}}
+@media(forced-colors:active){html[data-art=midnight] .yahtz-home .home-slot-machine,html[data-art=midnight] .yahtz-home .home-slot-machine .home-game-card,.yahtz-home .home-slot-machine .slot-machine-top,.home-tournament-return,.home-featured-player{background:Canvas!important;color:CanvasText;border-color:CanvasText;box-shadow:none}.yahtz-home .home-slot-machine .slot-lever-handle i{background:ButtonText}.yahtz-home .home-slot-machine .slot-machine-top h2{color:CanvasText;text-shadow:none}.yahtz-home .midnight-cover h1,.yahtz-home .home-slot-machine .slot-mode-symbol{filter:none}.home-tournament-return small,.home-featured-player small{color:CanvasText}}
+
+html[data-art=midnight] .yahtz-home .home-ribbon{grid-template-columns:36px minmax(0,1.3fr) minmax(0,1fr) 44px minmax(0,1fr) 36px;gap:2px}
