@@ -11,6 +11,7 @@ import{scorePresentation,presentationRemaining}from'./game/score-presentation.js
 import{syncScorePresentation,clearScorePresentation}from'./ui/score-presentation.js';
 import './ui/score-presentation.css';
 import{watchAccountAvatars}from'./profile/avatar-sync.js';
+import{currentAvatar}from'./profile/avatar-view.js';
 import './ui/portraits.css';
 import {renderLocalSetup} from './ui/local-setup.js';
 import {initializeMidnight} from './ui/midnight-profile.js';
@@ -157,7 +158,11 @@ function header(){return '<header class="compact-header"><button class="hbtn hom
 let launchGeneration=0;
 let view='home',localVoice=null,localVoiceGameId=null,welcomeGate=null,pendingWelcome=false,pendingLocalLaunch=null,settingsCleanup=()=>{};
 let homeAccount={status:'loading'},homeAccountGeneration=0;
-watchAccountAvatars(()=>{if(view==='home')drawHome();});
+watchAccountAvatars(()=>{
+ if(view==='home')drawHome();
+ const profile=currentAvatar();
+ if(view==='game'&&profile&&(onlineRoom?profile.ownerId===onlineUserId:game?.players.length===1))render();
+});
 let resumeCleanup=()=>{};
 function dismissResume(){if(view!=='home'||!game||onlineRoom)return;try{setResumeDismissed(game.id,true);drawHome();root.querySelector('[data-action=restore-resume]')?.focus({preventScroll:true});}catch{notice('Could not remove the shortcut. Your game is still saved.');}}
 function drawHome(){resumeCleanup();const focused=document.activeElement?.dataset?.action;root.innerHTML=renderClubhouseHome({savedGame:game&&!onlineRoom?game:null,commentary:readCommentaryPreferences(),voiceAvailable:!iosManualTest,account:homeAccount,theme,resumeHidden:!!game&&resumeDismissed(game.id)});resumeCleanup=bindResumeSwipe(root,dismissResume);if(focused)root.querySelector('[data-action="'+focused+'"]')?.focus({preventScroll:true});}
