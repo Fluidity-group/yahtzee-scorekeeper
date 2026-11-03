@@ -100,3 +100,9 @@ it('reconciles explicit bonuses and their Undo while preserving frame order',()=
 it('derives all reporting views without changing saved games or their audit history',()=>{
  const table=reportTable('readonly',[reportGame('immutable')]);const freeze=value=>{if(value&&typeof value==='object'){Object.values(value).forEach(freeze);Object.freeze(value);}return value;};freeze(table);const before=JSON.stringify(table),data=reportFacts('one',[table]);overallResults(data);playerPatterns(data,'one',{contract:data.contracts[0].id});expect(JSON.stringify(table)).toBe(before);
 });
+it('keeps valid final totals when an older entry list contains a malformed event',()=>{
+ const g=reportGame('malformed-history',{patches:[{chance:23}]});g.events.push(null);const data=facts([g]);expect(overallResults(data).points).toBe(23);expect(playerPatterns(data,'one',{contract:reportContract(g)}).chronologyGames).toBe(0);
+});
+it('marks malformed player rows as invalid scorecards without crashing the rest of the report',()=>{
+ const t=reportTable('old',[reportGame('malformed-player')]);t.room.game.players[0]=null;t.snapshots=[];const data=reportFacts('one',[t]);expect(data.games).toHaveLength(0);expect(data.quality.invalidGames).toBe(1);expect(data.quality.unverifiedTournaments).toBe(1);
+});

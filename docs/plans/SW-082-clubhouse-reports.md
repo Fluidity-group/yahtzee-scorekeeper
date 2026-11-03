@@ -33,7 +33,7 @@ chart nodes; actual account changes and pagehide retire private state. Rule keys
 use full canonical contracts rather than names or hashes. Missing sequence gaps,
 unavailable archives and incomplete completed tournaments remain explicit.
 
-Focused final run:115tests/13files passed (including54new reporting cases and
+Focused final run:117tests/13files passed (including56new reporting cases and
 adjacent transport/account/Studio/tournament/idle-screen checks). Full Node24 gate
 is pending. Evidence under ignored `/srv/yahtzee/main/artifacts/sw082/` includes
 `focused-final.log` and the synthetic browser harness/driver. No real account

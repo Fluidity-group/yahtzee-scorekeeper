@@ -10,6 +10,7 @@ export function recordedPattern(game){
  const sheets=game.players.map(()=>({})),originals=new Map(),undone=new Set(),ids=new Set(),scores=[];
  let entries=0,timedEntries=0;
  for(const event of game.events){
+  if(!event||typeof event!=='object')return unavailable;
   if(!['score','score-correction','score-undo','bonus','final-chain-roll'].includes(event.type))continue;
   if(event.type==='final-chain-roll'&&!event.value)continue;
   const seat=event.seat;

@@ -9,7 +9,7 @@ const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof v
 export const reportContract=game=>JSON.stringify(canonical({mode:game.mode,rules:game.rules,source:game.source||'unknown',solo:game.players.length===1}));
 export function contractLabel(game){return `${game.rules?.name||game.mode} · v${game.rules?.version??'?'} · ${game.source||'unknown'} · ${game.players.length===1?'solo':'multiplayer'} · Joker ${game.rules?.joker?'on':'off'}`;}
 function validScorecard(game,members){
- return game?.status==='finished'&&typeof game.id==='string'&&Number.isSafeInteger(game.revision)&&game.rules&&typeof game.rules==='object'&&game.players?.length>=1&&game.players.length<=8&&new Set(game.players.map(p=>p.id)).size===game.players.length&&game.players.every(p=>typeof p.id==='string'&&members.has(p.id))&&game.sheets?.length===game.players.length&&game.sheets.every(sheet=>BASE_KEYS.every(k=>Number.isSafeInteger(sheet?.[k])&&sheet[k]>=0)&&Number.isSafeInteger(sheet.yahtzeeBonus??0)&&(sheet.yahtzeeBonus??0)>=0&&Number.isSafeInteger(computeTotals(sheet).grand));
+ return game?.status==='finished'&&typeof game.id==='string'&&Number.isSafeInteger(game.revision)&&game.rules&&typeof game.rules==='object'&&Array.isArray(game.players)&&game.players.length>=1&&game.players.length<=8&&game.players.every(p=>p&&typeof p.id==='string'&&members.has(p.id))&&new Set(game.players.map(p=>p.id)).size===game.players.length&&Array.isArray(game.sheets)&&game.sheets.length===game.players.length&&game.sheets.every(sheet=>BASE_KEYS.every(k=>Number.isSafeInteger(sheet?.[k])&&sheet[k]>=0)&&Number.isSafeInteger(sheet.yahtzeeBonus??0)&&(sheet.yahtzeeBonus??0)>=0&&Number.isSafeInteger(computeTotals(sheet).grand));
 }
 
 export function reportFacts(userId,tables){
